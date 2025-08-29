@@ -18,10 +18,8 @@ void Scope_create(Scope* scope) {
 }
 
 void Scope_delete(Scope* scope) {
-	Array_loopPtr(Property, scope->properties, p_ptr) {
-		Property* p = *p_ptr;
-		Property_delete(p);
-		free(p);
+	Array_loopPtr(Property, scope->properties, p) {
+		Property_unfollowAsNull(*p);
 	}
 
 	Array_loopPtr(void, scope->variables, i) {free(*i);}
@@ -35,7 +33,7 @@ void Scope_delete(Scope* scope) {
 }
 
 
-void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall, Expression* value) {
+void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall) {
 	Variable* variable = malloc(sizeof(Variable));
 	variable->name = name;
 	variable->typeCall = *typeCall;
@@ -45,13 +43,5 @@ void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall, Ex
 	Property_fill(property, NULL, variable, typeCall);
 	*Array_push(Property*, &scope->properties) = property;
 
-	if (value) {
-		ExpressionProperty* expression = property->expression;
-		expression->value = value;
-		expression->value = value;
-		Expression_follow(value, Expression_cast(expression));
-	} else {
-		
-	}
 }
 

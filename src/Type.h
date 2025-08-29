@@ -3,9 +3,16 @@
 
 #include "declarations.h"
 
+#include "Expression.h"
+
 struct Type {
-    Class* class;
-    /// TODO: liste des propriétés vérifiées
+	Expression prefix;
+	const Class* class;
+
+	// liste des propriétés vérifiées
 };
+	
+
+void Type_delete(Type* property);
 
 #endif

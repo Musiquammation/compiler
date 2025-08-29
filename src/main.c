@@ -59,11 +59,12 @@ int main() {
 
 
 	TypeCall type = { .class = &class };
-	Scope_pushVariable(&scope, "point", &type, NULL);
+	Scope_pushVariable(&scope, "point", &type);
+
 
 
 	Scope_delete(&scope);
-	
+
 	Class_delete(&class);
 	Class_delete(&classInt);
 
@@ -85,9 +86,13 @@ int main() {
 #include "helper.c"
 
 #include "TypeCall.c"
-#include "Property.c"
+
 #include "Expression.c"
+#include "Property.c"
+#include "Type.c"
 
 #include "Function.c"
 #include "Variable.c"
 #include "Class.c"
+
+#include "Parser.c"

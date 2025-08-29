@@ -14,11 +14,13 @@ structdef(Function);
 structdef(Expression);
 
 structdef(Type);
-structdef(TypeCall);
-
 structdef(Property);
 
+structdef(TypeCall);
+
 structdef(LabelPool);
+structdef(Parser);
+
 structdef(Parser);
 
 #endif

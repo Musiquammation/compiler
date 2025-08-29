@@ -2,7 +2,6 @@
 #define COMPILER_EXPRESSION_H_
 
 #include "declarations.h"
-#include "Type.h"
 #include "label_t.h"
 
 #include <tools/Array.h>
@@ -29,10 +28,6 @@ void Expression_unfollow(Expression* follower, Expression* followed);
 
 void Expression_followAsNull(Expression* followed);
 void Expression_unfollowAsNull(expression_t type, Expression* followed);
-
-
-int Expression_getFollowingExpressionNumber(expression_t type, Expression* e);
-void Expression_collectFollowedExpressions(expression_t type, Expression* e, expressionPtr_t buffer[]);
 
 
 
@@ -96,7 +91,7 @@ enum {
 structdef(ExpressionNone);
 structdef(ExpressionInvalid);
 structdef(ExpressionArray);
-structdef(ExpressionProperty);
+structdef(Property);
 structdef(ExpressionChar);
 structdef(ExpressionBool);
 structdef(ExpressionShort);
@@ -148,13 +143,9 @@ struct ExpressionArray {
 	Array expressions; // type: expressionPtr_t
 };
 
-struct ExpressionProperty {
-	Expression prefix;
-	Type type;
-	ExpressionProperty* parent;
-	Expression* value;
-	const Variable* variable;
-};
+
+
+
 
 
 
@@ -167,7 +158,7 @@ struct ExpressionChar {
 
 struct ExpressionBool {
 	Expression prefix;
-	_Bool value;
+	bool value;
 };
 
 struct ExpressionShort {

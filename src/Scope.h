@@ -24,7 +24,7 @@ struct Scope {
 void Scope_create(Scope* scope);
 void Scope_delete(Scope* scope);
 
-void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall, Expression* value);
+void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall);
 
 
 
