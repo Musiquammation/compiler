@@ -1,15 +1,20 @@
 #include "Expression.h"
+
+#include "declarations.h"
 #include "helper.h"
 
-#include <string.h>
 
 void Expression_create(expression_t type, Expression* e) {
+	printf("CREATE %p\n", e);
 	e->type = type;
 	e->followerCount = 0;
+	Array_create(&e->followers, sizeof(Expression*));
 }
 
 
 void Expression_delete(expression_t type, Expression* e) {
+	printf("DELETE %p\n", e);
+	
 	switch (type) {
 
 	}
@@ -35,19 +40,26 @@ void Expression_free(expression_t type, Expression* e) {
 	}
 
 	// Free expression
+	Array_free(e->followers);
+	Expression_delete(type, e);
 	free(e);
 }
 
 
 void Expression_follow(Expression* follower, Expression* followed) {
+	printf("FOLLOW %p %d (%p)\n", followed, followed->followerCount + 1, follower);
 	*(Expression**)Array_pushInEmpty(&followed->followers, isNullPointerRef) = follower;
 	followed->followerCount++;
 }
 
 void Expression_unfollow(Expression* follower, Expression* followed) {
+	printf("UNFOLW %p %d\n", followed, followed->followerCount - 1);	
+	
 	Array_loop(expressionPtr_t, followed->followers, ptr) {
 		if (*ptr == follower) {
 			*ptr = NULL;
+			
+
 			if ((--followed->followerCount) > 0)
 				return;
 
@@ -60,13 +72,18 @@ void Expression_unfollow(Expression* follower, Expression* followed) {
 }
 
 void Expression_followAsNull(Expression* followed) {
+	printf("XOLLOW %p %d\n", followed, followed->followerCount + 1);
+
 	followed->followerCount++;
 }
 
 void Expression_unfollowAsNull(expression_t type, Expression* followed) {
+	printf("XNFOLW %p %d\n", followed, followed->followerCount - 1);
+
 	if ((--followed->followerCount) <= 0) {
 		Expression_free(type, followed);
 	}
+
 }
 
 
@@ -82,26 +99,26 @@ int Expression_getFollowingExpressionNumber(expression_t type, Expression* e) {
 
 	/// TODO: followingNumber
 	case EXPRESSION_VARIABLE:
-		return 0;
+		return -1;
 	
 	/// TODO: followingNumber
 	case EXPRESSION_PROPERTY:
-		return 0; 
+		return 2;
 	
 	/// TODO: followingNumber
 	case EXPRESSION_CLASS:
-		return 0;
+		return -1;
 	
-		/// TODO: followingNumber
+	/// TODO: followingNumber
 	case EXPRESSION_FUNCTION:
-		return 0;
+		return -1;
 
 	case EXPRESSION_ARRAY:
 		return ((ExpressionArray*)e)->expressions.length;
 
 	/// TODO: followingNumber
 	case EXPRESSION_TYPE:
-		return 0;
+		return -1;
 
 	case EXPRESSION_CHAR:
 	case EXPRESSION_BOOL:
@@ -112,16 +129,6 @@ int Expression_getFollowingExpressionNumber(expression_t type, Expression* e) {
 	case EXPRESSION_DOUBLE:
 	case EXPRESSION_STRING:
 	case EXPRESSION_LABEL:
-
-	case EXPRESSION_KNOWN_CHAR:
-	case EXPRESSION_KNOWN_BOOL:
-	case EXPRESSION_KNOWN_SHORT:
-	case EXPRESSION_KNOWN_INT:
-	case EXPRESSION_KNOWN_LONG:
-	case EXPRESSION_KNOWN_FLOAT:
-	case EXPRESSION_KNOWN_DOUBLE:
-	case EXPRESSION_KNOWN_STRING:
-	case EXPRESSION_KNOWN_LABEL:
 		return 0;
 
 	case EXPRESSION_NEGATION:        // -a
@@ -180,8 +187,8 @@ void Expression_collectFollowedExpressions(expression_t type, Expression* e, exp
 	
 	case EXPRESSION_PROPERTY:
 	{
-		/// TODO: collectExpressiosn
-		
+		buffer[0] = Expression_cast(((ExpressionProperty*)e)->parent);
+		buffer[1] = ((ExpressionProperty*)e)->value;
 		break;
 	}
 	

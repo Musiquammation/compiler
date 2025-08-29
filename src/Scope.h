@@ -1,30 +1,30 @@
 #ifndef COMPILER_SCOPE_H_
 #define COMPILER_SCOPE_H_
 
+#include "declarations.h"
+
+#include "Branch.h"
+#include "label_t.h"
+#include <tools/Array.h>
+
 typedef char scope_t;
 
-#include <tools/Array.h>
-#include "Expression.h"
 
-typedef struct {
+struct Scope {
 	Scope* parent;
 	scope_t type;
 	
-	Array variables; // type: Variable
-	Array classes; // type: Class
-	Array function; // type: Function
-
-	Array properties; // type: expressionPtr_t
-	Array types; // type: expressionPtr_t
-} Scope;
+	Array variables; // type: Variable*
+	Array classes; // type: Class*
+	Array functions; // type: Function*
+	Array properties; // type: Property*
+};
 
 
 void Scope_create(Scope* scope);
 void Scope_delete(Scope* scope);
 
-void Scope_appendVariable(Scope* scope, Expression* expression);
-void Scope_appendClass(Scope* scope, Expression* expression);
-void Scope_appendFunction(Scope* scope, Expression* expression);
+void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall, Expression* value);
 
 
 

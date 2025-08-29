@@ -1,9 +1,41 @@
 #ifndef COMPILER_EXPRESSION_H_
 #define COMPILER_EXPRESSION_H_
 
-typedef char expression_t;
+#include "declarations.h"
+#include "Type.h"
+#include "label_t.h"
 
 #include <tools/Array.h>
+
+typedef Expression* expressionPtr_t;
+typedef char expression_t;
+
+struct Expression {
+	expression_t type;
+	int followerCount;
+	Array followers; // type: expressionPtr_t
+};
+
+
+
+#define Expression_cast(expr) ((Expression*)(expr))
+
+void Expression_create(expression_t type, Expression* e);
+void Expression_delete(expression_t type, Expression* e);
+void Expression_free(expression_t type, Expression* e);
+
+void Expression_follow(Expression* follower, Expression* followed);
+void Expression_unfollow(Expression* follower, Expression* followed);
+
+void Expression_followAsNull(Expression* followed);
+void Expression_unfollowAsNull(expression_t type, Expression* followed);
+
+
+int Expression_getFollowingExpressionNumber(expression_t type, Expression* e);
+void Expression_collectFollowedExpressions(expression_t type, Expression* e, expressionPtr_t buffer[]);
+
+
+
 
 
 
@@ -28,16 +60,6 @@ enum {
 	EXPRESSION_DOUBLE,
 	EXPRESSION_STRING,
 	EXPRESSION_LABEL,
-
-	EXPRESSION_KNOWN_CHAR,
-	EXPRESSION_KNOWN_BOOL,
-	EXPRESSION_KNOWN_SHORT,
-	EXPRESSION_KNOWN_INT,
-	EXPRESSION_KNOWN_LONG,
-	EXPRESSION_KNOWN_FLOAT,
-	EXPRESSION_KNOWN_DOUBLE,
-	EXPRESSION_KNOWN_STRING,
-	EXPRESSION_KNOWN_LABEL,
 
 	EXPRESSION_ADDITION,        // a + b
 	EXPRESSION_SUBSTRACTION,    // a - b
@@ -71,315 +93,256 @@ enum {
 
 
 
+structdef(ExpressionNone);
+structdef(ExpressionInvalid);
+structdef(ExpressionArray);
+structdef(ExpressionProperty);
+structdef(ExpressionChar);
+structdef(ExpressionBool);
+structdef(ExpressionShort);
+structdef(ExpressionInt);
+structdef(ExpressionLong);
+structdef(ExpressionFloat);
+structdef(ExpressionDouble);
+structdef(ExpressionString);
+structdef(ExpressionLabel);
+structdef(ExpressionNegation);
+structdef(ExpressionIncrement);
+structdef(ExpressionDecrement);
+structdef(ExpressionBitwiseNot);
+structdef(ExpressionLogicalNot);
+structdef(ExpressionAddition);
+structdef(ExpressionSubstraction);
+structdef(ExpressionMultiplication);
+structdef(ExpressionDivision);
+structdef(ExpressionModulo);
+structdef(ExpressionBitwiseAnd);
+structdef(ExpressionBitwiseOr);
+structdef(ExpressionBitwiseXor);
+structdef(ExpressionLeftShift);
+structdef(ExpressionRightShift);
+structdef(ExpressionLogicalAnd);
+structdef(ExpressionLogicalOr);
+structdef(ExpressionEqual);
+structdef(ExpressionNotEqual);
+structdef(ExpressionLess);
+structdef(ExpressionLessEqual);
+structdef(ExpressionGreater);
+structdef(ExpressionGreaterEqual);
 
 
-typedef struct {
-	expression_t type;
-	int followerCount;
-	Array followers; // type: expressionPtr_t
-} Expression;
-
-typedef Expression* expressionPtr_t;
-
-#define Expression_cast(expr) ((Expression*)(expr))
-
-void Expression_create(expression_t type, Expression* e);
-void Expression_delete(expression_t type, Expression* e);
-void Expression_free(expression_t type, Expression* e);
-
-void Expression_follow(Expression* follower, Expression* followed);
-void Expression_unfollow(Expression* follower, Expression* followed);
-
-void Expression_followAsNull(Expression* followed);
-void Expression_unfollowAsNull(expression_t type, Expression* followed);
-
-
-int Expression_getFollowingExpressionNumber(expression_t type, Expression* e);
-void Expression_collectFollowedExpressions(expression_t type, Expression* e, expressionPtr_t buffer[]);
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-typedef struct {
+struct ExpressionNone {
 	Expression prefix;
-} ExpressionNone;
+};
 
-typedef struct {
+struct ExpressionInvalid {
 	Expression prefix;
-} ExpressionInvalid;
+};
 
-typedef struct {
+struct ExpressionArray {
 	Expression prefix;
 	Array expressions; // type: expressionPtr_t
-} ExpressionArray;
+};
 
-/// TODO: remove ExpressionVariable ?
-typedef struct {
+struct ExpressionProperty {
 	Expression prefix;
-} ExpressionVariable;
-
-typedef struct {
-	Expression prefix;
-} ExpressionProperty;
-
-/// TODO: remove ExpressionClass ?
-typedef struct {
-	Expression prefix;
-} ExpressionClass;
-
-/// TODO: remove ExpressionFunction ?
-typedef struct {
-	Expression prefix;
-} ExpressionFunction;
-
-typedef struct {
-	Expression prefix;
-} ExpressionType;
+	Type type;
+	ExpressionProperty* parent;
+	Expression* value;
+	const Variable* variable;
+};
 
 
 
 
-typedef struct {
+
+struct ExpressionChar {
 	Expression prefix;
 	char value;
-} ExpressionChar;
+};
 
-typedef struct {
+struct ExpressionBool {
 	Expression prefix;
 	_Bool value;
-} ExpressionBool;
+};
 
-typedef struct {
+struct ExpressionShort {
 	Expression prefix;
 	short value;
-} ExpressionShort;
+};
 
-typedef struct {
+struct ExpressionInt {
 	Expression prefix;
 	int value;
-} ExpressionInt;
+};
 
-typedef struct {
+struct ExpressionLong {
 	Expression prefix;
 	long value;
-} ExpressionLong;
+};
 
-typedef struct {
+struct ExpressionFloat {
 	Expression prefix;
 	float value;
-} ExpressionFloat;
+};
 
-typedef struct {
+struct ExpressionDouble {
 	Expression prefix;
 	double value;
-} ExpressionDouble;
+};
 
-typedef struct {
+struct ExpressionString {
 	Expression prefix;
 	char* value;
-} ExpressionString;
+};
 
-typedef struct {
+struct ExpressionLabel {
 	Expression prefix;
-	char* value;
-} ExpressionLabel;
+	label_t label;
+};
 
 
 
-typedef struct {
-	Expression prefix;
-	char value;
-} ExpressionKnownChar;
-
-typedef struct {
-	Expression prefix;
-	bool value;
-} ExpressionKnownBool;
-
-typedef struct {
-	Expression prefix;
-	short value;
-} ExpressionKnownShort;
-
-typedef struct {
-	Expression prefix;
-	int value;
-} ExpressionKnownInt;
-
-typedef struct {
-	Expression prefix;
-	long value;
-} ExpressionKnownLong;
-
-typedef struct {
-	Expression prefix;
-	float value;
-} ExpressionKnownFloat;
-
-typedef struct {
-	Expression prefix;
-	double value;
-} ExpressionKnownDouble;
-
-typedef struct {
-	Expression prefix;
-	char* value;
-} ExpressionKnownString;
-
-typedef struct {
-	Expression prefix;
-	char* value;
-} ExpressionKnownLabel;
 
 
-
-typedef struct {
+struct ExpressionNegation {
 	Expression prefix;
 	Expression* expr;
-} ExpressionNegation;
+};
 
-typedef struct {
+struct ExpressionIncrement {
 	Expression prefix;
 	Expression* expr;
-} ExpressionIncrement;
+};
 
-typedef struct {
+struct ExpressionDecrement {
 	Expression prefix;
 	Expression* expr;
-} ExpressionDecrement;
+};
 
-typedef struct {
+struct ExpressionBitwiseNot {
 	Expression prefix;
 	Expression* expr;
-} ExpressionBitwiseNot;
+};
 
-typedef struct {
+struct ExpressionLogicalNot {
 	Expression prefix;
 	Expression* expr;
-} ExpressionLogicalNot;
+};
 
 
 
-typedef struct {
+struct ExpressionAddition {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionAddition;
+};
 
-typedef struct {
+struct ExpressionSubstraction {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionSubstraction;
+};
 
-typedef struct {
+struct ExpressionMultiplication {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionMultiplication;
+};
 
-typedef struct {
+struct ExpressionDivision {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionDivision;
+};
 
-typedef struct {
+struct ExpressionModulo {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionModulo;
+};
 
-typedef struct {
+struct ExpressionBitwiseAnd {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionBitwiseAnd;
+};
 
-typedef struct {
+struct ExpressionBitwiseOr {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionBitwiseOr;
+};
 
-typedef struct {
+struct ExpressionBitwiseXor {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionBitwiseXor;
+};
 
-typedef struct {
+struct ExpressionLeftShift {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionLeftShift;
+};
 
-typedef struct {
+struct ExpressionRightShift {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionRightShift;
+};
 
-typedef struct {
+struct ExpressionLogicalAnd {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionLogicalAnd;
+};
 
-typedef struct {
+struct ExpressionLogicalOr {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionLogicalOr;
+};
 
-typedef struct {
+struct ExpressionEqual {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionEqual;
+};
 
-typedef struct {
+struct ExpressionNotEqual {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionNotEqual;
+};
 
-typedef struct {
+struct ExpressionLess {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionLess;
+};
 
-typedef struct {
+struct ExpressionLessEqual {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionLessEqual;
+};
 
-typedef struct {
+struct ExpressionGreater {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionGreater;
+};
 
-typedef struct {
+struct ExpressionGreaterEqual {
 	Expression prefix;
 	Expression* left;
 	Expression* right;
-} ExpressionGreaterEqual;
-
-
-
+};
 
 
 

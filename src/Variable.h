@@ -1,8 +1,14 @@
 #ifndef COMPILER_VARIABLE_H_
 #define COMPILER_VARIABLE_H_
 
-typedef struct {
+#include "declarations.h"
 
-} Variable;
+#include "TypeCall.h"
+
+
+struct Variable {
+    label_t name;
+    TypeCall typeCall;
+};
 
 #endif

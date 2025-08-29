@@ -1,42 +1,57 @@
 #include "Scope.h"
 
+#include "Property.h"
+#include "Expression.h"
+#include "Variable.h"
+#include "Class.h"
+#include "Function.h"
+
+#include <stdio.h>
+
+
 void Scope_create(Scope* scope) {
-	Array_create(&scope->variables, sizeof(expressionPtr_t));
-	Array_create(&scope->classes, sizeof(expressionPtr_t));
-	Array_create(&scope->functions, sizeof(expressionPtr_t));
+	Array_create(&scope->variables, sizeof(Variable*));
+	Array_create(&scope->classes, sizeof(Class*));
+	Array_create(&scope->functions, sizeof(Function*));
+	Array_create(&scope->properties, sizeof(Property*));
+	
 }
 
 void Scope_delete(Scope* scope) {
-	Array_loop(expressionPtr_t, scope->variables, i) {
-		Expression_unfollowAsNull(EXPRESSION_VARIABLE, *i);
+	Array_loopPtr(Property, scope->properties, p_ptr) {
+		Property* p = *p_ptr;
+		Property_delete(p);
+		free(p);
 	}
 
-	Array_loop(expressionPtr_t, scope->classes, i) {
-		Expression_unfollowAsNull(EXPRESSION_CLASS, *i);
-	}
-
-	Array_loop(expressionPtr_t, scope->functions, i) {
-		Expression_unfollowAsNull(EXPRESSION_FUNCTION, *i);
-	}
+	Array_loopPtr(void, scope->variables, i) {free(*i);}
+	Array_loopPtr(void, scope->classes, i) {free(*i);}
+	Array_loopPtr(void, scope->functions, i) {free(*i);}
 
 	Array_free(scope->variables);
 	Array_free(scope->classes);
 	Array_free(scope->functions);
+	Array_free(scope->properties);
 }
 
 
-void Scope_appendVariable(Scope* scope, Expression* expression) {
-	*Array_push(expressionPtr_t, &scope->variables) = expression;
-	Expression_followAsNull(expression);
-}
+void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall, Expression* value) {
+	Variable* variable = malloc(sizeof(Variable));
+	variable->name = name;
+	variable->typeCall = *typeCall;
+	*Array_push(Variable*, &scope->variables) = variable;
+	
+	Property* property = malloc(sizeof(Property));
+	Property_fill(property, NULL, variable, typeCall);
+	*Array_push(Property*, &scope->properties) = property;
 
-void Scope_appendClass(Scope* scope, Expression* expression) {
-	*Array_push(expressionPtr_t, &scope->classes) = expression;
-	Expression_followAsNull(expression);
-}
-
-void Scope_appendFunction(Scope* scope, Expression* expression) {
-	*Array_push(expressionPtr_t, &scope->functions) = expression;
-	Expression_followAsNull(expression);
+	if (value) {
+		ExpressionProperty* expression = property->expression;
+		expression->value = value;
+		expression->value = value;
+		Expression_follow(value, Expression_cast(expression));
+	} else {
+		
+	}
 }
 

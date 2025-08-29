@@ -1,8 +1,10 @@
 #ifndef COMPILER_FUNCTION_H_
 #define COMPILER_FUNCTION_H_
 
-typedef struct {
+#include "declarations.h"
 
-} Function;
+struct Function {
+
+};
 
 #endif

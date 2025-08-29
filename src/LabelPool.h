@@ -1,17 +1,18 @@
 #ifndef COMPILER_LABEL_POOL_H_
 #define COMPILER_LABEL_POOL_H_
 
+#include "declarations.h"
 #include "label_t.h"
 
 #include <tools/Array.h>
 
 
 
-typedef struct {
+struct LabelPool {
     char** data;
     int size;
     int capacity;
-} LabelPool;
+};
 
 
 void LabelPool_create(LabelPool* pool);
