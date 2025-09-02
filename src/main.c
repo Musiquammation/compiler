@@ -9,6 +9,11 @@
 #include "Variable.h"
 #include "Class.h"
 
+#include "Parser.h"
+
+#include "syntaxList.h"
+#include "globalLabelPool.h"
+
 /*
 int main() {
 	LabelPool labelPool;
@@ -28,46 +33,31 @@ int main() {
 */
 
 
+
 // Test
-int main() {
-	Scope scope;
-	Scope_create(&scope);
+int main(int argc, char *argv[]) {
+	if (argc < 2) {
+		printf("Fatal error: missing module path\n");
+		return 1;
+	}
 
 
-	Class classInt;
-	classInt.name = "int";
-	Class_create(&classInt);
+	Module module;
 
-	Class class;
-	class.name = "Point";
-	Class_create(&class);
+	LabelPool_create(&_labelPool);
+	
+	Module_create(&module);
+	CommonLabels_generate(&_commonLabels, &_labelPool);
+	syntaxList_init();
 
-	Variable* point_x_var = malloc(sizeof(Variable));
-	Variable* point_y_var = malloc(sizeof(Variable));
-
-	TypeCall typeInt = { .class = &classInt };
-
-	point_x_var->name = "x";
-	point_x_var->typeCall = typeInt;
-
-	point_y_var->name = "y";
-	point_y_var->typeCall = typeInt;
+	module.name = LabelPool_push(&_labelPool, argv[1]);
 
 
-	*Array_push(Variable*, &class.variables) = point_x_var;
-	*Array_push(Variable*, &class.variables) = point_y_var;
+	Module_generateFilesScopes(&module);
+	Module_readDeclarations(&module);
 
-
-	TypeCall type = { .class = &class };
-	Scope_pushVariable(&scope, "point", &type);
-
-
-
-	Scope_delete(&scope);
-
-	Class_delete(&class);
-	Class_delete(&classInt);
-
+	Module_delete(&module);
+	LabelPool_delete(&_labelPool);
 	printf("Sucessuly exited!\n");
 
 	return 0;
@@ -96,3 +86,6 @@ int main() {
 #include "Class.c"
 
 #include "Parser.c"
+
+#include "Syntax.c"
+#include "globalLabelPool.c"

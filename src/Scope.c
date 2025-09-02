@@ -14,8 +14,8 @@ void Scope_create(Scope* scope) {
 	Array_create(&scope->classes, sizeof(Class*));
 	Array_create(&scope->functions, sizeof(Function*));
 	Array_create(&scope->properties, sizeof(Property*));
-	
 }
+	
 
 void Scope_delete(Scope* scope) {
 	Array_loopPtr(Property, scope->properties, p) {
@@ -42,6 +42,11 @@ void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall) {
 	Property* property = malloc(sizeof(Property));
 	Property_fill(property, NULL, variable, typeCall);
 	*Array_push(Property*, &scope->properties) = property;
-
 }
 
+
+
+void ScopeFile_free(ScopeFile* file) {
+	free(file->filepath);
+	Scope_delete(&file->scope);
+}

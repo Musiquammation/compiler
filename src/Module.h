@@ -3,18 +3,24 @@
 
 #include "declarations.h"
 
-#include "label_t.h"
+#include "LabelPool.h"
 #include "Scope.h"
 
 struct Module {
-    label_t name;
-    Scope scope;
+	Scope scope;
+	label_t name;
+	ScopeFile* files;
+	int fileLength;
 };
 
-void Module_create(Module* module, label_t name);
+void Module_create(Module* module);
 void Module_delete(Module* module);
 
+void Module_generateFilesScopes(Module* module);
+void Module_readDeclarations(Module* module);
+ScopeFile* Module_findModuleFile(Module* module, label_t target);
 
 #endif
+
 
 

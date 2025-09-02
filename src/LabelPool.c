@@ -71,3 +71,11 @@ label_t LabelPool_search(const LabelPool* pool, const char* text) {
 
 
 
+void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
+    labels->_let      = LabelPool_push(pool, "let");
+    labels->_const    = LabelPool_push(pool, "const");
+    labels->_function = LabelPool_push(pool, "function");
+    labels->_class    = LabelPool_push(pool, "class");
+    labels->_module   = LabelPool_push(pool, "module");
+    labels->_main     = LabelPool_push(pool, "main");
+}

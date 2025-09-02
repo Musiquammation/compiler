@@ -29,17 +29,27 @@ void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall);
 
 
 
-typedef struct {
+struct ScopeFile {
 	Scope scope;
 	label_t name;
-	char* filename;
-} ScopeFile;
+	char* filepath;
+	char definitionMode; // 0=all, -1=tc only , +1=th only
+};
 
-typedef struct {
+struct ScopeFolder {
 	Scope scope;
 	label_t name;
-	char* foldername;
-} ScopeFolder;
+	char* folderpath;
+};
 
+
+enum {
+	SCOPE_MODULE,
+	SCOPE_FILE,
+	SCOPE_FOLDER,
+};
+
+
+void ScopeFile_free(ScopeFile* file);
 
 #endif

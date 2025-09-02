@@ -4,6 +4,9 @@
 #include <tools/tools.h>
 
 structdef(Scope);
+structdef(ScopeFile);
+structdef(ScopeFolder);
+
 structdef(Branch);
 structdef(Module);
 
@@ -19,8 +22,11 @@ structdef(Property);
 structdef(TypeCall);
 
 structdef(LabelPool);
-structdef(Parser);
+structdef(CommonLabels);
 
 structdef(Parser);
+
+
+
 
 #endif
