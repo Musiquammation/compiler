@@ -6,6 +6,6 @@
 bool isNullPointerRef(const void*);
 
 
-void raiseError();
+void raiseError(const char* reason);
 
 #endif

@@ -7,8 +7,8 @@ bool isNullPointerRef(const void* ptr) {
 }
 
 
-void raiseError() {
-	printf("Error raised.\n");
+void raiseError(const char* reason) {
+	printf("Error raised: %s\n", reason);
 	int* ptr = NULL;
 	int value = *ptr;
 }

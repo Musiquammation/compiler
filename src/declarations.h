@@ -25,6 +25,7 @@ structdef(LabelPool);
 structdef(CommonLabels);
 
 structdef(Parser);
+structdef(Annotation);
 
 
 

@@ -37,10 +37,15 @@ typedef struct {
 	};
 } Token;
 
+struct Annotation {
+	label_t name;
+};
+
+
 struct Parser {
 	FILE* file;
 	char buffer[PARSER_LINE_BUFFER_LENGTH];
-	
+	Array annotations; // type: Annotation
 
 	bool alive;
 	char current;
@@ -78,6 +83,7 @@ enum {
 
 
 	TOKEN_CTYPE_OPERATOR,
+	TOKEN_CTYPE_KEYWORD,
 	TOKEN_CTYPE_LABEL,
 	TOKEN_CTYPE_INTEGER,
 	TOKEN_CTYPE_NUMBER,
@@ -178,11 +184,11 @@ void Parser_open(Parser* parser, const char* filepath);
 void Parser_close(Parser* parser);
 
 Token Parser_read(Parser* parser, LabelPool* labelPool);
+Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool);
 
 
 
-
-void Token_print(const Token* token);
+void Token_println(const Token* token);
 
 int Token_compare(Token token, const Token comparators[], int length, char raise);
 

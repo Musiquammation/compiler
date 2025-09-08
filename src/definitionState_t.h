@@ -1,0 +1,12 @@
+#ifndef COMPILER_DEFINITIONSTATET_H_
+#define COMPILER_DEFINITIONSTATET_H_
+
+typedef char definitionState_t;
+
+enum {
+    DEFINITIONSTATE_NOT,
+    DEFINITIONSTATE_READING,
+    DEFINITIONSTATE_DONE,
+};
+
+#endif

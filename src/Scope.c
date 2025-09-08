@@ -46,6 +46,57 @@ void Scope_pushVariable(Scope* scope, label_t name, const TypeCall* typeCall) {
 
 
 
+
+
+void* Scope_search(label_t name, Scope* scope, ScopeSearchArgs* args, int searchFlags) {
+	while (scope) {
+		if (searchFlags & SCOPESEARCH_VARIABLE) {
+			typedef Variable* ptr_t;
+			Array_loop(ptr_t, scope->variables, ptr) {
+				ptr_t e = *ptr;
+				if (e->name == name) {
+					if (args) {
+						args->resultType = 0;
+					}
+					return e;
+				}
+			}
+		}
+
+		if (searchFlags & SCOPESEARCH_CLASS) {
+			typedef Class* ptr_t;
+			Array_loop(ptr_t, scope->classes, ptr) {
+				ptr_t e = *ptr;
+				if (e->name == name) {
+					if (args) {
+						args->resultType = 0;
+					}
+					return e;
+				}
+			}
+		}
+
+		if (searchFlags & SCOPESEARCH_FUNCTION) {
+			typedef Function* ptr_t;
+			Array_loop(ptr_t, scope->functions, ptr) {
+				ptr_t e = *ptr;
+				if (e->name == name) {
+					if (args) {
+						args->resultType = 0;
+					}
+					return e;
+				}
+			}
+		}
+
+		scope = scope->parent;
+	}
+
+	return NULL;
+}
+
+
+
 void ScopeFile_free(ScopeFile* file) {
 	free(file->filepath);
 	Scope_delete(&file->scope);

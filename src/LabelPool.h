@@ -17,8 +17,13 @@ struct LabelPool {
 struct CommonLabels {
 	label_t _let;
 	label_t _const;
-	label_t _function;
 	label_t _class;
+	label_t _function;
+	label_t _if;
+	label_t _else;
+	label_t _for;
+	label_t _while;
+	label_t _switch;
 	label_t _module;
 	label_t _main;
 };

@@ -1,6 +1,7 @@
 #ifndef COMPILER_VARIABLE_H_
 #define COMPILER_VARIABLE_H_
 
+#include "label_t.h"
 #include "declarations.h"
 
 #include "TypeCall.h"

@@ -10,6 +10,7 @@ struct Module {
 	Scope scope;
 	label_t name;
 	ScopeFile* files;
+	Function* mainFunction;
 	int fileLength;
 };
 
@@ -18,6 +19,7 @@ void Module_delete(Module* module);
 
 void Module_generateFilesScopes(Module* module);
 void Module_readDeclarations(Module* module);
+void Module_generateDefinitions(Module* module);
 ScopeFile* Module_findModuleFile(Module* module, label_t target);
 
 #endif

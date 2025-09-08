@@ -55,6 +55,7 @@ int main(int argc, char *argv[]) {
 
 	Module_generateFilesScopes(&module);
 	Module_readDeclarations(&module);
+	Module_generateDefinitions(&module);
 
 	Module_delete(&module);
 	LabelPool_delete(&_labelPool);

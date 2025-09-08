@@ -1,15 +1,21 @@
 #include "Module.h"
 
-#include "Syntax.h"
 #include "helper.h"
+#include "globalLabelPool.h"
+
+#include "Syntax.h"
+
+#include "Class.h"
 
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
 
 void Module_create(Module* module) {
-	module->scope.type = SCOPE_MODULE;
 	Scope_create(&module->scope);
+	module->scope.type = SCOPE_MODULE;
+	module->scope.parent = NULL;
+	module->mainFunction = NULL;
 }
 
 void Module_delete(Module* module) {
@@ -42,7 +48,7 @@ void Module_generateFilesScopes(Module* module) {
 
 	d = opendir(path);
 	if (!d) {
-		raiseError();
+		raiseError("Cannot open directory");
 		return;
 	}
 
@@ -76,6 +82,8 @@ void Module_generateFilesScopes(Module* module) {
 
 		// Récupérer le label
 		label_t label = LabelPool_push(&_labelPool, nameBuf);
+		if (label == _commonLabels._module)
+			continue; // skip module
 
 		// Vérifier si on a déjà un ScopeFile pour ce label
 		bool found = false;
@@ -94,12 +102,15 @@ void Module_generateFilesScopes(Module* module) {
 		sf->name = label;
 		Scope_create(&sf->scope);
 		sf->scope.type = SCOPE_FILE;
+		sf->scope.parent = &module->scope;
 
 		size_t pathLen = strlen(path) + 1 + nameLen + 1;
 		sf->filepath = malloc(pathLen);
 		snprintf(sf->filepath, pathLen, "%s/%s", path, nameBuf);
 
 		sf->definitionMode = definitionMode;
+		sf->state_tc = DEFINITIONSTATE_NOT;
+		sf->state_th = DEFINITIONSTATE_NOT;
 	}
 
 	closedir(d);
@@ -129,13 +140,26 @@ ScopeFile* Module_findModuleFile(Module* module, label_t target) {
 
 
 void Module_readDeclarations(Module* module) {
-	// Search module.dh
-	ScopeFile* sf = Module_findModuleFile(module, _commonLabels._module);
-	if (!sf || sf->definitionMode != 1) {
-		raiseError();
-		return;
-	}
+	// Search module.th
+	int moduleNameLength = strlen(module->name);
+	char* const filepath = malloc(moduleNameLength + sizeof("/module.th"));
+	memcpy(filepath, module->name, moduleNameLength);
+	memcpy(&filepath[moduleNameLength], "/module.th", sizeof("/module.th"));
 
-	
-	Syntax_file(sf);
+	Syntax_module(module, filepath);
+	free(filepath);
+}
+
+void Module_generateDefinitions(Module* module) {
+	Array_loopPtr(Class, module->scope.classes, clPtr) {
+		Class* cl = *clPtr;
+		ScopeFile* file = Module_findModuleFile(module, cl->name);
+
+		/// TODO: should we raise an error?
+		if (!file) {
+			raiseError("[Architecture] Missing module file\n");
+		}
+
+		Syntax_file(file);
+	}
 }

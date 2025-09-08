@@ -4,7 +4,7 @@
 #include "declarations.h"
 
 struct Function {
-
+    label_t name;
 };
 
 #endif

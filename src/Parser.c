@@ -130,20 +130,20 @@ static char moveCursor(int cursor, int lineLength, Parser* parser) {
 
 static Token handleNegativeChar(Parser* parser, char c) {
 	if (c == -2) {
-		raiseError();
+		raiseError("[Parser] Error from parser");
 		return (Token){.type = TOKEN_TYPE_ERROR};
 	}
 	
 	if (c == -1) {
 		if (parser->scopeLevel != 0) {
-			raiseError();
+			raiseError("[Parser] Scope level error");
 			return (Token){.type = TOKEN_TYPE_ERROR};
 		}
 		
 		return (Token){.type = TOKEN_TYPE_EOF};
 	}
 	
-	raiseError();
+	raiseError("[Parser] Invalid char");
 	return (Token){.type = TOKEN_TYPE_ERROR};
 }
 
@@ -298,18 +298,21 @@ void Parser_open(Parser* parser, const char* filepath) {
 	parser->file_column = 0;
 	parser->cursor = 0;
 	parser->current = 0;
+
+	Array_create(&parser->annotations, sizeof(Annotation));
 	
 	FILE* file = fopen(filepath, "r");
 	if (!file) {
 		printf("%s\n", filepath);
 		parser->file = NULL;
 		parser->alive = false;
-		raiseError();
+		raiseError("[Parser] Cannot open file");
 		return;
 	}
 
 	parser->file = file;
 	parser->scopeLevel = 0;
+
 
 	loadNextLine(parser);
 }
@@ -317,6 +320,8 @@ void Parser_open(Parser* parser, const char* filepath) {
 void Parser_close(Parser* parser) {
 	if (parser->file)
 		fclose(parser->file);
+
+	Array_free(parser->annotations);
 }
 
 
@@ -347,7 +352,7 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 	if (isOperatorChar(firstChar)) {
 		operator_t operator = getOperator(&parser->buffer[cursor], lineLength - cursor);
 		if (operator < 0) {
-			raiseError();
+			raiseError("[Parser] Operator not found");
 			return (Token){.type = TOKEN_TYPE_ERROR};
 		}
 
@@ -397,59 +402,72 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 	return (Token){.type = TOKEN_TYPE_NONE};
 
 	#undef move
-
 }
 
 
-void Token_print(const Token* token) {
+Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool) {
+	parser->annotations.length = 0;
+
+	Token token = Parser_read(parser, labelPool);
+	while (token.type == TOKEN_TYPE_OPERATOR && token.operator == TOKEN_OPERATOR_AT) {
+		Syntax_annotation(Array_push(Annotation, &parser->annotations), parser, labelPool);
+		token = Parser_read(parser, labelPool);
+	}
+
+	return token;
+}
+
+
+
+void Token_println(const Token* token) {
 	switch(token->type) {
 		// Signed integers
-		case TOKEN_TYPE_I8:  printf("number<i8>(%d)", token->i8); break;
-		case TOKEN_TYPE_I16: printf("number<i16>(%d)", token->i16); break;
-		case TOKEN_TYPE_I32: printf("number<i32>(%d)", token->i32); break;
-		case TOKEN_TYPE_I64: printf("number<i64>(%ld)", token->i64); break;
+		case TOKEN_TYPE_I8:  printf("number<i8>(%d)\n", token->i8); break;
+		case TOKEN_TYPE_I16: printf("number<i16>(%d)\n", token->i16); break;
+		case TOKEN_TYPE_I32: printf("number<i32>(%d)\n", token->i32); break;
+		case TOKEN_TYPE_I64: printf("number<i64>(%ld\n)", token->i64); break;
 
 		// Unsigned integers
-		case TOKEN_TYPE_U8:  printf("number<u8>(%u)", token->u8); break;
-		case TOKEN_TYPE_U16: printf("number<u16>(%u)", token->u16); break;
-		case TOKEN_TYPE_U32: printf("number<u32>(%u)", token->u32); break;
-		case TOKEN_TYPE_U64: printf("number<u64>(%lu)", token->u64); break;
+		case TOKEN_TYPE_U8:  printf("number<u8>(%u)\n", token->u8); break;
+		case TOKEN_TYPE_U16: printf("number<u16>(%u)\n", token->u16); break;
+		case TOKEN_TYPE_U32: printf("number<u32>(%u)\n", token->u32); break;
+		case TOKEN_TYPE_U64: printf("number<u64>(%lu\n)", token->u64); break;
 
 		// Floating-point numbers
-		case TOKEN_TYPE_F32: printf("number<f32>(%f)", token->f32); break;
-		case TOKEN_TYPE_F64: printf("number<f64>(%lf)", token->f64); break;
+		case TOKEN_TYPE_F32: printf("number<f32>(%f)\n", token->f32); break;
+		case TOKEN_TYPE_F64: printf("number<f64>(%lf\n)", token->f64); break;
 
 		// Operators
 		case TOKEN_TYPE_OPERATOR:
 			if(token->operator >= 0 && token->operator < (sizeof(PARSER_OPERATORS)/TOKEN_OPERATORMAXLENGTH)) {
 				printf("operator");
-				printf("%.*s", TOKEN_OPERATORMAXLENGTH, PARSER_OPERATORS[token->operator]);
+				printf("%.*s\n", TOKEN_OPERATORMAXLENGTH, PARSER_OPERATORS[token->operator]);
 			} else {
-				printf("operator <invalid>");
+				printf("operator <invalid>\n");
 			}
 			break;
 
 		// Labels or strings
 		case TOKEN_TYPE_LABEL:
 		case TOKEN_TYPE_STRING:
-			if(token->string) printf("label[%s]", token->string);
-			else printf("<null>");
+			if(token->string) printf("label[%s]\n", token->string);
+			else printf("<null>\n");
 			break;
 
 		case TOKEN_TYPE_NONE:
-			printf("<NONE>");
+			printf("<NONE>\n");
 			break;
 
 		case TOKEN_TYPE_EOF:
-			printf("<EOF>");
+			printf("<EOF>\n");
 			break;
 
 		case TOKEN_TYPE_ERROR:
-			printf("<ERROR>");
+			printf("<ERROR>\n");
 			break;
 		
 		default:
-			printf("<UNKNOWN>");
+			printf("<UNKNOWN>\n");
 	}
 }
 
@@ -460,12 +478,12 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 
 	switch (token.type) {
 	case TOKEN_TYPE_ERROR:
-		raiseError();
+		raiseError("[Parser] Token to compare is has ERROR type");
 		return -1;
 	
 	case TOKEN_TYPE_EOF:
 		if ((flags & SYNTAXFLAG_EOF) == 0)
-			raiseError();
+			raiseError("[Parser] Illegal EOF");
 
 		return -2;
 	}
@@ -478,12 +496,29 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 			
 			break;
 		
-		case TOKEN_CTYPE_LABEL:
+		case TOKEN_CTYPE_KEYWORD:
 			if (token.type == TOKEN_TYPE_LABEL && token.label == comparator->label)
 				success();
 			
 			break;
 
+
+		case TOKEN_CTYPE_LABEL:
+			if (token.type == TOKEN_TYPE_LABEL) {
+				// Forbidden keywords
+				if (
+					token.label == _commonLabels._let ||
+					token.label == _commonLabels._const ||
+					token.label == _commonLabels._class ||
+					token.label == _commonLabels._function
+				) {
+					raiseError("[Parser] Forbidden keyword used");
+				}
+				
+				success();
+			}
+
+			break;
 
 		case TOKEN_CTYPE_INTEGER:
 			switch (token.type) {
@@ -527,7 +562,7 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 
 
 	if ((flags & SYNTAXFLAG_UNFOUND) == 0)
-		raiseError();
+		raiseError("[Parser] Token not found");
 		
 
 	return -3;

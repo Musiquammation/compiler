@@ -3,6 +3,8 @@
 
 #include "declarations.h"
 
+#include "definitionState_t.h"
+
 #include "Branch.h"
 #include "label_t.h"
 #include <tools/Array.h>
@@ -34,22 +36,43 @@ struct ScopeFile {
 	label_t name;
 	char* filepath;
 	char definitionMode; // 0=all, -1=tc only , +1=th only
+	definitionState_t state_tc;
+	definitionState_t state_th;
 };
 
 struct ScopeFolder {
 	Scope scope;
 	label_t name;
 	char* folderpath;
+	char readState;
 };
 
 
 enum {
 	SCOPE_MODULE,
 	SCOPE_FILE,
-	SCOPE_FOLDER,
+	SCOPE_FOLDER
 };
 
 
+typedef struct {
+	int resultType;
+} ScopeSearchArgs;
+
+enum {
+	SCOPESEARCH_VARIABLE = 1,
+	SCOPESEARCH_CLASS = 2,
+	SCOPESEARCH_FUNCTION = 4,
+
+	SCOPESEARCH_ANYTYPE = SCOPESEARCH_VARIABLE|SCOPESEARCH_CLASS|SCOPESEARCH_FUNCTION,
+};
+
+void* Scope_search(label_t name, Scope* scope, ScopeSearchArgs* args, int searchFlags);
+
+
+
 void ScopeFile_free(ScopeFile* file);
+
+
 
 #endif
