@@ -12,21 +12,29 @@
 #include <ctype.h>
 
 void Module_create(Module* module) {
-	Scope_create(&module->scope);
 	module->scope.type = SCOPE_MODULE;
 	module->scope.parent = NULL;
 	module->mainFunction = NULL;
+
+	Array_create(&module->classes, sizeof(Class*));
 }
 
 void Module_delete(Module* module) {
-	Scope_delete(&module->scope);
-
 	ScopeFile* files = module->files;
 	Array_for(ScopeFile, files, module->fileLength, i) {
 		ScopeFile_free(i);
 	}
 
 	free(files);
+
+	// Delete classes
+	Array_loopPtr(Class, module->classes, clPtr) {
+		Class* cl = *clPtr;
+		Class_delete(cl);
+		free(cl);
+	}
+
+	Array_free(module->classes);
 }
 
 
@@ -99,9 +107,8 @@ void Module_generateFilesScopes(Module* module) {
 
 		// Créer un nouveau ScopeFile
 		ScopeFile* sf = Array_push(ScopeFile, &filesArray);
+		ScopeFile_create(sf);
 		sf->name = label;
-		Scope_create(&sf->scope);
-		sf->scope.type = SCOPE_FILE;
 		sf->scope.parent = &module->scope;
 
 		size_t pathLen = strlen(path) + 1 + nameLen + 1;
@@ -151,7 +158,7 @@ void Module_readDeclarations(Module* module) {
 }
 
 void Module_generateDefinitions(Module* module) {
-	Array_loopPtr(Class, module->scope.classes, clPtr) {
+	Array_loopPtr(Class, module->classes, clPtr) {
 		Class* cl = *clPtr;
 		ScopeFile* file = Module_findModuleFile(module, cl->name);
 
@@ -163,3 +170,42 @@ void Module_generateDefinitions(Module* module) {
 		Syntax_file(file);
 	}
 }
+
+
+
+Variable* Module_searchVariable(Module* module, label_t name, ScopeSearchArgs* args) {
+	raiseError("[TODO] Module_searchVariable");
+	return NULL;
+}
+
+Class* Module_searchClass(Module* module, label_t name, ScopeSearchArgs* args) {
+	Array_loopPtr(Class, module->classes, ptr) {
+		Class* e = *ptr;
+		if (e->name == name) {
+			if (args) {
+				args->resultType = 0;
+			}
+			return e;
+		}
+	}
+
+	return NULL;
+}
+
+Function* Module_searchFunction(Module* module, label_t name, ScopeSearchArgs* args) {
+	raiseError("[TODO] Module_searchFunction");
+}
+
+
+void Module_addVariable(Module* module, Variable* v) {
+
+}
+
+void Module_addClass(Module* module, Class* cl) {
+	*Array_push(Class*, &module->classes) = cl;
+}
+
+void Module_addFunction(Module* module, Function* fn) {
+
+}
+

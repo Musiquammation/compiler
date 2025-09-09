@@ -1,7 +1,5 @@
 #include "Expression.h"
 
-#include "Property.h"
-#include "Type.h"
 
 #include "declarations.h"
 #include "helper.h"
@@ -31,7 +29,6 @@ void Expression_delete(expression_t type, Expression* e) {
 			break;
 			
 		case EXPRESSION_PROPERTY:
-			Property_delete((Property*)e);
 			break;
 			
 		case EXPRESSION_CLASS:
@@ -41,7 +38,6 @@ void Expression_delete(expression_t type, Expression* e) {
 			break;
 			
 		case EXPRESSION_TYPE:
-			Type_delete((Type*)e);
 			break;
 			
 		

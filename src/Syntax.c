@@ -66,7 +66,7 @@ void Syntax_file(ScopeFile* scope) {
 		// order
 		case 2:
 		{
-			printf("[TODO] File order\n");
+			raiseError("[TODO] File order\n");
 			break;
 		}
 
@@ -189,8 +189,8 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 }
 
 
-void Syntax_continueVariableDeclaration(Array* variableArray, Scope* scope, Parser* parser) {
-	raiseError("[TODO]: Syntax_continueVariableDeclaration");
+void Syntax_continueVariableDeclaration(Variable* variable, Scope* scope, Parser* parser) {
+	printf("add (%p) %s\n", variable, variable->name);
 }
 
 
@@ -282,7 +282,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	}
 
 	// Search class in scope
-	Class* cl = Scope_search(name, scope, NULL, SCOPESEARCH_CLASS);
+	Class* cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
 	/// TODO: handle double declaration
 	if (cl) {
 		switch (cl->definitionState) {
@@ -298,9 +298,9 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	} else {
 		cl = malloc(sizeof(Class));
 		Class_create(cl);
-		*Array_push(Class*, &scope->classes) = cl;
 		cl->name = name;
 		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
+		Scope_addClass(scope, scope->type, cl);
 	}
 
 	// Read definition
@@ -314,6 +314,11 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
+	ScopeClass classScope = {
+		.scope = {.parent = parentScope, .type = SCOPE_CLASS},
+		.cl = cl
+	};
+
 	while (true) {
 		Token token = Parser_read(parser, &_labelPool);
 		
@@ -341,8 +346,10 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
 			// variable
 			case 0:
 			{
-				/// TODO: should we create a scope for class ? (while reading inside)
-				Syntax_continueVariableDeclaration(NULL, NULL, parser);
+				Variable* variable = malloc(sizeof(Variable));
+				variable->name = name;
+				*Array_push(Variable*, &cl->variables) = variable;
+				Syntax_continueVariableDeclaration(variable, &classScope.scope, parser);
 				break;
 			}
 			}

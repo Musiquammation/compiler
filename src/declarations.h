@@ -14,12 +14,12 @@ structdef(Variable);
 structdef(Class);
 structdef(Function);
 
+structdef(ScopeClass);
+
+structdef(ScopeSearchArgs);
+
 structdef(Expression);
 
-structdef(Type);
-structdef(Property);
-
-structdef(TypeCall);
 
 structdef(LabelPool);
 structdef(CommonLabels);

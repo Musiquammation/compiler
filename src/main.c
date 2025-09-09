@@ -76,11 +76,8 @@ int main(int argc, char *argv[]) {
 #include "Module.c"
 #include "helper.c"
 
-#include "TypeCall.c"
 
 #include "Expression.c"
-#include "Property.c"
-#include "Type.c"
 
 #include "Function.c"
 #include "Variable.c"

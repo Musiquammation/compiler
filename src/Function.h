@@ -7,4 +7,6 @@ struct Function {
     label_t name;
 };
 
+void Function_delete(Function* fn);
+
 #endif

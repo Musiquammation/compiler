@@ -12,6 +12,8 @@ struct Module {
 	ScopeFile* files;
 	Function* mainFunction;
 	int fileLength;
+
+	Array classes; // type: Class*
 };
 
 void Module_create(Module* module);
@@ -21,6 +23,16 @@ void Module_generateFilesScopes(Module* module);
 void Module_readDeclarations(Module* module);
 void Module_generateDefinitions(Module* module);
 ScopeFile* Module_findModuleFile(Module* module, label_t target);
+
+Variable* Module_searchVariable(Module* module, label_t name, ScopeSearchArgs* args);
+Class* Module_searchClass(Module* module, label_t name, ScopeSearchArgs* args);
+Function* Module_searchFunction(Module* module, label_t name, ScopeSearchArgs* args);
+
+void Module_addVariable(Module* module, Variable* v);
+void Module_addClass(Module* module, Class* cl);
+void Module_addFunction(Module* module, Function* fn);
+
+
 
 #endif
 

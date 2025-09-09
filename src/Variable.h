@@ -4,12 +4,14 @@
 #include "label_t.h"
 #include "declarations.h"
 
-#include "TypeCall.h"
 
 
 struct Variable {
     label_t name;
-    TypeCall typeCall;
 };
+
+void Variable_create(Variable* variable);
+void Variable_delete(Variable* variable);
+
 
 #endif
