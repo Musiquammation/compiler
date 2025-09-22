@@ -81,6 +81,26 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	labels->_for      = LabelPool_push(pool, "for");
 	labels->_while    = LabelPool_push(pool, "while");
 	labels->_switch   = LabelPool_push(pool, "switch");
+
 	labels->_module   = LabelPool_push(pool, "module");
 	labels->_main     = LabelPool_push(pool, "main");
+
+	labels->_i8       = LabelPool_push(pool, "i8");
+	labels->_u8       = LabelPool_push(pool, "u8");
+	labels->_i16      = LabelPool_push(pool, "i16");
+	labels->_u16      = LabelPool_push(pool, "u16");
+	labels->_i32      = LabelPool_push(pool, "i32");
+	labels->_u32      = LabelPool_push(pool, "u32");
+	labels->_i64      = LabelPool_push(pool, "i64");
+	labels->_u64      = LabelPool_push(pool, "u64");
+	labels->_f32      = LabelPool_push(pool, "f32");
+	labels->_f64      = LabelPool_push(pool, "f64");
+
+	labels->_char     = LabelPool_push(pool, "char");
+	labels->_bool     = LabelPool_push(pool, "bool");
+	labels->_short    = LabelPool_push(pool, "short");
+	labels->_int      = LabelPool_push(pool, "int");
+	labels->_long     = LabelPool_push(pool, "long");
+	labels->_float    = LabelPool_push(pool, "float");
+	labels->_double   = LabelPool_push(pool, "double");
 }

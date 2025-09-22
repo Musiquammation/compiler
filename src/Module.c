@@ -5,6 +5,7 @@
 
 #include "Syntax.h"
 
+#include "Function.h"
 #include "Class.h"
 
 #include <string.h>
@@ -17,6 +18,7 @@ void Module_create(Module* module) {
 	module->mainFunction = NULL;
 
 	Array_create(&module->classes, sizeof(Class*));
+	Array_create(&module->functions, sizeof(Function*));
 }
 
 void Module_delete(Module* module) {
@@ -35,6 +37,15 @@ void Module_delete(Module* module) {
 	}
 
 	Array_free(module->classes);
+
+	// Delete functions
+	Array_loopPtr(Function, module->functions, fnPtr) {
+		Function* fn = *fnPtr;
+		Function_delete(fn);
+		free(fn);
+	}
+
+	Array_free(module->functions);
 }
 
 
@@ -158,6 +169,21 @@ void Module_readDeclarations(Module* module) {
 }
 
 void Module_generateDefinitions(Module* module) {
+	// Read th classes
+	Array_loopPtr(Class, module->classes, clPtr) {
+		Class* cl = *clPtr;
+		ScopeFile* file = Module_findModuleFile(module, cl->name);
+
+		/// TODO: should we raise an error?
+		if (!file) {
+			raiseError("[Architecture] Missing class definition file\n");
+		}
+
+		if (file->definitionMode >= 0 && file->state_th == DEFINITIONSTATE_NOT)
+			Syntax_thFile(file);
+	}
+
+	// Read tc classes
 	Array_loopPtr(Class, module->classes, clPtr) {
 		Class* cl = *clPtr;
 		ScopeFile* file = Module_findModuleFile(module, cl->name);
@@ -167,14 +193,29 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing module file\n");
 		}
 
-		Syntax_file(file);
+		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_NOT)
+			Syntax_tcFile(file);
+	}
+
+	// Read th functions
+	Array_loopPtr(Function, module->functions, fnPtr) {
+		Function* fn = *fnPtr;
+		ScopeFile* file = Module_findModuleFile(module, fn->name);
+
+		/// TODO: should we raise an error?
+		if (!file) {
+			raiseError("[Architecture] Missing module file\n");
+		}
+
+		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_NOT)
+			Syntax_tcFile(file);
 	}
 }
 
 
 
 Variable* Module_searchVariable(Module* module, label_t name, ScopeSearchArgs* args) {
-	raiseError("[TODO] Module_searchVariable");
+	// raiseError("[TODO] Module_searchVariable");
 	return NULL;
 }
 
@@ -193,12 +234,22 @@ Class* Module_searchClass(Module* module, label_t name, ScopeSearchArgs* args) {
 }
 
 Function* Module_searchFunction(Module* module, label_t name, ScopeSearchArgs* args) {
-	raiseError("[TODO] Module_searchFunction");
+	Array_loopPtr(Function, module->functions, ptr) {
+		Function* e = *ptr;
+		if (e->name == name) {
+			if (args) {
+				args->resultType = 1;
+			}
+			return e;
+		}
+	}
+
+	return NULL;
 }
 
 
 void Module_addVariable(Module* module, Variable* v) {
-
+	raiseError("[TODO]");
 }
 
 void Module_addClass(Module* module, Class* cl) {
@@ -206,6 +257,6 @@ void Module_addClass(Module* module, Class* cl) {
 }
 
 void Module_addFunction(Module* module, Function* fn) {
-
+	*Array_push(Function*, &module->functions) = fn;
 }
 

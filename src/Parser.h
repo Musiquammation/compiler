@@ -49,6 +49,7 @@ struct Parser {
 
 	bool alive;
 	char current;
+	bool hasSavedToken;
 	
 	int cursor;
 	int lineLength;
@@ -57,6 +58,8 @@ struct Parser {
 
 	int file_line;
 	int file_column;
+
+	Token token;
 };
 
 
@@ -69,9 +72,9 @@ enum {
 	TOKEN_TYPE_I32,
 	TOKEN_TYPE_U32,
 	TOKEN_TYPE_F32,
+	TOKEN_TYPE_F64,
 	TOKEN_TYPE_I64,
 	TOKEN_TYPE_U64,
-	TOKEN_TYPE_F64,
 	
 	TOKEN_TYPE_OPERATOR,
 	TOKEN_TYPE_LABEL,
@@ -186,7 +189,7 @@ void Parser_close(Parser* parser);
 Token Parser_read(Parser* parser, LabelPool* labelPool);
 Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool);
 
-
+void Parser_saveToken(Parser* parser, const Token* token);
 
 void Token_println(const Token* token);
 

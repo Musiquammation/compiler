@@ -6,6 +6,10 @@
 #include "Class.h"
 #include "Function.h"
 
+#include "Syntax.h"
+#include "helper.h"
+
+
 #include <stdio.h>
 
 
@@ -23,6 +27,10 @@ void Scope_delete(Scope* scope, int scopeType) {
 	case SCOPE_CLASS:
 		ScopeClass_delete((ScopeClass*)scope);
 		break;
+
+	case SCOPE_FUNCTION:
+		ScopeFunction_delete((ScopeFunction*)scope);
+		break;
 	}
 }
 
@@ -33,6 +41,15 @@ void Scope_delete(Scope* scope, int scopeType) {
 
 
 void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int searchFlags) {
+	// Search primitives
+	if (searchFlags & SCOPESEARCH_CLASS) {
+		Class* cl = primitives_getClass(name);
+		if (cl) {
+			return cl;
+		}
+	}
+
+	// Search object
 	while (scope) {
 		const int scopeType = scope->type;
 
@@ -62,6 +79,52 @@ void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int search
 
 
 
+
+Module* Scope_reachModule(Scope* scope) {
+	Scope* parent = scope->parent;
+	while (parent) {
+		scope = parent;
+		parent = scope->parent;
+	}
+
+	if (scope->type != SCOPE_MODULE) {
+		raiseError("[Architecture] Root scope should be a module");
+		return NULL;
+	}
+
+	return (Module*)scope;
+}
+
+
+void Scope_defineOnFly(Scope* scope, label_t name) {
+	/// TODO: complete this function
+	ScopeFile* file = Module_findModuleFile(Scope_reachModule(scope), name);
+	if (!file) {
+		raiseError("[Architecture] Missing definition file\n");
+		return;
+	}
+
+	definitionState_t s = file->state_th;
+	if (s == DEFINITIONSTATE_READING) {
+		raiseError("[Architecture] Trying to read on fly a file being read");
+		return;
+	}
+
+	if (s == DEFINITIONSTATE_DONE) {
+		raiseError("[Architecture] Trying to read on fly a file already read");
+		return;
+	}
+
+	printf("Define on fly\n");
+
+	Syntax_thFile(file);
+}
+
+
+
+
+
+
 Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args) {
 	switch (scopeType) {
 	case SCOPE_MODULE:
@@ -72,6 +135,10 @@ Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeS
 
 	case SCOPE_CLASS:
 		return ScopeClass_searchVariable((ScopeClass*)scope, name, args);
+
+	case SCOPE_FUNCTION:
+		return ScopeFunction_searchVariable((ScopeFunction*)scope, name, args);
+
 	}
 
 	return NULL;
@@ -87,6 +154,10 @@ Class* Scope_searchClass(Scope* scope, int scopeType, label_t name, ScopeSearchA
 
 	case SCOPE_CLASS:
 		return ScopeClass_searchClass((ScopeClass*)scope, name, args);
+
+	case SCOPE_FUNCTION:
+		return ScopeFunction_searchClass((ScopeFunction*)scope, name, args);
+
 	}
 
 	return NULL;
@@ -102,6 +173,10 @@ Function* Scope_searchFunction(Scope* scope, int scopeType, label_t name, ScopeS
 
 	case SCOPE_CLASS:
 		return ScopeClass_searchFunction((ScopeClass*)scope, name, args);
+
+	case SCOPE_FUNCTION:
+		return ScopeFunction_searchFunction((ScopeFunction*)scope, name, args);
+
 	}
 
 	return NULL;
@@ -242,15 +317,18 @@ Function* ScopeFile_searchFunction(ScopeFile* file, label_t name, ScopeSearchArg
 
 
 void ScopeFile_addVariable(ScopeFile* file, Variable* v) {
-	
+	raiseError("[TODO]");
 }
 
 void ScopeFile_addClass(ScopeFile* file, Class* cl) {
-	
+	raiseError("[TODO]");
 }
 
 void ScopeFile_addFunction(ScopeFile* file, Function* fn) {
-	
+	raiseError("[TODO]");
 }
+
+
+
 
 

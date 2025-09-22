@@ -4,221 +4,279 @@
 #include "declarations.h"
 #include "helper.h"
 
+void Expression_free(int type, Expression* e) {
+	switch (type) {
+	case EXPRESSION_NONE:
+	case EXPRESSION_INVALID:
+		break;
 
-void Expression_create(expression_t type, Expression* e) {
-	printf("CREATE %p\n", e);
-	e->type = type;
-	e->followerCount = 0;
-	Array_create(&e->followers, sizeof(Expression*));
+	case EXPRESSION_PROPERTY:
+	{
+		Expression* source = e->data.property.source;
+		if (!source)
+			break;
+			
+		Expression_free(-EXPRESSION_PROPERTY, e);
+
+		
+		free(source);
+		break;
+	}
+
+	// Special case without free
+	case -EXPRESSION_PROPERTY:
+	{
+		Expression* source = e->data.property.source;
+		if (!source) 
+		break;
+		
+		Expression_free(-EXPRESSION_PROPERTY, source);
+
+		/// TODO: free proto 
+		break;
+	}
+
+
+
+	case EXPRESSION_I8:
+	case EXPRESSION_I16:
+	case EXPRESSION_I32:
+	case EXPRESSION_I64:
+
+	case EXPRESSION_U8:
+	case EXPRESSION_U16:
+	case EXPRESSION_U32:
+	case EXPRESSION_U64:
+
+	case EXPRESSION_F32:
+	case EXPRESSION_F64:
+		
+	case EXPRESSION_STRING:
+		break;
+
+
+
+	case EXPRESSION_ADDITION:
+	case EXPRESSION_SUBSTRACTION:
+	case EXPRESSION_MULTIPLICATION:
+	case EXPRESSION_DIVISION:
+	case EXPRESSION_MODULO:
+	case EXPRESSION_BITWISE_AND:
+	case EXPRESSION_BITWISE_OR:
+	case EXPRESSION_BITWISE_XOR:
+	case EXPRESSION_LEFT_SHIFT:
+	case EXPRESSION_RIGHT_SHIFT:
+	
+	case EXPRESSION_LOGICAL_AND:
+	case EXPRESSION_LOGICAL_OR:
+	
+	case EXPRESSION_EQUAL:
+	case EXPRESSION_NOT_EQUAL:
+	case EXPRESSION_LESS:
+	case EXPRESSION_LESS_EQUAL:
+	case EXPRESSION_GREATER:
+	case EXPRESSION_GREATER_EQUAL:
+		Expression_free(e->data.operands.left->type, e->data.operands.left);
+		Expression_free(e->data.operands.right->type, e->data.operands.right);
+		break;
+
+
+	case EXPRESSION_POSITIVE:
+	case EXPRESSION_NEGATION:
+	case EXPRESSION_BITWISE_NOT:
+	case EXPRESSION_LOGICAL_NOT:
+		Expression_free(e->data.operands.right->type, e->data.operands.right);
+		break;
+
+	case EXPRESSION_R_INCREMENT:
+	case EXPRESSION_R_DECREMENT:
+		Expression_free(e->data.operands.left->type, e->data.operands.left);
+		break;
+
+	case EXPRESSION_L_INCREMENT:
+	case EXPRESSION_L_DECREMENT:
+		Expression_free(e->data.operands.right->type, e->data.operands.right);
+		break;
+
+
+	case EXPRESSION_GROUP:
+	{
+		Expression* target = e->data.target;
+		Expression_free(target->type, target);
+		free(target);
+		break;
+	}
+	}
 }
 
 
-void Expression_delete(expression_t type, Expression* e) {
-	printf("DELETE %p\n", e);
-	
-	switch (type) {
-		case EXPRESSION_NONE:
-			break;
-		case EXPRESSION_INVALID:
-			break;
 
-		case EXPRESSION_ARRAY:
+
+void Expression_exchangeReferences(
+	Expression* expr,
+	const Expression* base,
+	Expression* results,
+	int length
+) {
+	#define exchange(ptr) {                   \
+		int diff = ptr - base;                \
+		if (diff <= 0) {diff += length;}      \
+		ptr = &results[diff];                 \
+	};
+
+	switch (expr->type) {
+		case EXPRESSION_NONE:
+		case EXPRESSION_INVALID:
+
+		case EXPRESSION_I8:
+		case EXPRESSION_I16:
+		case EXPRESSION_I32:
+		case EXPRESSION_I64:
+
+		case EXPRESSION_U8:
+		case EXPRESSION_U16:
+		case EXPRESSION_U32:
+		case EXPRESSION_U64:
+
+		case EXPRESSION_F32:
+		case EXPRESSION_F64:
 			break;
-			
-		case EXPRESSION_VARIABLE:
-			break;
-			
+	
+
 		case EXPRESSION_PROPERTY:
 			break;
-			
-		case EXPRESSION_CLASS:
-			break;
-			
-		case EXPRESSION_FUNCTION:
-			break;
-			
-		case EXPRESSION_TYPE:
-			break;
-			
+
 		
-
-
-		case EXPRESSION_CHAR:
-		case EXPRESSION_BOOL:
-		case EXPRESSION_SHORT:
-		case EXPRESSION_INT:
-		case EXPRESSION_LONG:
-		case EXPRESSION_FLOAT:
-		case EXPRESSION_DOUBLE:
+		/// TODO: there
 		case EXPRESSION_STRING:
-		case EXPRESSION_LABEL:
 			break;
-
+	
 
 		case EXPRESSION_ADDITION:
-			Expression_unfollow(e, ((ExpressionAddition*)e)->left);
-			Expression_unfollow(e, ((ExpressionAddition*)e)->right);
-			break;
-
 		case EXPRESSION_SUBSTRACTION:
-			Expression_unfollow(e, ((ExpressionSubstraction*)e)->left);
-			Expression_unfollow(e, ((ExpressionSubstraction*)e)->right);
-			break;
-
 		case EXPRESSION_MULTIPLICATION:
-			Expression_unfollow(e, ((ExpressionMultiplication*)e)->left);
-			Expression_unfollow(e, ((ExpressionMultiplication*)e)->right);
-			break;
-
 		case EXPRESSION_DIVISION:
-			Expression_unfollow(e, ((ExpressionDivision*)e)->left);
-			Expression_unfollow(e, ((ExpressionDivision*)e)->right);
-			break;
-
 		case EXPRESSION_MODULO:
-			Expression_unfollow(e, ((ExpressionModulo*)e)->left);
-			Expression_unfollow(e, ((ExpressionModulo*)e)->right);
-			break;
-
-
-		case EXPRESSION_NEGATION:
-			Expression_unfollow(e, ((ExpressionNegation*)e)->expr);
-			break;
-
-		case EXPRESSION_INCREMENT:
-			Expression_unfollow(e, ((ExpressionIncrement*)e)->expr);
-			break;
-
-		case EXPRESSION_DECREMENT:
-			Expression_unfollow(e, ((ExpressionDecrement*)e)->expr);
-			break;
-
-		case EXPRESSION_BITWISE_NOT:
-			Expression_unfollow(e, ((ExpressionBitwiseNot*)e)->expr);
-			break;
-
-		case EXPRESSION_LOGICAL_NOT:
-			Expression_unfollow(e, ((ExpressionLogicalNot*)e)->expr);
-			break;
-
 
 		case EXPRESSION_BITWISE_AND:
-			Expression_unfollow(e, ((ExpressionBitwiseAnd*)e)->left);
-			Expression_unfollow(e, ((ExpressionBitwiseAnd*)e)->right);
-			break;
-
 		case EXPRESSION_BITWISE_OR:
-			Expression_unfollow(e, ((ExpressionBitwiseOr*)e)->left);
-			Expression_unfollow(e, ((ExpressionBitwiseOr*)e)->right);
-			break;
-
 		case EXPRESSION_BITWISE_XOR:
-			Expression_unfollow(e, ((ExpressionBitwiseXor*)e)->left);
-			Expression_unfollow(e, ((ExpressionBitwiseXor*)e)->right);
-			break;
-
 		case EXPRESSION_LEFT_SHIFT:
-			Expression_unfollow(e, ((ExpressionLeftShift*)e)->left);
-			Expression_unfollow(e, ((ExpressionLeftShift*)e)->right);
-			break;
-
 		case EXPRESSION_RIGHT_SHIFT:
-			Expression_unfollow(e, ((ExpressionRightShift*)e)->left);
-			Expression_unfollow(e, ((ExpressionRightShift*)e)->right);
-			break;
-
-
-		case EXPRESSION_LOGICAL_AND:
-			Expression_unfollow(e, ((ExpressionLogicalAnd*)e)->left);
-			Expression_unfollow(e, ((ExpressionLogicalAnd*)e)->right);
-			break;
-
-		case EXPRESSION_LOGICAL_OR:
-			Expression_unfollow(e, ((ExpressionLogicalOr*)e)->left);
-			Expression_unfollow(e, ((ExpressionLogicalOr*)e)->right);
-			break;
-
-
-		case EXPRESSION_EQUAL:
-			Expression_unfollow(e, ((ExpressionEqual*)e)->left);
-			Expression_unfollow(e, ((ExpressionEqual*)e)->right);
-			break;
-
-		case EXPRESSION_NOT_EQUAL:
-			Expression_unfollow(e, ((ExpressionNotEqual*)e)->left);
-			Expression_unfollow(e, ((ExpressionNotEqual*)e)->right);
-			break;
-
-		case EXPRESSION_LESS:
-			Expression_unfollow(e, ((ExpressionLess*)e)->left);
-			Expression_unfollow(e, ((ExpressionLess*)e)->right);
-			break;
-
-		case EXPRESSION_LESS_EQUAL:
-			Expression_unfollow(e, ((ExpressionLessEqual*)e)->left);
-			Expression_unfollow(e, ((ExpressionLessEqual*)e)->right);
-			break;
-
-		case EXPRESSION_GREATER:
-			Expression_unfollow(e, ((ExpressionGreater*)e)->left);
-			Expression_unfollow(e, ((ExpressionGreater*)e)->right);
-			break;
-
-		case EXPRESSION_GREATER_EQUAL:
-			Expression_unfollow(e, ((ExpressionGreaterEqual*)e)->left);
-			Expression_unfollow(e, ((ExpressionGreaterEqual*)e)->right);
-			break;
-	}
-}
-
-void Expression_free(expression_t type, Expression* e) {
-	// Free expression
-	Expression_delete(type, e);
-	Array_free(e->followers);
-	free(e);
-}
-
-
-void Expression_follow(Expression* follower, Expression* followed) {
-	printf("+FOLLW %p %d (%p)\n", followed, followed->followerCount + 1, follower);
-	*(Expression**)Array_pushInEmpty(&followed->followers, isNullPointerRef) = follower;
-	followed->followerCount++;
-}
-
-void Expression_unfollow(Expression* follower, Expression* followed) {
-	printf("-FOLLW %p %d (%p)\n", followed, followed->followerCount - 1, follower);	
 	
-	Array_loop(expressionPtr_t, followed->followers, ptr) {
-		if (*ptr == follower) {
-			*ptr = NULL;
-			
-			if ((--followed->followerCount) > 0)
-				return;
+		case EXPRESSION_LOGICAL_AND:
+		case EXPRESSION_LOGICAL_OR:
+	
+		case EXPRESSION_EQUAL:
+		case EXPRESSION_NOT_EQUAL:
+		case EXPRESSION_LESS:
+		case EXPRESSION_LESS_EQUAL:
+		case EXPRESSION_GREATER:
+		case EXPRESSION_GREATER_EQUAL:
+			exchange(expr->data.operands.left);
+			exchange(expr->data.operands.right);
+			break;
 
-			// Followed is followed by nobody
-			Expression_free(followed->type, followed);
-			return;
-		}
+		
+		case EXPRESSION_BITWISE_NOT:
+		case EXPRESSION_LOGICAL_NOT:
+		case EXPRESSION_POSITIVE:
+		case EXPRESSION_NEGATION:
+		case EXPRESSION_R_INCREMENT:
+		case EXPRESSION_R_DECREMENT:
+		case EXPRESSION_L_INCREMENT:
+		case EXPRESSION_L_DECREMENT:
+		case EXPRESSION_A_INCREMENT:
+		case EXPRESSION_A_DECREMENT:
+			printf("op %p\n", expr->data.operand);
+			exchange(expr->data.operand);
+			break;
+
 	}
 
-	printf("WARN: Unfollow failed\n");
+
+	#undef exchange
 }
 
-void Expression_followAsNull(Expression* followed) {
-	printf("+XOLLW %p %d\n", followed, followed->followerCount + 1);
 
-	followed->followerCount++;
-}
 
-void Expression_unfollowAsNull(expression_t type, Expression* followed) {
-	printf("-XOLLW %p %d\n", followed, followed->followerCount - 1);
+bool Expression_followsOperatorPlace(int operatorPlace, int type) {
+	switch (operatorPlace) {
+		// 0: multiplication, division, modulo
+		case 0:
+			switch (type) {
+				case EXPRESSION_MULTIPLICATION:
+				case EXPRESSION_DIVISION:
+				case EXPRESSION_MODULO:
+					return true;
+				default:
+					return false;
+			}
 
-	if ((--followed->followerCount) <= 0) {
-		Expression_free(type, followed);
+		// 1: addition, subtraction
+		case 1:
+			switch (type) {
+				case EXPRESSION_ADDITION:
+				case EXPRESSION_SUBSTRACTION:
+					return true;
+				default:
+					return false;
+			}
+
+		// 2: bit shifts
+		case 2:
+			switch (type) {
+				case EXPRESSION_LEFT_SHIFT:
+				case EXPRESSION_RIGHT_SHIFT:
+					return true;
+				default:
+					return false;
+			}
+
+		// 3: relational (< <= > >=)
+		case 3:
+			switch (type) {
+				case EXPRESSION_LESS:
+				case EXPRESSION_LESS_EQUAL:
+				case EXPRESSION_GREATER:
+				case EXPRESSION_GREATER_EQUAL:
+					return true;
+				default:
+					return false;
+			}
+
+		// 4: equality (== !=)
+		case 4:
+			switch (type) {
+				case EXPRESSION_EQUAL:
+				case EXPRESSION_NOT_EQUAL:
+					return true;
+				default:
+					return false;
+			}
+
+		// 5: bitwise AND
+		case 5:
+			return type == EXPRESSION_BITWISE_AND;
+
+		// 6: bitwise XOR
+		case 6:
+			return type == EXPRESSION_BITWISE_XOR;
+
+		// 7: bitwise OR
+		case 7:
+			return type == EXPRESSION_BITWISE_OR;
+
+		// 8: logical AND
+		case 8:
+			return type == EXPRESSION_LOGICAL_AND;
+
+		// 9: logical OR
+		case 9:
+			return type == EXPRESSION_LOGICAL_OR;
+
+		default:
+			return false;
 	}
 
 }
-
-
-
-

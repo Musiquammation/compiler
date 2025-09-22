@@ -1,0 +1,109 @@
+#include "primitives.h"
+
+#include "globalLabelPool.h"
+
+#include <string.h>
+
+
+PrimitiveContainer _primitives;
+
+
+// comparaison par pointeur (pas strcmp, comme demandé)
+static int cmpLabelPtr(const void* a, const void* b) {
+	const label_t* la = (const label_t*)a;
+	const label_t* lb = (const label_t*)b;
+	if (*la < *lb) return -1;
+	if (*la > *lb) return 1;
+	return 0;
+}
+
+void primitives_init(void) {
+	#define def(id, s)\
+		_primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE;\
+		_primitives.class_##id##s.name = _commonLabels._##id##s;\
+		_primitives.class_##id##s.isPrimitive = true;\
+		_primitives.class_##id##s.size = s/8;\
+		_primitives.class_##id##s.maxMinimalSize = s/8;\
+		\
+		_primitives.type_##id##s.cl = &_primitives.class_##id##s;\
+		_primitives.type_##id##s.isPrimitive = true;\
+
+	def(i, 8);
+	def(u, 8);
+	def(i, 16);
+	def(u, 16);
+	def(i, 32);
+	def(u, 32);
+	def(i, 64);
+	def(u, 64);
+	def(f, 32);
+	def(f, 64);
+
+	#undef def
+
+
+
+	struct {
+		label_t lbl;
+		Class*  cls;
+	} tmp[] = {
+		{ _commonLabels._i8,    &_primitives.class_i8 },
+		{ _commonLabels._u8,    &_primitives.class_u8 },
+		{ _commonLabels._i16,   &_primitives.class_i16 },
+		{ _commonLabels._u16,   &_primitives.class_u16 },
+		{ _commonLabels._i32,   &_primitives.class_i32 },
+		{ _commonLabels._u32,   &_primitives.class_u32 },
+		{ _commonLabels._i64,   &_primitives.class_i64 },
+		{ _commonLabels._u64,   &_primitives.class_u64 },
+		{ _commonLabels._f32,   &_primitives.class_f32 },
+		{ _commonLabels._f64,   &_primitives.class_f64 },
+
+		// alias
+		{ _commonLabels._char,  &_primitives.class_i8  },
+		{ _commonLabels._bool,  &_primitives.class_u8  },
+		{ _commonLabels._short, &_primitives.class_i16 },
+		{ _commonLabels._int,   &_primitives.class_i32 },
+		{ _commonLabels._long,  &_primitives.class_i64 },
+		{ _commonLabels._float, &_primitives.class_f32 },
+		{ _commonLabels._double,&_primitives.class_f64 },
+	};
+
+	enum {N = sizeof(tmp) / sizeof(tmp[0])};
+
+	// extraire juste les labels pour trier par pointeur
+	label_t labels[N];
+	for (int i = 0; i < N; i++) {
+		labels[i] = tmp[i].lbl;
+	}
+
+	// trier labels[]
+	qsort(labels, N, sizeof(label_t), cmpLabelPtr);
+
+	// reconstruire sortedLabels et sortedClasses en gardant cohérence
+	for (int i = 0; i < N; i++) {
+		_primitives.sortedLabels[i] = labels[i];
+		// retrouver la Class correspondante
+		for (int j = 0; j < N; j++) {
+			if (tmp[j].lbl == labels[i]) {
+				_primitives.sortedClasses[i] = tmp[j].cls;
+				break;
+			}
+		}
+	}
+}
+
+
+
+Class* primitives_getClass(label_t name) {
+    int low = 0, high = 17 - 1;
+    while (low <= high) {
+        int mid = (low + high) / 2;
+        if (_primitives.sortedLabels[mid] == name)
+            return _primitives.sortedClasses[mid];
+        if (_primitives.sortedLabels[mid] < name)
+            low = mid + 1;
+        else
+            high = mid - 1;
+    }
+    return NULL;
+}

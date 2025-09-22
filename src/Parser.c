@@ -1,11 +1,14 @@
 #include "Parser.h"
 
 #include "LabelPool.h"
+#include "globalLabelPool.h"
+
+#include "syntaxList.h"
 #include "helper.h"
 
 #include <string.h>
 
-const char PARSER_OPERATOR_CHARS[] = ".=;()+-&|^!~()[]{}<>?:@#*/%";
+const char PARSER_OPERATOR_CHARS[] = ".=;()+-,&|^!~()[]{}<>?:@#*/%";
 const char PARSER_OPERATORS[][TOKEN_OPERATORMAXLENGTH] = {
 	/* Length 3 */
 	"<<=",  // 0 TOKEN_OPERATOR_SHL_ASSIGN
@@ -68,7 +71,6 @@ const char PARSER_OPERATORS[][TOKEN_OPERATORMAXLENGTH] = {
 	"}",    // 53 TOKEN_OPERATOR_RBRACE
 	"<",    // 54 TOKEN_OPERATOR_LANGLE
 	">",    // 55 TOKEN_OPERATOR_RANGLE
-
 
 };
 
@@ -298,6 +300,7 @@ void Parser_open(Parser* parser, const char* filepath) {
 	parser->file_column = 0;
 	parser->cursor = 0;
 	parser->current = 0;
+	parser->hasSavedToken = false;
 
 	Array_create(&parser->annotations, sizeof(Annotation));
 	
@@ -328,6 +331,12 @@ void Parser_close(Parser* parser) {
 
 
 Token Parser_read(Parser* parser, LabelPool* labelPool) {
+	if (parser->hasSavedToken) {
+		parser->hasSavedToken = false;
+		return parser->token;
+	}
+
+
 	char firstChar = parser->current;
 	
 	#define move(n) {parser->file_column += n; moveCursor(cursor + n, lineLength, parser);}
@@ -417,6 +426,15 @@ Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool) {
 	return token;
 }
 
+
+
+void Parser_saveToken(Parser* parser, const Token* token) {
+	if (parser->hasSavedToken) {
+		raiseError("[Parser] A token is already saved");
+	}
+	parser->hasSavedToken = true;
+	parser->token = *token;
+}
 
 
 void Token_println(const Token* token) {

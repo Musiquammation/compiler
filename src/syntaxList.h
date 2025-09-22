@@ -9,7 +9,7 @@ enum {
     SYNTAXFLAG_UNFOUND = 2,
 };
 
-void syntaxList_init();
+void syntaxList_init(void);
 
 
 #endif

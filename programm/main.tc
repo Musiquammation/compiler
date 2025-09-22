@@ -1,3 +1,5 @@
-function: {
-    let x = 42;
+function {
+    let object: Pointer;
+    let value: float = object.point.x + 3;
+
 }

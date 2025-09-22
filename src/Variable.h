@@ -4,10 +4,13 @@
 #include "label_t.h"
 #include "declarations.h"
 
+#include "Prototype.h"
 
 
 struct Variable {
-    label_t name;
+	label_t name;
+	Prototype proto;
+	int offset;
 };
 
 void Variable_create(Variable* variable);

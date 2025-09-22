@@ -1,9 +1,12 @@
 #include "Class.h"
 
 #include "Scope.h"
+#include "Variable.h"
 
 void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
+	cl->definitionState = DEFINITIONSTATE_NOT;
+	cl->size = -1; // size is undefined
 }
 
 
@@ -20,34 +23,43 @@ void Class_delete(Class* cl) {
 
 
 
+
 void ScopeClass_delete(ScopeClass* scope) {
 
 }
 
 
 
-Variable* ScopeClass_searchVariable(ScopeClass* scl, label_t name, ScopeSearchArgs* args) {
+Variable* ScopeClass_searchVariable(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
+	Array_loopPtr(Variable, scope->cl->variables, ptr) {
+		Variable* v = *ptr;
+		if (v->name == name)
+			return v;
+	}
+	
 	return NULL;
 }
 
-Class* ScopeClass_searchClass(ScopeClass* scl, label_t name, ScopeSearchArgs* args) {
+Class* ScopeClass_searchClass(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
 	return NULL;
 }
 
-Function* ScopeClass_searchFunction(ScopeClass* scl, label_t name, ScopeSearchArgs* args) {
+Function* ScopeClass_searchFunction(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
 	return NULL;
 }
 
 
-void ScopeClass_addVariable(ScopeClass* scl, Variable* v) {
+void ScopeClass_addVariable(ScopeClass* scope, Variable* v) {
+	raiseError("[TODO]");
 
 }
 
-void ScopeClass_addClass(ScopeClass* scl, Class* cl) {
+void ScopeClass_addClass(ScopeClass* scope, Class* cl) {
+	raiseError("[TODO]");
 
 }
 
-void ScopeClass_addFunction(ScopeClass* scl, Function* fn) {
-
+void ScopeClass_addFunction(ScopeClass* scope, Function* fn) {
+	raiseError("[TODO]");
 }
 

@@ -1,4 +1,6 @@
 @!module {
 	class Point;
-	function positive;
+	class Pointer;
+	function main(arg: int, arg2: int);
+
 }

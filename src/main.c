@@ -14,6 +14,8 @@
 #include "syntaxList.h"
 #include "globalLabelPool.h"
 
+#include "primitives.h"
+
 /*
 int main() {
 	LabelPool labelPool;
@@ -41,7 +43,6 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-
 	Module module;
 
 	LabelPool_create(&_labelPool);
@@ -49,6 +50,9 @@ int main(int argc, char *argv[]) {
 	Module_create(&module);
 	CommonLabels_generate(&_commonLabels, &_labelPool);
 	syntaxList_init();
+
+	primitives_init();
+
 
 	module.name = LabelPool_push(&_labelPool, argv[1]);
 
@@ -87,3 +91,8 @@ int main(int argc, char *argv[]) {
 
 #include "Syntax.c"
 #include "globalLabelPool.c"
+
+#include "Prototype.c"
+#include "Type.c"
+
+#include "primitives.c"

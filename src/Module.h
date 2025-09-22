@@ -14,7 +14,9 @@ struct Module {
 	int fileLength;
 
 	Array classes; // type: Class*
+	Array functions; // type: Function*
 };
+
 
 void Module_create(Module* module);
 void Module_delete(Module* module);

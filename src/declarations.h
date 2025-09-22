@@ -15,6 +15,7 @@ structdef(Class);
 structdef(Function);
 
 structdef(ScopeClass);
+structdef(ScopeFunction);
 
 structdef(ScopeSearchArgs);
 
@@ -27,7 +28,8 @@ structdef(CommonLabels);
 structdef(Parser);
 structdef(Annotation);
 
-
+structdef(Prototype);
+structdef(Type);
 
 
 #endif

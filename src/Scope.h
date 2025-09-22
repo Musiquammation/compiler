@@ -2,6 +2,7 @@
 #define COMPILER_SCOPE_H_
 
 #include "declarations.h"
+#include "globalLabelPool.h"
 
 #include "definitionState_t.h"
 
@@ -31,8 +32,6 @@ struct ScopeFile {
 	Array variables; // type: Variable*
 	Array classes; // type: Class*
 	Array functions; // type: Function*
-
-	int test;
 };
 
 struct ScopeFolder {
@@ -47,7 +46,8 @@ enum {
 	SCOPE_MODULE,
 	SCOPE_FILE,
 	SCOPE_FOLDER,
-	SCOPE_CLASS
+	SCOPE_CLASS,
+	SCOPE_FUNCTION,
 };
 
 
@@ -63,7 +63,12 @@ enum {
 	SCOPESEARCH_ANYTYPE = SCOPESEARCH_VARIABLE|SCOPESEARCH_CLASS|SCOPESEARCH_FUNCTION,
 };
 
+
 void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int searchFlags);
+Module* Scope_reachModule(Scope* scope);
+
+void Scope_defineOnFly(Scope* scope, label_t name);
+
 
 Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
 Class* Scope_searchClass(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
@@ -85,6 +90,8 @@ Function* ScopeFile_searchFunction(ScopeFile* module, label_t name, ScopeSearchA
 void ScopeFile_addVariable(ScopeFile* file, Variable* v);
 void ScopeFile_addClass(ScopeFile* file, Class* cl);
 void ScopeFile_addFunction(ScopeFile* file, Function* fn);
+
+
 
 
 #endif
