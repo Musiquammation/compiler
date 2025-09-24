@@ -118,6 +118,7 @@ void Expression_exchangeReferences(
 
 bool Expression_followsOperatorPlace(int operatorPlace, int type);
 
+Expression* Expression_processLine(Expression* line, int length);
 
 
 #endif

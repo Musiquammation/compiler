@@ -2,6 +2,7 @@
 #define COMPILER_FUNCTION_H_
 
 #include "declarations.h"
+#include "TypeNode.h"
 #include "label_t.h"
 
 #include <tools/Array.h>
@@ -14,11 +15,15 @@ struct Function {
     Prototype returnType;
 };
 
+
+/// TODO: init defnodes
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
+    TypeNode rootNode;
 
     Array variables; // type: Variable*
+    
 };
 
 void Function_create(Function* fn);

@@ -5,7 +5,7 @@
 
 
 void Function_create(Function* fn) {
-    
+
 }
 
 void Function_delete(Function* fn) {
@@ -23,9 +23,12 @@ void Function_delete(Function* fn) {
 
 void ScopeFunction_create(ScopeFunction* scope) {
 	Array_create(&scope->variables, sizeof(Variable*));
+	scope->rootNode.length = 0;
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
+	TypeNode_unfollow(&scope->rootNode, 1);
+
 	Array_loopPtr(Variable, scope->variables, v_ptr) {
 		Variable* v = *v_ptr;
 		Variable_delete(v);
@@ -33,6 +36,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 	} 
 
 	Array_free(scope->variables);
+
 }
 
 
@@ -57,8 +61,15 @@ Function* ScopeFunction_searchFunction(ScopeFunction* scope, label_t name, Scope
 
 
 void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v) {
-	raiseError("[TODO]");
-
+	TypeNode* node = malloc(sizeof(TypeNode));
+	*Array_push(Variable*, &scope->variables) = v;
+	
+	node->length = 0;
+	node->usage = 0;
+	/// TODO: define type and remove v
+	node->value.v = v;
+	
+	TypeNode_set(&scope->rootNode, &v, node, 1, false);
 }
 
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
