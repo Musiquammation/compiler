@@ -4,7 +4,6 @@
 #include "declarations.h"
 #include "label_t.h"
 
-#include <tools/Array.h>
 
 
 struct Expression {
@@ -18,10 +17,10 @@ struct Expression {
 		unsigned char u8;
 
 		short i16;
-		unsigned u16;
+		unsigned short u16;
 
 		int i32;
-		unsigned u32;
+		unsigned int u32;
 
 		float f32;
 		double f64;
@@ -54,17 +53,18 @@ enum {
 
 	EXPRESSION_PROPERTY,
 
-	EXPRESSION_I8,
-	EXPRESSION_I16,
-	EXPRESSION_I32,
-	EXPRESSION_I64,
-
 	EXPRESSION_U8,
-	EXPRESSION_U16,
-	EXPRESSION_U32,
-	EXPRESSION_U64,
+	EXPRESSION_I8,
 
+	EXPRESSION_U16,
+	EXPRESSION_I16,
+
+	EXPRESSION_U32,
+	EXPRESSION_I32,
 	EXPRESSION_F32,
+
+	EXPRESSION_U64,
+	EXPRESSION_I64,
 	EXPRESSION_F64,
 	
 	EXPRESSION_STRING,
@@ -101,9 +101,6 @@ enum {
 	EXPRESSION_L_DECREMENT,     // --a
 	EXPRESSION_A_INCREMENT,     // a++ or ++a (used temporarily)
 	EXPRESSION_A_DECREMENT,     // a-- or --a (used temporarily)
-
-
-
 };
 
 
@@ -119,6 +116,17 @@ void Expression_exchangeReferences(
 bool Expression_followsOperatorPlace(int operatorPlace, int type);
 
 Expression* Expression_processLine(Expression* line, int length);
+
+bool Expression_canSimplify(int type, int op1, int op2);
+
+int Expression_simplify(
+	int type,
+	int type_op1,
+	int type_op2,
+	Expression* target,
+	const Expression* left,
+	const Expression* right
+);
 
 
 #endif

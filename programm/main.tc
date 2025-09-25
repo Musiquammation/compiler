@@ -1,4 +1,6 @@
 function {
-    let object: Pointer;
-    let value: float;
+    let x: int;
+    let y = (10 - 21) * -122 + x;
+
+    
 }

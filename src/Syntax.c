@@ -342,9 +342,19 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 		// open parenthesis
 		case 3:
 		{
+			Expression* target = Syntax_expression(parser, scope, false);
 			Expression* e = Array_push(Expression, &lineArr);
-			e->type = EXPRESSION_GROUP;
-			e->data.target = Syntax_expression(parser, scope, false);
+
+			int targetType = target->type;
+			if (targetType >= EXPRESSION_U8 && targetType <= EXPRESSION_F64) {
+				*e = *target;
+				free(target);
+
+			} else {
+				e->type = EXPRESSION_GROUP;
+				e->data.target = target;
+			}
+
 			break;
 		}
 
@@ -1183,8 +1193,8 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 		Prototype_generateType(&variable->proto, type);
 		tnode->value.type = type;
 	}
-
 }
+
 
 void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 	while (true) {
@@ -1235,7 +1245,7 @@ void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 		// free label
 		case 6:
 		{
-			raiseError("[TODO] in Syntax_functionScope: free ²label");
+			raiseError("[TODO] in Syntax_functionScope: free label");
 			break;
 		}
 

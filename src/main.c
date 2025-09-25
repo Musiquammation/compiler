@@ -211,3 +211,5 @@ int main(int argc, char *argv[]) {
 #include "Type.c"
 
 #include "primitives.c"
+
+#include "Expression_simplify.c"

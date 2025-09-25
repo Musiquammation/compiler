@@ -4,6 +4,8 @@
 #include "declarations.h"
 #include "helper.h"
 
+#include <stddef.h>
+
 void Expression_free(int type, Expression* e) {
 	switch (type) {
 	case EXPRESSION_NONE:
@@ -85,17 +87,17 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_NEGATION:
 	case EXPRESSION_BITWISE_NOT:
 	case EXPRESSION_LOGICAL_NOT:
-		Expression_free(e->data.operands.right->type, e->data.operands.right);
+		Expression_free(e->data.operand->type, e->data.operand);
 		break;
 
 	case EXPRESSION_R_INCREMENT:
 	case EXPRESSION_R_DECREMENT:
-		Expression_free(e->data.operands.left->type, e->data.operands.left);
+		Expression_free(e->data.operand->type, e->data.operand);
 		break;
 
 	case EXPRESSION_L_INCREMENT:
 	case EXPRESSION_L_DECREMENT:
-		Expression_free(e->data.operands.right->type, e->data.operands.right);
+		Expression_free(e->data.operand->type, e->data.operand);
 		break;
 
 
@@ -188,7 +190,6 @@ void Expression_exchangeReferences(
 		case EXPRESSION_L_DECREMENT:
 		case EXPRESSION_A_INCREMENT:
 		case EXPRESSION_A_DECREMENT:
-			printf("op %p\n", expr->data.operand);
 			exchange(expr->data.operand);
 			break;
 
@@ -369,14 +370,17 @@ Expression* Expression_processLine(Expression* line, int length) {
 		switch (i_type) {
 			case EXPRESSION_ADDITION:
 			case EXPRESSION_SUBSTRACTION:
-				i_type += EXPRESSION_POSITIVE - EXPRESSION_ADDITION;
-				
-				// check if operand is one-operand
-				switch (prev_type) {
-					case -1:
-					case EXPRESSION_ADDITION:
-					case EXPRESSION_SUBSTRACTION:
-						break;
+			
+			// check if operand is one-operand
+			switch (prev_type) {
+				case -1:
+				case EXPRESSION_ADDITION:
+				case EXPRESSION_SUBSTRACTION:
+				case EXPRESSION_MULTIPLICATION:
+				case EXPRESSION_DIVISION:
+				case EXPRESSION_MODULO:
+					i_type += EXPRESSION_POSITIVE - EXPRESSION_ADDITION;
+					break;
 
 					default:
 						goto nextOneOperand;
@@ -408,33 +412,37 @@ Expression* Expression_processLine(Expression* line, int length) {
 				break;
 		}
 
-		// Change type
-		line[prev_index].type = i_type;
-		line[prev_index].data.operand = &line[i];
-		prev_type = i_type;
-		i--; // handle current operation
+		// Consume operand
+		lineUsed[i] = 1;
 
+		// Set
+		int operandType = line[i].type;
+		if (Expression_canSimplify(i_type, operandType, -1)) {
+			prev_type = Expression_simplify(
+				i_type,
+				operandType,
+				-1,
+				&line[prev_index],
+				&line[i],
+				NULL
+			);
+			
+			line[prev_index].type = prev_type;
+
+		} else {
+			changeType:
+			// Change type
+			line[prev_index].type = i_type;
+			line[prev_index].data.operand = &line[i];
+			prev_type = i_type;
+		}
+
+		
+
+		continue; // skip prev_type = i_type (maybe over-optimisation)
 
 		nextOneOperand:
 		prev_type = i_type;
-	}
-
-	// Consume operands of one-operand operators
-	prev_index = -1;
-	for (int i = length; i > 0; ) {
-		i--;
-
-		if (lineUsed[i])
-			continue;
-
-		int type = line[i].type;
-		if (type < EXPRESSION_BITWISE_NOT || type > EXPRESSION_NEGATION) {
-			prev_index = i;
-			continue;	
-		}
-		
-		lineUsed[prev_index] = 1; // consume
-		prev_index = i;
 	}
 
 
@@ -474,9 +482,28 @@ Expression* Expression_processLine(Expression* line, int length) {
 					break;
 			}
 
-			// Add operands
-			line[operationIndex].data.operands.left = &line[prev_index];
-			line[operationIndex].data.operands.right = &line[i];
+
+			int rightType = line[i].type;
+			if (Expression_canSimplify(type, prev_type, rightType)) {
+				// Simplify
+				line[operationIndex].type = Expression_simplify(
+					type,
+					prev_type,
+					rightType,
+					&line[operationIndex],
+					&line[prev_index],
+					&line[i]
+				);
+
+
+			} else {
+				// Add operands
+				line[operationIndex].data.operands.left = &line[prev_index];
+				line[operationIndex].data.operands.right = &line[i];
+
+			}
+
+
 
 			// Consume operands
 			lineUsed[prev_index] = 1;
@@ -543,9 +570,45 @@ Expression* Expression_processLine(Expression* line, int length) {
 	// Print result
 	// printf("===RESULT===\n");
 	// for (int i = 0; i < length; i++)
-	// 	printf("%2d %p %p %p\n", result[i].type, &result[i], result[i].data.operands.left, result[i].data.operands.right);
+		// printf("%2d %p %p %p\n", result[i].type, &result[i], result[i].data.operands.left, result[i].data.operands.right);
 	
 	
 	return result;
 
 }
+
+
+
+
+
+bool Expression_canSimplify(int type, int op1, int op2) {
+	#define checkLeft()  {if (op1 < EXPRESSION_I8 || op1 > EXPRESSION_F64) return false;}
+	#define checkRight() {if (op2 < EXPRESSION_I8 || op2 > EXPRESSION_F64) return false;}
+
+	if (type >= EXPRESSION_ADDITION && type <= EXPRESSION_GREATER_EQUAL) {
+		checkLeft();
+		checkRight();
+		return true;
+	}
+
+	if (type >= EXPRESSION_BITWISE_NOT && type <= EXPRESSION_NEGATION) {
+		checkLeft();
+		return true;
+	}
+
+
+	return false;
+	
+	#undef checkLeft
+	#undef checkRight
+	#undef scale
+
+}
+
+
+
+
+
+
+
+
