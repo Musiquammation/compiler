@@ -17,7 +17,7 @@
 #include "primitives.h"
 
 
-#define RUNNING_TEST 1
+#define RUNNING_TEST false
 
 #if RUNNING_TEST
 
@@ -83,7 +83,7 @@ int main() {
 	path = MAKE_PATH(r2);
 	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
 	path = MAKE_PATH(a, left);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length, false);
+	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 
 	// print
 	path = MAKE_PATH(a, left);
@@ -94,13 +94,13 @@ int main() {
 	path = MAKE_PATH(a);
 	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
 	path = MAKE_PATH(b);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length, false);
+	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 
 	// a.left = r2
 	path = MAKE_PATH(r2);
 	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
 	path = MAKE_PATH(a, left);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length, false);
+	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 
 	// print (should be equal)
 	path = MAKE_PATH(a, left);
@@ -115,7 +115,7 @@ int main() {
 	path = MAKE_PATH(a);
 	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
 	path = MAKE_PATH(b);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length, false);
+	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 	
 	// print
 	path = MAKE_PATH(b, left);
@@ -125,7 +125,7 @@ int main() {
 	path = MAKE_PATH(b);
 	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
 	path = MAKE_PATH(a);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length, false);
+	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 	
 	// print
 	path = MAKE_PATH(b, left);
@@ -188,7 +188,6 @@ int main(int argc, char *argv[]) {
 
 // Include C files
 #include "Scope.c"
-#include "Branch.c"
 
 #include "LabelPool.c"
 #include "Module.c"

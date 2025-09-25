@@ -15,6 +15,7 @@
 #include "Function.h"
 
 #include "Type.h"
+#include "TypeNode.h"
 #include "Prototype.h"
 
 #include <string.h>
@@ -1127,12 +1128,15 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 	Variable_create(variable);
 	
 	int syntaxIndex = -1;
+	Expression* exprValue = NULL;
+
 	
 	// Type
 	while (true) {
 		token = Parser_read(parser, &_labelPool);
 		int nextSyntaxIndex = TokenCompare(SYNTAXLIST_FUNCTION_VARDECL, 0);
 
+		
 		if (nextSyntaxIndex <= syntaxIndex) {
 			raiseError("[Syntax] Illegal order in type declaration");
 			return;
@@ -1148,11 +1152,9 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 
 		// Value
 		case 1:
-			Expression* expr = Syntax_expression(parser, &scope->scope, true);
-
 			/// TODO: handle this expression
-			Expression_free(expr->type, expr);
-			free(expr);
+			exprValue = Syntax_expression(parser, &scope->scope, true);
+
 			break;
 
 		// end
@@ -1164,9 +1166,24 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 
 	// Add variable
 	finish:
-	*Array_push(Variable*, &scope->variables) = variable;
-
+	if (exprValue) {
+		/// TODO: handle this expression
+		Expression_free(exprValue->type, exprValue);
+		free(exprValue);
+		raiseError("[TODO]: read value while creating a new variable");
+		return;
+	}
 	
+	TypeNode* tnode = ScopeFunction_pushVariable(scope, variable);
+	if (variable->proto.isPrimitive) {
+		/// TODO: define length using TYPENODE_LENGTH_I8
+		tnode->length = TYPENODE_LENGTH_UNDEF_I8;
+	} else {
+		Type* type = malloc(sizeof(Type));
+		Prototype_generateType(&variable->proto, type);
+		tnode->value.type = type;
+	}
+
 }
 
 void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {

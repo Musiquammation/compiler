@@ -6,7 +6,6 @@
 
 #include "definitionState_t.h"
 
-#include "Branch.h"
 #include "label_t.h"
 #include <tools/Array.h>
 

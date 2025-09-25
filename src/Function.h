@@ -44,5 +44,7 @@ void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v);
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl);
 void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn);
 
+TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v);
+
 
 #endif

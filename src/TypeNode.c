@@ -1,5 +1,7 @@
 #include "TypeNode.h"
 
+#include "Type.h"
+#include "Prototype.h"
 #include "Variable.h"
 #include "helper.h"
 #include <string.h>
@@ -43,10 +45,14 @@ TypeNode* TypeNode_get(
 	Variable* path[],
 	int pathLength
 ) {
-
 	// Search sub node
 	typedef Variable* variable_t;
-	Array_for(variable_t, path, pathLength, vPtr) {
+	for (
+		variable_t *vPtr = path,
+		*const vPtr_end = vPtr + pathLength - 1;
+		vPtr <= vPtr_end;
+		vPtr++
+	) {
 		variable_t variable = *vPtr;
 		
 		TypeNodePair* pairs = node->pairs;
@@ -66,9 +72,14 @@ TypeNode* TypeNode_get(
 			TypeNode* child = malloc(sizeof(TypeNode));
 			child->length = 0;
 			child->usage = 1;
-
+			
 			TypeNode_pushPair(node, variable, child);
 			node = child;
+
+			if (vPtr == vPtr_end)
+				return node; // skip fillValue
+
+			TypeNode_fillValue(child, &variable->proto);
 		}
 		
 		
@@ -83,8 +94,7 @@ bool TypeNode_set(
 	TypeNode* node,
 	Variable* path[],
 	TypeNode* value,
-	int pathLength,
-	bool copyValue
+	int pathLength
 ) {	
 	typedef Variable* variable_t;
 
@@ -109,16 +119,7 @@ bool TypeNode_set(
 			
 			node = pair->node;
 
-			if (vPtr == vPtr_end) {
-				if (copyValue) {
-					/// TODO: check copy
-					TypeNode_unfollow(node, 2);
-					node->value = value->value;
-					node->length = value->length; // should be < 0
-					node->usage = -1;
-					return true;
-				}
-				
+			if (vPtr == vPtr_end) {				
 				TypeNode_unfollow(node, 0);
 				pair->node = value;
 				value->usage++;
@@ -142,11 +143,6 @@ bool TypeNode_set(
 
 		{
 			if (vPtr == vPtr_end) {
-				if (copyValue) {
-					raiseError("[TODO]: copyValue");
-					goto pairFound;
-				}
-
 				TypeNode_pushPair(node, variable, value);
 				value->usage++;
 
@@ -154,7 +150,6 @@ bool TypeNode_set(
 			}
 
 			TypeNode* child = malloc(sizeof(TypeNode));
-			printf("new %p for %p\n", node, child);
 			child->length = 0;
 			child->usage = 1;
 
@@ -202,6 +197,15 @@ void TypeNode_copy(TypeNode* dest, TypeNode* src) {
 	}
 }
 
+void TypeNode_fillValue(TypeNode* node, Prototype* proto) {
+	if (proto->isPrimitive)
+		return;
+
+	Type* type = malloc(sizeof(Type));
+	Prototype_generateType(proto, type);
+	node->value.type = type;
+}
+
 
 void TypeNode_unfollow(TypeNode* node, char mode) {
 	int usage;
@@ -227,8 +231,13 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 		}
 
 
-		if (mode == 0)
+		// Free node
+		if (mode == 0) {
+			if (childrenLength >= 0)
+				free(node->value.type);
+
 			free(node);
+		}
 		return;
 	}
 

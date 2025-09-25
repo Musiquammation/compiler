@@ -61,15 +61,8 @@ Function* ScopeFunction_searchFunction(ScopeFunction* scope, label_t name, Scope
 
 
 void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v) {
-	TypeNode* node = malloc(sizeof(TypeNode));
-	*Array_push(Variable*, &scope->variables) = v;
-	
-	node->length = 0;
-	node->usage = 0;
-	/// TODO: define type and remove v
-	node->value.v = v;
-	
-	TypeNode_set(&scope->rootNode, &v, node, 1, false);
+	/// TODO: let this code ?
+	ScopeFunction_pushVariable(scope, v)->value.type = NULL;
 }
 
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
@@ -79,4 +72,17 @@ void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
 
 void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 	raiseError("[TODO]");
+}
+
+
+TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v) {
+	TypeNode* node = malloc(sizeof(TypeNode));
+	*Array_push(Variable*, &scope->variables) = v;
+	
+	node->length = 0;
+	node->usage = 0;
+	
+	TypeNode_set(&scope->rootNode, &v, node, 1);
+
+	return node;
 }

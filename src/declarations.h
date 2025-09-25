@@ -7,7 +7,6 @@ structdef(Scope);
 structdef(ScopeFile);
 structdef(ScopeFolder);
 
-structdef(Branch);
 structdef(Module);
 
 structdef(Variable);

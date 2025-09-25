@@ -23,11 +23,10 @@ struct TypeNode {
 	TypeNodePair* pairs;
 
 	int length; // length < 0 for number ; length >= 0 for a node
-	int usage; // -1 for a number
+	int usage;
 	
 
 	union {
-		Variable* v;
 		Type* type;
 
 		char i8;
@@ -49,6 +48,33 @@ struct TypeNode {
 
 
 
+enum {
+	TYPENODE_LENGTH_I8 = -127,
+	TYPENODE_LENGTH_U8,
+	TYPENODE_LENGTH_I16,
+	TYPENODE_LENGTH_U16,
+	TYPENODE_LENGTH_I32,
+	TYPENODE_LENGTH_U32,
+	TYPENODE_LENGTH_I64,
+	TYPENODE_LENGTH_U64,
+	TYPENODE_LENGTH_F32,
+	TYPENODE_LENGTH_F64,
+
+	TYPENODE_LENGTH_UNDEF_I8,
+	TYPENODE_LENGTH_UNDEF_U8,
+	TYPENODE_LENGTH_UNDEF_I16,
+	TYPENODE_LENGTH_UNDEF_U16,
+	TYPENODE_LENGTH_UNDEF_I32,
+	TYPENODE_LENGTH_UNDEF_U32,
+	TYPENODE_LENGTH_UNDEF_I64,
+	TYPENODE_LENGTH_UNDEF_U64,
+	TYPENODE_LENGTH_UNDEF_F32,
+	TYPENODE_LENGTH_UNDEF_F64,
+	
+};
+
+
+
 
 void TypeNode_pushPair(
 	TypeNode* node,
@@ -66,13 +92,13 @@ bool TypeNode_set(
 	TypeNode* node,
 	Variable* path[],
 	TypeNode* value,
-	int pathLength,
-	bool copyValue
+	int pathLength
 );
 
 
 void TypeNode_copy(TypeNode* dest, TypeNode* src);
 
+void TypeNode_fillValue(TypeNode* node, Prototype* proto);
 
 /**
  * mode=0 : free

@@ -1,4 +1,4 @@
 function {
     let object: Pointer;
-    let value: float = object.point.x + (3 - 12);
+    let value: float;
 }
