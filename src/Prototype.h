@@ -9,8 +9,8 @@ struct Prototype {
 };
 
 
-
-
 Type* Prototype_generateType(Prototype* proto);
+
+bool Prototype_accepts(const Prototype* proto, const Type* type);
 
 #endif

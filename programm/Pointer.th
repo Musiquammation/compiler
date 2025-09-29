@@ -2,5 +2,6 @@ class {
 	c1: Point;
 	c2: Test;
 	c3: Point;
+	c4: Test;
 }
 

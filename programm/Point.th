@@ -1,6 +1,7 @@
 class {
-	x: float;
-	y: float;
+	x: int;
+	y: int;
+	z: int;
 	sub: Test;
 }
 

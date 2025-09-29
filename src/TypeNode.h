@@ -97,6 +97,12 @@ TypeNode* TypeNode_get(
 	int pathLength
 );
 
+TypeNode* TypeNode_tryReach(
+	TypeNode* node,
+	Variable* path[],
+	int pathLength
+);
+
 bool TypeNode_set(
 	TypeNode* node,
 	Variable* path[],
@@ -114,6 +120,7 @@ void TypeNode_fillValue(TypeNode* node, Prototype* proto);
 
 int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined);
 
+bool TypeNode_checkProto(Prototype* prototype, TypeNode* node);
 
 /**
  * mode=0 : free

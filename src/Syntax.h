@@ -43,7 +43,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 Array Syntax_functionArguments(Scope* scope, Parser* parser);
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn);
 
-
+WordBranchNode* Syntax_readPath(label_t label, Parser* parser, Scope* scope, int* branchLengthPtr);
 void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool);
 
 #endif

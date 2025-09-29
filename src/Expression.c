@@ -200,6 +200,7 @@ void Expression_exchangeReferences(
 
 
 
+
 bool Expression_followsOperatorPlace(int operatorPlace, int type) {
 	switch (operatorPlace) {
 		// 0: multiplication, division, modulo
@@ -279,6 +280,8 @@ bool Expression_followsOperatorPlace(int operatorPlace, int type) {
 			return false;
 	}
 }
+
+
 
 
 Expression* Expression_processLine(Expression* line, int length) {
@@ -575,7 +578,6 @@ Expression* Expression_processLine(Expression* line, int length) {
 	return result;
 
 }
-
 
 
 
