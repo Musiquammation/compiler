@@ -1,6 +1,16 @@
 function {
-    let x: int;
-    let y = (10 - 21) * -122 + x;
+	let pa: Pointer;
+	let pb: Pointer;
 
-    
+	pa.c2 = pb.c2;
+	pa.c1.sub = pb.c2;
+	
+	let test: Test;
+	pa.c1.sub = test;
+
+	pa.c3 = pa.c1;
+	let pt: Point;
+	pa.c1 = pt;
+
+	pa = pb;
 }

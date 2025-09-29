@@ -25,8 +25,8 @@
 #include "Variable.h"
 
 int main() {
-	#define add(n) Variable* n = malloc(sizeof(Variable)); n->name = #n; ScopeFunction_addVariable(&scope, n);
-	#define decl(n) Variable real_ ##n = {.name = #n}; Variable* n = &real_ ##n;
+	#define add(n) Variable* n = malloc(sizeof(Variable)); n->name = #n; n->proto.cl = &_primitives.class_i32; n->proto.isPrimitive = true; TypeNode* tn_ ##n = ScopeFunction_pushVariable(&scope, n);
+	#define decl(n) Variable real_ ##n = {.name = #n}; Variable* n = &real_ ##n; n->proto.cl = &_primitives.class_i32; n->proto.isPrimitive = true;
 
 
 	#define COUNT_ARGS(_0,_1,_2,_3, COUNT, ...) COUNT
@@ -53,10 +53,17 @@ int main() {
 
 
 
+	LabelPool_create(&_labelPool);
+	CommonLabels_generate(&_commonLabels, &_labelPool);
+	syntaxList_init();
+
+	primitives_init();
+
 
 	decl(numerator);
 	decl(denominator);
 
+	
 	decl(left);
 	decl(center);
 	decl(right);
@@ -64,6 +71,7 @@ int main() {
 
 	Path path;
 	TypeNode* bff;
+	
 
 	ScopeFunction scope;
 	ScopeFunction_create(&scope);
@@ -73,9 +81,11 @@ int main() {
 	add(r2);
 	add(r3);
 
+	
 	add(num1);
 	add(num2);
-
+	
+	
 	
 	add(a);
 
@@ -139,6 +149,7 @@ int main() {
 
 	ScopeFunction_delete(&scope);
 
+	LabelPool_delete(&_labelPool);
 
 	#undef add
 	#undef decl

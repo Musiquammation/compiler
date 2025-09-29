@@ -50,26 +50,35 @@ struct TypeNode {
 
 enum {
 	TYPENODE_LENGTH_I8 = -127,
-	TYPENODE_LENGTH_U8,
-	TYPENODE_LENGTH_I16,
-	TYPENODE_LENGTH_U16,
-	TYPENODE_LENGTH_I32,
-	TYPENODE_LENGTH_U32,
-	TYPENODE_LENGTH_I64,
-	TYPENODE_LENGTH_U64,
-	TYPENODE_LENGTH_F32,
-	TYPENODE_LENGTH_F64,
-
 	TYPENODE_LENGTH_UNDEF_I8,
+
+	TYPENODE_LENGTH_U8,
 	TYPENODE_LENGTH_UNDEF_U8,
+	
+	TYPENODE_LENGTH_I16,
 	TYPENODE_LENGTH_UNDEF_I16,
+
+	TYPENODE_LENGTH_U16,
 	TYPENODE_LENGTH_UNDEF_U16,
+
+	TYPENODE_LENGTH_I32,
 	TYPENODE_LENGTH_UNDEF_I32,
+	
+	TYPENODE_LENGTH_U32,
 	TYPENODE_LENGTH_UNDEF_U32,
+	
+	TYPENODE_LENGTH_I64,
 	TYPENODE_LENGTH_UNDEF_I64,
+
+	TYPENODE_LENGTH_U64,
 	TYPENODE_LENGTH_UNDEF_U64,
+
+	TYPENODE_LENGTH_F32,
 	TYPENODE_LENGTH_UNDEF_F32,
+	
+	TYPENODE_LENGTH_F64,
 	TYPENODE_LENGTH_UNDEF_F64,
+
 	
 };
 
@@ -95,10 +104,16 @@ bool TypeNode_set(
 	int pathLength
 );
 
+TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value);
 
-void TypeNode_copy(TypeNode* dest, TypeNode* src);
+void TypeNode_copyValue(TypeNode* dest, const TypeNode* src, int srcLength);
+
+void TypeNode_copy(TypeNode* dest, const TypeNode* src);
 
 void TypeNode_fillValue(TypeNode* node, Prototype* proto);
+
+int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined);
+
 
 /**
  * mode=0 : free

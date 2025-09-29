@@ -5,13 +5,12 @@
 
 struct Prototype {
 	Class* cl;
-	bool isPrimitive;
+	char isPrimitive;
 };
 
 
 
 
-void Prototype_generateType(Prototype* proto, Type* type);
-
+Type* Prototype_generateType(Prototype* proto);
 
 #endif

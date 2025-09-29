@@ -12,7 +12,7 @@ struct Class {
 	Array variables; // type: Variable*
 	definitionState_t definitionState;
 	label_t name;
-	bool isPrimitive;
+	char isPrimitive;
 	int size;
 	int maxMinimalSize;
 };

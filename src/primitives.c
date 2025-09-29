@@ -16,25 +16,25 @@ static int cmpLabelPtr(const void* a, const void* b) {
 }
 
 void primitives_init(void) {
-    #define def(id, s) \
+    #define def(id, s, k) \
         _primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
         _primitives.class_##id##s.name = _commonLabels._##id##s; \
-        _primitives.class_##id##s.isPrimitive = true; \
+        _primitives.class_##id##s.isPrimitive = k; \
         _primitives.class_##id##s.size = s/8; \
         _primitives.class_##id##s.maxMinimalSize = s/8; \
         _primitives.type_##id##s.cl = &_primitives.class_##id##s; \
-        _primitives.type_##id##s.isPrimitive = true;
-
-    def(i, 8);
-    def(u, 8);
-    def(i, 16);
-    def(u, 16);
-    def(i, 32);
-    def(u, 32);
-    def(i, 64);
-    def(u, 64);
-    def(f, 32);
-    def(f, 64);
+        _primitives.type_##id##s.isPrimitive = k;\
+        
+    def(i, 8,  1);
+    def(u, 8,  2);
+    def(i, 16, 3);
+    def(u, 16, 4);
+    def(i, 32, 5);
+    def(u, 32, 6);
+    def(i, 64, 7);
+    def(u, 64, 8);
+    def(f, 32, 9);
+    def(f, 64, 10);
 
     #undef def
 
@@ -103,7 +103,7 @@ Class* primitives_getClass(label_t name) {
 Type* primitives_getType(Class* cl) {
     int low = 0, high = 17 - 1;
     while (low <= high) {
-        int mid = (low + high) / 2;
+        int mid = (low + high) / 2;        
         if (_primitives.sortedClasses[mid] == cl)
             return _primitives.sortedTypes[mid];
         if (_primitives.sortedClasses[mid] < cl)

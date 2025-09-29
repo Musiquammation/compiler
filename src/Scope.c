@@ -45,6 +45,9 @@ void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int search
 	if (searchFlags & SCOPESEARCH_CLASS) {
 		Class* cl = primitives_getClass(name);
 		if (cl) {
+			if (args) {
+				args->resultType = SCOPESEARCH_CLASS;
+			}
 			return cl;
 		}
 	}
@@ -55,20 +58,33 @@ void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int search
 
 		if (searchFlags & SCOPESEARCH_VARIABLE) {
 			Variable* variable = Scope_searchVariable(scope, scopeType, name, args);
-			if (variable)
+			if (variable) {
+				if (args) {
+					args->resultType = SCOPESEARCH_VARIABLE;
+				}
+
 				return variable;
+			}
 		}
 
 		if (searchFlags & SCOPESEARCH_CLASS) {
 			Class* cl = Scope_searchClass(scope, scopeType, name, args);
-			if (cl)
+			if (cl) {
+				if (args) {
+					args->resultType = SCOPESEARCH_CLASS;
+				}
 				return cl;
+			}
 		}
 
 		if (searchFlags & SCOPESEARCH_FUNCTION) {
 			Function* fn = Scope_searchFunction(scope, scopeType, name, args);
-			if (fn)
+			if (fn) {
+				if (args) {
+					args->resultType = SCOPESEARCH_FUNCTION;
+				}
 				return fn;
+			}
 		}
 
 		scope = scope->parent;
@@ -275,9 +291,6 @@ Variable* ScopeFile_searchVariable(ScopeFile* file, label_t name, ScopeSearchArg
 	Array_loopPtr(Variable, file->variables, ptr) {
 		Variable* e = *ptr;
 		if (e->name == name) {
-			if (args) {
-				args->resultType = 0;
-			}
 			return e;
 		}
 	}
@@ -289,9 +302,6 @@ Class* ScopeFile_searchClass(ScopeFile* file, label_t name, ScopeSearchArgs* arg
 	Array_loopPtr(Class, file->classes, ptr) {
 		Class* e = *ptr;
 		if (e->name == name) {
-			if (args) {
-				args->resultType = 0;
-			}
 			return e;
 		}
 	}
@@ -304,9 +314,6 @@ Function* ScopeFile_searchFunction(ScopeFile* file, label_t name, ScopeSearchArg
 	Array_loopPtr(Function, file->functions, ptr) {
 		Function* e = *ptr;
 		if (e->name == name) {
-			if (args) {
-				args->resultType = 0;
-			}
 			return e;
 		}
 	}

@@ -6,8 +6,11 @@
 
 struct Type {
 	Class* cl;
-	bool isPrimitive;
+	char isPrimitive;
 };
+
+Type* Type_newCopy(Type* src);
+void Type_free(Type* type);
 
 
 #endif

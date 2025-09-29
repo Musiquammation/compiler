@@ -14,6 +14,8 @@
 #include "Variable.h"
 #include "Function.h"
 
+#include "WordBranch.h"
+
 #include "Type.h"
 #include "TypeNode.h"
 #include "Prototype.h"
@@ -239,13 +241,14 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 				finalExpr->type = EXPRESSION_PROPERTY;
 				finalExpr->data.property.source = NULL;
 				finalExpr->data.property.variable = origin->data.property.variable;
+				free(exprPath.data);
 				break;
 			}
 
 			const int subLength = exprPath.length-1;
 			Expression* const buffer = malloc(subLength * sizeof(Expression));
 
-			Expression* e = Array_get(Expression, exprPath,  subLength);
+			Expression* e = Array_get(Expression, exprPath, 0);
 			
 			finalExpr->type = EXPRESSION_PROPERTY;
 			finalExpr->data.property.source = buffer;
@@ -765,7 +768,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		Class_create(cl);
 		cl->name = name;
 		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
-		cl->isPrimitive = false;
+		cl->isPrimitive = 0;
 		Scope_addClass(scope, scope->type, cl);
 	}
 
@@ -1127,6 +1130,96 @@ Array Syntax_functionArguments(Scope* scope, Parser* parser) {
 
 
 
+WordBranchNode* Syntax_readPath(label_t label, Parser* parser, Scope* scope, int* branchLengthPtr) {
+	int branchLength = 1;
+	WordBranchNode* const firstBranch = malloc(sizeof(WordBranchNode));
+	WordBranchNode* branch = firstBranch;
+	
+	union {
+		ScopeClass cl;
+	} subScope;
+
+	Scope* subScopePtr = scope;
+	
+	while (true) {
+		ScopeSearchArgs searchArg;
+		void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANYTYPE);
+
+		if (!object) {
+			raiseError("[UNKOWN] Variable not defined");
+			return NULL;
+		}
+
+
+		switch (searchArg.resultType) {
+		// variable
+		case SCOPESEARCH_VARIABLE:
+		{
+			// Define branch
+			Variable* v = object;
+			branch->branch.v = v;
+			branch->branch.type = WORDBRANCH_VARIABLE;
+
+
+			// Update scope
+			subScope.cl.scope.parent = NULL;
+			subScope.cl.scope.type = SCOPE_CLASS;
+			subScope.cl.cl = v->proto.cl;
+			subScope.cl.allowThis = false;
+
+			subScopePtr = &subScope.cl.scope;
+
+			break;
+		}
+
+		// class
+		case SCOPESEARCH_CLASS:
+		{
+			
+			break;
+		}
+
+		// function
+		case SCOPESEARCH_FUNCTION:
+		{
+			
+			break;
+		}
+		}
+
+		Token token = Parser_read(parser, &_labelPool);
+		if (token.type == TOKEN_TYPE_OPERATOR) {
+			if (token.operator == TOKEN_OPERATOR_MEMBER) {
+				token = Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
+					return NULL;
+				
+				label = token.label;
+				goto forNext;
+			}
+			
+			if (token.operator == TOKEN_OPERATOR_MEMBER) {
+				goto forNext;
+				/// TODO: for [::] operator
+			}
+		}
+
+		// Exit
+		*branchLengthPtr = branchLength;
+		Parser_saveToken(parser, &token);
+		branch->next = NULL;
+		return firstBranch;
+
+		forNext:
+		WordBranchNode* next = malloc(sizeof(WordBranchNode));
+		branch->next = next;
+		branch = next;
+		branchLength++;
+	}
+
+}
+
+
 void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 	Token token = Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
@@ -1184,16 +1277,103 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 		return;
 	}
 	
-	TypeNode* tnode = ScopeFunction_pushVariable(scope, variable);
-	if (variable->proto.isPrimitive) {
-		/// TODO: define length using TYPENODE_LENGTH_I8
-		tnode->length = TYPENODE_LENGTH_UNDEF_I8;
-	} else {
-		Type* type = malloc(sizeof(Type));
-		Prototype_generateType(&variable->proto, type);
-		tnode->value.type = type;
-	}
+	ScopeFunction_pushVariable(scope, variable, exprValue);
 }
+
+
+void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token token) {
+	int pathLength;
+	WordBranchNode* branchNode = Syntax_readPath(token.label, parser, &scope->scope, &pathLength);
+
+	WordBranch* const branches = malloc(pathLength * sizeof(WordBranch));
+	Variable** const variablePath = malloc(pathLength * sizeof(Variable*));
+
+	// fill branches
+	bool isVariableOnly = true;
+	{
+		Variable** v = variablePath;
+		WordBranch* branch = branches;
+		while (branchNode) {
+			int type = branchNode->branch.type;
+			*branch = branchNode->branch;
+			if (type == WORDBRANCH_VARIABLE) {
+				if (isVariableOnly) {
+					*v = branch->v;
+					v++;
+				}
+			} else {
+				isVariableOnly = false;
+			}
+			
+			WordBranchNode* n = branchNode->next;
+			free(branchNode);
+			branchNode = n;
+			branch++;
+		}
+	}
+
+
+	if (isVariableOnly) {
+		// Assign operand
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_ASSIGN, 0) != 0)
+			return;
+		
+		// Read expression
+		Expression* expr = Syntax_expression(parser, &scope->scope, true);
+
+		switch (expr->type) {
+		case EXPRESSION_PROPERTY:
+		{
+			
+			int valuePathLength = 0;
+			Expression* source = expr;
+			while (source) {
+				valuePathLength++;
+				source = source->data.property.source;
+			}
+			
+			source = expr;
+			
+			Variable** const valueVarPath = malloc(valuePathLength * sizeof(Variable*));
+			typedef Variable* var_ptr_t;
+			Array_for(var_ptr_t, valueVarPath, valuePathLength, vPtr) {
+				*vPtr = source->data.property.variable;
+				source = source->data.property.source;
+			}
+
+			TypeNode* operand = TypeNode_get(&scope->rootNode, valueVarPath, valuePathLength);
+			TypeNode_set(&scope->rootNode, variablePath, operand, pathLength);
+			free(valueVarPath);
+			break;
+		}
+
+		default:
+			raiseError("[TODO]: this expression is not handled");
+			break;
+		}
+
+
+		// Free expression
+		Expression_free(expr->type, expr);
+		free(expr);
+
+
+		// End operand
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
+			return;
+
+
+	} else {
+		raiseError("[TODO]: other than isVariableOnly");
+	}
+
+
+	free(branches);
+	free(variablePath);
+}
+
 
 
 void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
@@ -1245,11 +1425,11 @@ void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 		// free label
 		case 6:
 		{
-			raiseError("[TODO] in Syntax_functionScope: free label");
+			Syntax_functionScope_freeLabel(scope, parser, token);
 			break;
 		}
 
-		// free label
+		// finish scope
 		case 7:
 		{
 			goto finishScope;

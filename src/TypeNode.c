@@ -1,5 +1,6 @@
 #include "TypeNode.h"
 
+#include "Class.h"
 #include "Type.h"
 #include "Prototype.h"
 #include "Variable.h"
@@ -70,16 +71,15 @@ TypeNode* TypeNode_get(
 		// If here, not found so let's create a TypeNode
 		{
 			TypeNode* child = malloc(sizeof(TypeNode));
-			child->length = 0;
 			child->usage = 1;
 			
+			TypeNode_fillValue(child, &variable->proto);
 			TypeNode_pushPair(node, variable, child);
 			node = child;
 
 			if (vPtr == vPtr_end)
 				return node; // skip fillValue
 
-			TypeNode_fillValue(child, &variable->proto);
 		}
 		
 		
@@ -150,7 +150,7 @@ bool TypeNode_set(
 			}
 
 			TypeNode* child = malloc(sizeof(TypeNode));
-			child->length = 0;
+			TypeNode_fillValue(child, &variable->proto);
 			child->usage = 1;
 
 			TypeNode_pushPair(node, variable, child);
@@ -169,13 +169,78 @@ bool TypeNode_set(
 }
 
 
-void TypeNode_copy(TypeNode* dest, TypeNode* src) {
+TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value) {
+	TypeNode* node = malloc(sizeof(TypeNode));
+	node->usage = 0;
+
+	if (v->proto.isPrimitive) {
+		node->length = TypeNode_getPrimitiveLength(v->proto.cl, value != NULL);
+		if (value) {
+			/// TODO: set value
+		}
+
+	} else {
+		node->length = 0;
+		if (value) {
+
+		} else {
+			Type* type = Prototype_generateType(&v->proto);
+			node->value.type = type;
+		}
+	}
+
+	TypeNode_set(root, &v, node, 1);
+	
+
+	return node;
+}
+
+
+void TypeNode_copyValue(TypeNode* dest, const TypeNode* src, int length) {
+	dest->length = length;
+
+	// Copy type
+	if (length >= 0) {
+		dest->value.type = Type_newCopy(src->value.type);
+		return;
+	}
+
+
+
+	switch (length) {
+	TYPENODE_LENGTH_I8:  dest->value.i8 = src->value.i8; break; 
+	TYPENODE_LENGTH_U8:  dest->value.u8 = src->value.u8; break;
+	TYPENODE_LENGTH_I16: dest->value.i16 = src->value.i16; break;
+	TYPENODE_LENGTH_U16: dest->value.u16 = src->value.u16; break;
+	TYPENODE_LENGTH_I32: dest->value.i32 = src->value.i32; break;
+	TYPENODE_LENGTH_U32: dest->value.u32 = src->value.u32; break;
+	TYPENODE_LENGTH_I64: dest->value.i64 = src->value.i64; break;
+	TYPENODE_LENGTH_U64: dest->value.u64 = src->value.u64; break;
+	TYPENODE_LENGTH_F32: dest->value.f32 = src->value.f32; break;
+	TYPENODE_LENGTH_F64: dest->value.f64 = src->value.f64; break;
+
+	TYPENODE_LENGTH_UNDEF_I8:
+	TYPENODE_LENGTH_UNDEF_U8:
+	TYPENODE_LENGTH_UNDEF_I16:
+	TYPENODE_LENGTH_UNDEF_U16:
+	TYPENODE_LENGTH_UNDEF_I32:
+	TYPENODE_LENGTH_UNDEF_U32:
+	TYPENODE_LENGTH_UNDEF_I64:
+	TYPENODE_LENGTH_UNDEF_U64:
+	TYPENODE_LENGTH_UNDEF_F32:
+	TYPENODE_LENGTH_UNDEF_F64:
+		break;
+	}
+}
+
+
+
+void TypeNode_copy(TypeNode* dest, const TypeNode* src) {
 	int length = src->length;
 	
 	// Quick copy
 	dest->usage = 1;
-	dest->length = length;
-	dest->value = src->value;
+	TypeNode_copyValue(dest, src, length);
 
 	if (length <= 0)
 		return;
@@ -198,13 +263,45 @@ void TypeNode_copy(TypeNode* dest, TypeNode* src) {
 }
 
 void TypeNode_fillValue(TypeNode* node, Prototype* proto) {
-	if (proto->isPrimitive)
+	if (proto->isPrimitive) {
+		node->length = TypeNode_getPrimitiveLength(proto->cl, false);
 		return;
+	}
 
-	Type* type = malloc(sizeof(Type));
-	Prototype_generateType(proto, type);
+	printf("fill\n");
+	Type* type = Prototype_generateType(proto);
 	node->value.type = type;
+	node->length = 0;
 }
+
+
+
+int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined) {
+	int result;
+	switch (primitiveClass->isPrimitive) {
+	case  1: result = TYPENODE_LENGTH_I8;  break;
+	case  2: result = TYPENODE_LENGTH_U8;  break;
+	case  3: result = TYPENODE_LENGTH_I16; break;
+	case  4: result = TYPENODE_LENGTH_U16; break;
+	case  5: result = TYPENODE_LENGTH_I32; break;
+	case  6: result = TYPENODE_LENGTH_U32; break;
+	case  7: result = TYPENODE_LENGTH_I64; break;
+	case  8: result = TYPENODE_LENGTH_U64; break;
+	case  9: result = TYPENODE_LENGTH_F32; break;
+	case 10: result = TYPENODE_LENGTH_F64; break;
+
+	default:
+		return -1;
+	}
+
+
+	if (!isDefined) {
+		result++;
+	}
+
+	return result;
+}
+
 
 
 void TypeNode_unfollow(TypeNode* node, char mode) {
@@ -233,8 +330,9 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 
 		// Free node
 		if (mode == 0) {
+			printf("free %d %p\n", node->length, node->value.type);
 			if (childrenLength >= 0)
-				free(node->value.type);
+				Type_free(node->value.type);
 
 			free(node);
 		}

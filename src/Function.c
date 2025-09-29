@@ -2,6 +2,7 @@
 
 #include "Variable.h"
 #include "Scope.h"
+#include "TypeNode.h"
 
 
 void Function_create(Function* fn) {
@@ -62,7 +63,7 @@ Function* ScopeFunction_searchFunction(ScopeFunction* scope, label_t name, Scope
 
 void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v) {
 	/// TODO: let this code ?
-	ScopeFunction_pushVariable(scope, v)->value.type = NULL;
+	ScopeFunction_pushVariable(scope, v, NULL)->value.type = NULL;
 }
 
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
@@ -75,14 +76,7 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 }
 
 
-TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v) {
-	TypeNode* node = malloc(sizeof(TypeNode));
+TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
 	*Array_push(Variable*, &scope->variables) = v;
-	
-	node->length = 0;
-	node->usage = 0;
-	
-	TypeNode_set(&scope->rootNode, &v, node, 1);
-
-	return node;
+	return TypeNode_push(&scope->rootNode, v, value);
 }

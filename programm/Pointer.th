@@ -1,8 +1,6 @@
 class {
-    point: Point;
-    a: Point;
-    d: char;
-    c: short;
-    f: char;
+	c1: Point;
+	c2: Test;
+	c3: Point;
 }
 

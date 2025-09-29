@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 
-
 #include "declarations.h"
 #include "label_t.h"
 
