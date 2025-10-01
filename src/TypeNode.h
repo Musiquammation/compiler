@@ -116,7 +116,7 @@ void TypeNode_copyValue(TypeNode* dest, const TypeNode* src, int srcLength);
 
 void TypeNode_copy(TypeNode* dest, const TypeNode* src);
 
-void TypeNode_fillValue(TypeNode* node, Prototype* proto);
+bool TypeNode_fillValue(TypeNode* node, Prototype* proto);
 
 int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined);
 
@@ -133,3 +133,4 @@ void TypeNode_unfollow(TypeNode* node, char mode);
 
 
 #endif
+

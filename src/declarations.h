@@ -30,8 +30,6 @@ structdef(Annotation);
 structdef(Prototype);
 structdef(Type);
 
-structdef(WordBranchNode);
-structdef(WordBranch);
 
 
 #endif

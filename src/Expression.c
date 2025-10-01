@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 void Expression_free(int type, Expression* e) {
+	restartFree:
 	switch (type) {
 	case EXPRESSION_NONE:
 	case EXPRESSION_INVALID:
@@ -13,31 +14,22 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_PROPERTY:
 	{
-		Expression* source = e->data.property.source;
-		if (!source)
-			break;
-			
-		Expression_free(-EXPRESSION_PROPERTY, e);
+		free(e->data.property.variableArr);
+		if (e->data.property.next) {
+			e++;
+			type = e->type;
+			goto restartFree; // avoid recursion
+		}
 
-		
-		free(source);
 		break;
 	}
 
-	// Special case without free
-	case -EXPRESSION_PROPERTY:
+	case EXPRESSION_PATH:
 	{
-		Expression* source = e->data.property.source;
-		if (!source) 
-		break;
-		
-		Expression_free(-EXPRESSION_PROPERTY, source);
-
-		/// TODO: free proto 
-		break;
+		Expression* target = e->data.target;
+		Expression_free(target->type, target);
+		free(target);
 	}
-
-
 
 	case EXPRESSION_I8:
 	case EXPRESSION_I16:
@@ -145,6 +137,7 @@ void Expression_exchangeReferences(
 	
 
 		case EXPRESSION_PROPERTY:
+		case EXPRESSION_PATH:
 			break;
 
 		
@@ -289,10 +282,6 @@ Expression* Expression_processLine(Expression* line, int length) {
 	memset(lineUsed, 0, length);
 
 
-	// Handle properties
-	/// TODO:  Handle properties
-
-	
 	// Handle increments/decrements
 	int prev_type = -1;
 	int prev_index = -1;
@@ -552,7 +541,7 @@ Expression* Expression_processLine(Expression* line, int length) {
 		Expression_exchangeReferences(&result[i], base, result, length);
 		j++;
 	}
-
+	
 	for (j = 0; i < length; i++) {
 		result[i] = line[j];
 		Expression_exchangeReferences(&result[i], base, result, length);
@@ -563,17 +552,7 @@ Expression* Expression_processLine(Expression* line, int length) {
 
 	
 
-
-
-
 	free(lineUsed);
-
-	
-	// Print result
-	// printf("===RESULT===\n");
-	// for (int i = 0; i < length; i++)
-		// printf("%2d %p %p %p\n", result[i].type, &result[i], result[i].data.operands.left, result[i].data.operands.right);
-	
 	
 	return result;
 

@@ -1,6 +1,10 @@
 function {
 	let pa: Pointer;
 	let pb: Pointer;
+	
 
-	pa.c1.z = pa.c1.y;
+	pa.c2.num = 38;
+	pa.c1.sub = pa.c2;
+	pa.c2 = pa.c4;
+	pa.c4.num = pa.c1.sub.dem;
 }

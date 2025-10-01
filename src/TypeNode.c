@@ -79,23 +79,12 @@ TypeNode* TypeNode_get(
 		// If here, not found so let's create a TypeNode
 		pairNotFound:
 		{
-			// Check if variable exists
-			Array_loop(variable_t, variable->proto.cl->variables, memberPtr) {
-				if (*memberPtr == variable)
-					goto varExists;
-				
-			}
-			raiseError("[Unknown] Variable not defined");
-			return NULL;
-
-			varExists:
-
 			// Create child
 			TypeNode* child = malloc(sizeof(TypeNode));
 			child->usage = 1;
-			
 			TypeNode_fillValue(child, &variable->proto);
 			TypeNode_pushPair(node, variable, child);
+			
 			node = child;
 
 			if (vPtr == vPtr_end)
@@ -158,7 +147,6 @@ bool TypeNode_set(
 ) {	
 	typedef Variable* variable_t;
 
-
 	// Search sub node
 	for (
 		variable_t *vPtr = path,
@@ -179,7 +167,7 @@ bool TypeNode_set(
 			
 			node = pair->node;
 
-			if (vPtr == vPtr_end) {				
+			if (vPtr == vPtr_end) {			
 				TypeNode_unfollow(node, 0);
 				pair->node = value;
 				value->usage++;
@@ -206,16 +194,18 @@ bool TypeNode_set(
 			if (vPtr == vPtr_end) {
 				TypeNode_pushPair(node, variable, value);
 				value->usage++;
+				
 
 				// Check type and return
 				return TypeNode_checkProto(&variable->proto, value);
 			}
 
 			TypeNode* child = malloc(sizeof(TypeNode));
-			TypeNode_fillValue(child, &variable->proto);
 			child->usage = 1;
-
+			TypeNode_fillValue(child, &variable->proto);
 			TypeNode_pushPair(node, variable, child);
+			
+
 			node = child;
 		}
 		
@@ -234,9 +224,11 @@ TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value) {
 	node->usage = 0;
 
 	if (v->proto.isPrimitive) {
-		node->length = TypeNode_getPrimitiveLength(v->proto.cl, value != NULL);
 		if (value) {
 			/// TODO: set value
+			node->length = TypeNode_getPrimitiveLength(v->proto.cl, true);
+		} else {
+			node->length = TypeNode_getPrimitiveLength(v->proto.cl, false);
 		}
 
 	} else {
@@ -322,15 +314,16 @@ void TypeNode_copy(TypeNode* dest, const TypeNode* src) {
 	}
 }
 
-void TypeNode_fillValue(TypeNode* node, Prototype* proto) {
+bool TypeNode_fillValue(TypeNode* node, Prototype* proto) {
 	if (proto->isPrimitive) {
 		node->length = TypeNode_getPrimitiveLength(proto->cl, false);
-		return;
+		return false;
 	}
 
 	Type* type = Prototype_generateType(proto);
 	node->value.type = type;
 	node->length = 0;
+	return true;
 }
 
 
@@ -445,12 +438,13 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 	
 
 	usage = node->usage;
-
+	
 	if (usage == 1) {
 		unfollowChildren:
 
 		// Unfollow children
 		int childrenLength = node->length;
+
 		if (childrenLength > 0) {
 			TypeNodePair* pairs = node->pairs;
 			Array_for(TypeNodePair, pairs, childrenLength, i) {
@@ -459,6 +453,7 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 
 			free(pairs);
 		}
+
 
 
 		// Free node

@@ -37,7 +37,6 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 	} 
 
 	Array_free(scope->variables);
-
 }
 
 
