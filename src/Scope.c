@@ -131,8 +131,6 @@ void Scope_defineOnFly(Scope* scope, label_t name) {
 		return;
 	}
 
-	printf("Define on fly\n");
-
 	Syntax_thFile(file);
 }
 

@@ -5,9 +5,9 @@
 #include "Prototype.h"
 #include "Variable.h"
 #include "helper.h"
+#include "primitives.h"
+
 #include <string.h>
-
-
 
 void TypeNode_pushPair(
 	TypeNode* node,
@@ -48,6 +48,7 @@ TypeNode* TypeNode_get(
 ) {
 	// Search sub node
 	typedef Variable* variable_t;
+	
 	for (
 		variable_t *vPtr = path,
 		*const vPtr_end = vPtr + pathLength - 1;
@@ -56,25 +57,34 @@ TypeNode* TypeNode_get(
 	) {
 		variable_t variable = *vPtr;
 		
-		TypeNodePair* pairs = node->pairs;
-		if (pairs == NULL)
+		int length = node->length;
+		if (length < 0)
 			return NULL;
-
+		
+		if (length == 0)
+			goto pairNotFound;
+		
+		
 		// Search variable
-		Array_for(TypeNodePair, pairs, node->length, pair) {
-			if (pair->defined == variable) {
-				node = pair->node;
-				goto pairFound;
+		{
+			TypeNodePair* pairs = node->pairs;
+			Array_for(TypeNodePair, pairs, length, pair) {
+				if (pair->defined == variable) {
+					node = pair->node;
+					goto pairFound;
+				}
 			}
 		}
 
 		// If here, not found so let's create a TypeNode
+		pairNotFound:
 		{
+			// Create child
 			TypeNode* child = malloc(sizeof(TypeNode));
 			child->usage = 1;
-			
 			TypeNode_fillValue(child, &variable->proto);
 			TypeNode_pushPair(node, variable, child);
+			
 			node = child;
 
 			if (vPtr == vPtr_end)
@@ -90,6 +100,45 @@ TypeNode* TypeNode_get(
 }
 
 
+TypeNode* TypeNode_tryReach(
+	TypeNode* node,
+	Variable* path[],
+	int pathLength
+) {
+	typedef Variable* variable_t;
+
+	for (
+		variable_t *vPtr = path,
+		*const vPtr_end = vPtr + pathLength - 1;
+		vPtr <= vPtr_end;
+		vPtr++
+	) {
+		variable_t variable = *vPtr;
+
+		int length = node->length;
+		if (length <= 0)
+			return NULL;
+		
+		// Search variable
+		TypeNodePair* pairs = node->pairs;
+		Array_for(TypeNodePair, pairs, length, pair) {
+			if (pair->defined == variable) {
+				node = pair->node;
+				goto pairFound;
+			}
+		}
+
+		// Not found
+		return NULL;
+
+		pairFound:{}
+	}
+
+	return node;
+}
+
+
+
 bool TypeNode_set(
 	TypeNode* node,
 	Variable* path[],
@@ -97,7 +146,6 @@ bool TypeNode_set(
 	int pathLength
 ) {	
 	typedef Variable* variable_t;
-
 
 	// Search sub node
 	for (
@@ -119,12 +167,13 @@ bool TypeNode_set(
 			
 			node = pair->node;
 
-			if (vPtr == vPtr_end) {				
+			if (vPtr == vPtr_end) {			
 				TypeNode_unfollow(node, 0);
 				pair->node = value;
 				value->usage++;
 
-				return true;
+				// Check type and return
+				return TypeNode_checkProto(&variable->proto, value);
 			}
 			
 			int usage = node->usage;
@@ -145,27 +194,28 @@ bool TypeNode_set(
 			if (vPtr == vPtr_end) {
 				TypeNode_pushPair(node, variable, value);
 				value->usage++;
+				
 
-				return true;
+				// Check type and return
+				return TypeNode_checkProto(&variable->proto, value);
 			}
 
 			TypeNode* child = malloc(sizeof(TypeNode));
-			TypeNode_fillValue(child, &variable->proto);
 			child->usage = 1;
-
+			TypeNode_fillValue(child, &variable->proto);
 			TypeNode_pushPair(node, variable, child);
+			
+
 			node = child;
 		}
 		
 		
 		pairFound:{}
-
 	}
 
 	
 
-
-	return node;
+	return true;
 }
 
 
@@ -174,9 +224,11 @@ TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value) {
 	node->usage = 0;
 
 	if (v->proto.isPrimitive) {
-		node->length = TypeNode_getPrimitiveLength(v->proto.cl, value != NULL);
 		if (value) {
 			/// TODO: set value
+			node->length = TypeNode_getPrimitiveLength(v->proto.cl, true);
+		} else {
+			node->length = TypeNode_getPrimitiveLength(v->proto.cl, false);
 		}
 
 	} else {
@@ -262,16 +314,16 @@ void TypeNode_copy(TypeNode* dest, const TypeNode* src) {
 	}
 }
 
-void TypeNode_fillValue(TypeNode* node, Prototype* proto) {
+bool TypeNode_fillValue(TypeNode* node, Prototype* proto) {
 	if (proto->isPrimitive) {
 		node->length = TypeNode_getPrimitiveLength(proto->cl, false);
-		return;
+		return false;
 	}
 
-	printf("fill\n");
 	Type* type = Prototype_generateType(proto);
 	node->value.type = type;
 	node->length = 0;
+	return true;
 }
 
 
@@ -302,6 +354,80 @@ int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined) {
 	return result;
 }
 
+bool TypeNode_checkProto(Prototype* prototype, TypeNode* node) {
+	bool returnValue;
+
+	int value = node->length;
+	if (value < 0) {
+		switch (value) {
+		/// TODO: handle casts
+		case TYPENODE_LENGTH_I8:
+		case TYPENODE_LENGTH_UNDEF_I8:
+			returnValue = prototype->cl == &_primitives.class_i8;
+			goto handleReturnValue;
+			
+		case TYPENODE_LENGTH_U8:
+		case TYPENODE_LENGTH_UNDEF_U8:
+			returnValue = prototype->cl == &_primitives.class_u8;
+			goto handleReturnValue;
+		
+		case TYPENODE_LENGTH_I16:
+		case TYPENODE_LENGTH_UNDEF_I16:
+			returnValue = prototype->cl == &_primitives.class_i16;
+			goto handleReturnValue;
+
+		case TYPENODE_LENGTH_U16:
+		case TYPENODE_LENGTH_UNDEF_U16:
+			returnValue = prototype->cl == &_primitives.class_u16;
+			goto handleReturnValue;
+
+		case TYPENODE_LENGTH_I32:
+		case TYPENODE_LENGTH_UNDEF_I32:
+			returnValue = prototype->cl == &_primitives.class_i32;
+			goto handleReturnValue;
+		
+		case TYPENODE_LENGTH_U32:
+		case TYPENODE_LENGTH_UNDEF_U32:
+			returnValue = prototype->cl == &_primitives.class_u32;
+			goto handleReturnValue;
+		
+		case TYPENODE_LENGTH_I64:
+		case TYPENODE_LENGTH_UNDEF_I64:
+			returnValue = prototype->cl == &_primitives.class_i64;
+			goto handleReturnValue;
+
+		case TYPENODE_LENGTH_U64:
+		case TYPENODE_LENGTH_UNDEF_U64:
+			returnValue = prototype->cl == &_primitives.class_u64;
+			goto handleReturnValue;
+
+		case TYPENODE_LENGTH_F32:
+		case TYPENODE_LENGTH_UNDEF_F32:
+			returnValue = prototype->cl == &_primitives.class_f32;
+			goto handleReturnValue;
+		
+		case TYPENODE_LENGTH_F64:
+		case TYPENODE_LENGTH_UNDEF_F64:
+			returnValue = prototype->cl == &_primitives.class_f64;
+			goto handleReturnValue;
+
+		}
+
+		returnValue = false; // not found
+		goto handleReturnValue;
+	}
+
+	returnValue = Prototype_accepts(prototype, node->value.type);
+	
+	handleReturnValue:
+	if (returnValue) {
+		return true;
+	}
+
+	raiseError("[Type] Type refused");
+	return false;
+}
+
 
 
 void TypeNode_unfollow(TypeNode* node, char mode) {
@@ -312,12 +438,13 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 	
 
 	usage = node->usage;
-
+	
 	if (usage == 1) {
 		unfollowChildren:
 
 		// Unfollow children
 		int childrenLength = node->length;
+
 		if (childrenLength > 0) {
 			TypeNodePair* pairs = node->pairs;
 			Array_for(TypeNodePair, pairs, childrenLength, i) {
@@ -328,9 +455,9 @@ void TypeNode_unfollow(TypeNode* node, char mode) {
 		}
 
 
+
 		// Free node
 		if (mode == 0) {
-			printf("free %d %p\n", node->length, node->value.type);
 			if (childrenLength >= 0)
 				Type_free(node->value.type);
 

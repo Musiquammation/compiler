@@ -14,7 +14,6 @@
 #include "Variable.h"
 #include "Function.h"
 
-#include "WordBranch.h"
 
 #include "Type.h"
 #include "TypeNode.h"
@@ -166,108 +165,10 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 		// variable
 		case 0:
 		{
-			Array exprPath;
-			Array_create(&exprPath, sizeof(Expression));
-
-			char currentScopeType = 0;
-			ScopeClass scopeClass;
-
-			while (true) {
-				// Create expression
-				Expression* expr = Array_push(Expression, &exprPath);
-				expr->type = EXPRESSION_PROPERTY;
-
-				Scope* subScope;
-				switch (currentScopeType) {
-				case 0:
-					subScope = scope;
-					break;
-
-				case 1:
-					subScope = &scopeClass.scope;
-					break;
-				}
-				
-				// Search variable
-				Variable* variable = Scope_search(subScope, token.label, NULL, SCOPESEARCH_VARIABLE);
-				expr->data.property.variable = variable;
-
-				if (!variable) {
-					raiseError("[UNKOWN] Variable not defined");
-					return NULL;
-				}
-
-				token = Parser_read(parser, &_labelPool);
-				
-				
-				switch (TokenCompare(SYNTAXLIST_PROPERTY, SYNTAXFLAG_UNFOUND)) {
-				// get
-				case 0:
-				{
-					// Set scope
-					scopeClass.scope.type = SCOPE_CLASS;
-					scopeClass.scope.parent = NULL;
-					scopeClass.cl = variable->proto.cl;
-					scopeClass.allowThis = false;
-					currentScopeType = 1;
-
-					// Get next label
-					token = Parser_read(parser, &_labelPool);
-					if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0)) {
-						raiseError("[Syntax] Property was expected");
-						return NULL;
-					}
-
-
-					break; // continue reading variable
-				}
-
-				default:
-					goto finishVariable;
-				}
-
-			}
-
-
-			finishVariable:
-			Parser_saveToken(parser, &token); // save back token
-
-			// Fill expressions
-			Expression* finalExpr = Array_push(Expression, &lineArr);
-
-			if (exprPath.length == 1) {
-				/// TODO: handle for function calls
-				Expression* origin = Array_get(Expression, exprPath, 0);
-				finalExpr->type = EXPRESSION_PROPERTY;
-				finalExpr->data.property.source = NULL;
-				finalExpr->data.property.variable = origin->data.property.variable;
-				free(exprPath.data);
-				break;
-			}
-
-			const int subLength = exprPath.length-1;
-			Expression* const buffer = malloc(subLength * sizeof(Expression));
-
-			Expression* e = Array_get(Expression, exprPath, 0);
-			
-			finalExpr->type = EXPRESSION_PROPERTY;
-			finalExpr->data.property.source = buffer;
-			finalExpr->data.property.variable = e->data.property.variable;
-
-			for (int i = 0; i < subLength; i++) {
-				e = Array_get(Expression, exprPath,  subLength - i);
-
-				buffer[i].type = EXPRESSION_PROPERTY;
-				buffer[i].data.property.source = &buffer[i+1];
-				buffer[i].data.property.variable = e->data.property.variable;
-			}
-
-			buffer[subLength-1].data.property.source = NULL;
-
-
-			Array_free(exprPath);
-
-
+			Expression* path = Syntax_readPath(token.label, parser, scope);
+			Expression* expr = Array_push(Expression, &lineArr);
+			expr->type = EXPRESSION_PATH;
+			expr->data.target = path;
 			break;
 		}
 
@@ -456,6 +357,8 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 	if (lineArr.length == 0) {
 		return NULL; // no expression
 	}
+
+
 
 	Expression* result = Expression_processLine(lineArr.data, lineArr.length);
 	free(lineArr.data);
@@ -1130,93 +1033,131 @@ Array Syntax_functionArguments(Scope* scope, Parser* parser) {
 
 
 
-WordBranchNode* Syntax_readPath(label_t label, Parser* parser, Scope* scope, int* branchLengthPtr) {
-	int branchLength = 1;
-	WordBranchNode* const firstBranch = malloc(sizeof(WordBranchNode));
-	WordBranchNode* branch = firstBranch;
-	
+Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
+	Array expressions; // type: Expression
+	Array currentVarPath; // type: Variable*
+	Array_create(&expressions, sizeof(Expression)); 
+	Array_create(&currentVarPath, sizeof(Variable*)); 
+
+
 	union {
 		ScopeClass cl;
 	} subScope;
 
+	char isFirstLabelState = 1;
 	Scope* subScopePtr = scope;
-	
+	Token token;
+
 	while (true) {
-		ScopeSearchArgs searchArg;
-		void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANYTYPE);
-
-		if (!object) {
-			raiseError("[UNKOWN] Variable not defined");
-			return NULL;
-		}
-
-
-		switch (searchArg.resultType) {
-		// variable
-		case SCOPESEARCH_VARIABLE:
+		// Get type
+		token = Parser_read(parser, &_labelPool);
+		int syntaxResult = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
+		switch (syntaxResult) {
+		// Object (or not found)
+		case 0:
+		case -3:
 		{
-			// Define branch
-			Variable* v = object;
-			branch->branch.v = v;
-			branch->branch.type = WORDBRANCH_VARIABLE;
+			// Search property
+			ScopeSearchArgs searchArg;
+			void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANYTYPE);
 
+			if (!object) {
+				raiseError("[Unknown] Object not defined");
+				return NULL;
+			}
 
-			// Update scope
-			subScope.cl.scope.parent = NULL;
-			subScope.cl.scope.type = SCOPE_CLASS;
-			subScope.cl.cl = v->proto.cl;
-			subScope.cl.allowThis = false;
+			if (searchArg.resultType == SCOPESEARCH_VARIABLE) {
+				*Array_push(Variable*, &currentVarPath) = (Variable*)object;
+				subScope.cl.scope.parent = NULL;
+				subScope.cl.scope.type = SCOPE_CLASS;
+				subScope.cl.cl = ((Variable*)object)->proto.cl;
+				subScope.cl.allowThis = false;
+				subScopePtr = &subScope.cl.scope;
 
-			subScopePtr = &subScope.cl.scope;
-
-			break;
-		}
-
-		// class
-		case SCOPESEARCH_CLASS:
-		{
-			
-			break;
-		}
-
-		// function
-		case SCOPESEARCH_FUNCTION:
-		{
-			
-			break;
-		}
-		}
-
-		Token token = Parser_read(parser, &_labelPool);
-		if (token.type == TOKEN_TYPE_OPERATOR) {
-			if (token.operator == TOKEN_OPERATOR_MEMBER) {
-				token = Parser_read(parser, &_labelPool);
-				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
-					return NULL;
-				
-				label = token.label;
-				goto forNext;
+				goto nextProperty;
 			}
 			
-			if (token.operator == TOKEN_OPERATOR_MEMBER) {
-				goto forNext;
-				/// TODO: for [::] operator
+			// Generate var path
+			if (currentVarPath.length) {
+				generateVarExpr:
+				size_t size = sizeof(Variable) * currentVarPath.length;
+				Variable** list = malloc(size);
+				memcpy(list, currentVarPath.data, size);
+
+				Expression* expr = Array_push(Expression, &expressions);
+				expr->type = EXPRESSION_PROPERTY;
+				expr->data.property.length = currentVarPath.length;
+				expr->data.property.variableArr = list;
+
+				currentVarPath.length = 0;
+
+				// exit loop
+				if (syntaxResult == -3) {
+					Parser_saveToken(parser, &token);
+					goto exitWhile;
+				}
+
 			}
+
+			// class
+			if (searchArg.resultType == SCOPESEARCH_CLASS) {
+				raiseError("[TODO]: SCOPESEARCH_CLASS");
+			} else if (searchArg.resultType == SCOPESEARCH_FUNCTION) {
+				raiseError("[TODO]: SCOPESEARCH_FUNCTION");
+			}
+
+			nextProperty:
+			if (syntaxResult == -3) {
+				goto generateVarExpr;
+			}
+
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
+				return NULL;
+
+			// Next label and next scope
+			label = token.label;
+
+			break;
 		}
 
-		// Exit
-		*branchLengthPtr = branchLength;
-		Parser_saveToken(parser, &token);
-		branch->next = NULL;
-		return firstBranch;
+		// Function call
+		case 1:
+		{
+			raiseError("Handle fn call");
+			break;
+		}
+		}
 
-		forNext:
-		WordBranchNode* next = malloc(sizeof(WordBranchNode));
-		branch->next = next;
-		branch = next;
-		branchLength++;
+		label = token.label;
+		isFirstLabelState = 0;
 	}
 
+
+	// Fill 'next' members
+	exitWhile:
+	Expression* const output = malloc(sizeof(Expression) * expressions.length);
+	int subLength = expressions.length - 1;
+	for (int i = 0; i <= subLength; i++) {
+		Expression* val = Array_get(Expression, expressions, i);
+		Expression* res = &output[i];
+		switch (val->type) {
+		case EXPRESSION_PROPERTY:
+			res->type = EXPRESSION_PROPERTY;
+			res->data.property.variableArr = val->data.property.variableArr;
+			res->data.property.length = val->data.property.length;
+			res->data.property.next = i < subLength;
+			break;
+		/// TODO: handle fn call
+		}
+		
+	}
+
+	/// TODO: generate expressions 
+	Array_free(expressions);
+	Array_free(currentVarPath);
+
+	return output;
 }
 
 
@@ -1282,69 +1223,82 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 
 
 void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token token) {
-	int pathLength;
-	WordBranchNode* branchNode = Syntax_readPath(token.label, parser, &scope->scope, &pathLength);
+	Expression* expression = Syntax_readPath(token.label, parser, &scope->scope);
+	int expressionType = expression->type;
 
-	WordBranch* const branches = malloc(pathLength * sizeof(WordBranch));
-	Variable** const variablePath = malloc(pathLength * sizeof(Variable*));
 
 	// fill branches
-	bool isVariableOnly = true;
+	switch (expressionType) {
+	case EXPRESSION_PROPERTY:
 	{
-		Variable** v = variablePath;
-		WordBranch* branch = branches;
-		while (branchNode) {
-			int type = branchNode->branch.type;
-			*branch = branchNode->branch;
-			if (type == WORDBRANCH_VARIABLE) {
-				if (isVariableOnly) {
-					*v = branch->v;
-					v++;
-				}
-			} else {
-				isVariableOnly = false;
-			}
-			
-			WordBranchNode* n = branchNode->next;
-			free(branchNode);
-			branchNode = n;
-			branch++;
+		if (expression->data.property.next) {
+			raiseError("[TODO]: next==true not handled");
+			break;
 		}
-	}
 
-
-	if (isVariableOnly) {
-		// Assign operand
 		token = Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_ASSIGN, 0) != 0)
 			return;
 		
 		// Read expression
 		Expression* expr = Syntax_expression(parser, &scope->scope, true);
+		Expression* const exprSource = expr;
+		int exprSourceType = expr->type;
 
-		switch (expr->type) {
-		case EXPRESSION_PROPERTY:
+		switch (exprSourceType) {
+		case EXPRESSION_PATH:
 		{
-			
-			int valuePathLength = 0;
-			Expression* source = expr;
-			while (source) {
-				valuePathLength++;
-				source = source->data.property.source;
+			expr = expr->data.target;
+			switch (expr->type) {
+			case EXPRESSION_PROPERTY:
+			{
+				/// TODO: handle this case
+				if (expr->data.property.next) {
+					raiseError("[TODO]: expr such that next==true not handled");
+					return;
+				}
+				
+
+				TypeNode* operand = TypeNode_get(
+					&scope->rootNode,
+					expr->data.property.variableArr,
+					expr->data.property.length
+				);
+				TypeNode_set(
+					&scope->rootNode,
+					expression->data.property.variableArr,
+					operand,
+					expression->data.property.length
+				);
+				break;
 			}
-			
-			source = expr;
-			
-			Variable** const valueVarPath = malloc(valuePathLength * sizeof(Variable*));
-			typedef Variable* var_ptr_t;
-			Array_for(var_ptr_t, valueVarPath, valuePathLength, vPtr) {
-				*vPtr = source->data.property.variable;
-				source = source->data.property.source;
 			}
 
-			TypeNode* operand = TypeNode_get(&scope->rootNode, valueVarPath, valuePathLength);
-			TypeNode_set(&scope->rootNode, variablePath, operand, pathLength);
-			free(valueVarPath);
+			break;
+		}
+
+		case EXPRESSION_I32:
+		{
+			/// TODO: handle casts
+			Variable** variableArr = expression->data.property.variableArr;
+			int length = expression->data.property.length;
+			TypeNode* valueNode = TypeNode_tryReach(
+				&scope->rootNode,
+				variableArr,
+				length
+			);
+
+			if (valueNode) {
+				valueNode->value.i32 = expr->data.i32;
+				valueNode->length = TYPENODE_LENGTH_I32;
+				break;
+			}
+			
+			valueNode = malloc(sizeof(TypeNode));
+			valueNode->length = TYPENODE_LENGTH_I32;
+			valueNode->usage = 0;
+			TypeNode_set(&scope->rootNode, variableArr, valueNode, length);
+			
 			break;
 		}
 
@@ -1353,10 +1307,9 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 			break;
 		}
 
-
 		// Free expression
-		Expression_free(expr->type, expr);
-		free(expr);
+		Expression_free(exprSourceType, exprSource);
+		free(exprSource);
 
 
 		// End operand
@@ -1365,13 +1318,17 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 			return;
 
 
-	} else {
-		raiseError("[TODO]: other than isVariableOnly");
+		break;
+	}
+
+	default:
+		raiseError("[Syntax] invalid expression type in free label");
+		break;
 	}
 
 
-	free(branches);
-	free(variablePath);
+	Expression_free(expressionType, expression);
+	free(expression);
 }
 
 

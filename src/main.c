@@ -25,7 +25,7 @@
 #include "Variable.h"
 
 int main() {
-	#define add(n) Variable* n = malloc(sizeof(Variable)); n->name = #n; n->proto.cl = &_primitives.class_i32; n->proto.isPrimitive = true; TypeNode* tn_ ##n = ScopeFunction_pushVariable(&scope, n);
+	#define add(n) Variable* n = malloc(sizeof(Variable)); n->name = #n; n->proto.cl = &_primitives.class_i32; n->proto.isPrimitive = true; TypeNode* tn_ ##n = ScopeFunction_pushVariable(&scope, n, NULL);
 	#define decl(n) Variable real_ ##n = {.name = #n}; Variable* n = &real_ ##n; n->proto.cl = &_primitives.class_i32; n->proto.isPrimitive = true;
 
 
@@ -77,27 +77,8 @@ int main() {
 	ScopeFunction_create(&scope);
 
 
-	add(r1);
-	add(r2);
-	add(r3);
-
-	
-	add(num1);
-	add(num2);
-	
-	
 	
 	add(a);
-
-	// a.left = r2;
-	path = MAKE_PATH(r2);
-	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
-	path = MAKE_PATH(a, left);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
-
-	// print
-	path = MAKE_PATH(a, left);
-	printf("$A= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
 
 	// b = a;
 	add(b);
@@ -106,49 +87,18 @@ int main() {
 	path = MAKE_PATH(b);
 	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 
-	// a.left = r2
-	path = MAKE_PATH(r2);
-	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
-	path = MAKE_PATH(a, left);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
-
-	// print (should be equal)
-	path = MAKE_PATH(a, left);
-	printf("$B= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
-	path = MAKE_PATH(b, left);
-	printf("$C= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
-	path = MAKE_PATH(r2);
-	printf("$D= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
-
-
-	// b = a;
-	path = MAKE_PATH(a);
-	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
-	path = MAKE_PATH(b);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
-	
-	// print
-	path = MAKE_PATH(b, left);
-	printf("$E= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
-
-	// a = b;
-	path = MAKE_PATH(b);
-	bff = TypeNode_get(&scope.rootNode, path.items, path.length);
-	path = MAKE_PATH(a);
-	TypeNode_set(&scope.rootNode, path.items, bff, path.length);
-	
-	// print
-	path = MAKE_PATH(b, left);
-	printf("$F= %p\n", TypeNode_get(&scope.rootNode, path.items, path.length));
-
-
+	// // a.left = r2
+	// printf("TRY\n");
+	// path = MAKE_PATH(r2);
+	// bff = TypeNode_get(&scope.rootNode, path.items, path.length);
+	// path = MAKE_PATH(a, left);
+	// TypeNode_set(&scope.rootNode, path.items, bff, path.length);
 
 
 
 	printf("===DONE===\n");
 
 	ScopeFunction_delete(&scope);
-
 	LabelPool_delete(&_labelPool);
 
 	#undef add

@@ -38,8 +38,9 @@ struct Expression {
 		Expression* target;
 
 		struct {
-			Variable* variable;
-			Expression* source;
+			Variable** variableArr;
+			int length;
+			bool next;
 		} property;
 	} data;
 };
@@ -52,6 +53,7 @@ enum {
 	EXPRESSION_GROUP,
 
 	EXPRESSION_PROPERTY,
+	EXPRESSION_PATH,
 
 	EXPRESSION_U8,
 	EXPRESSION_I8,

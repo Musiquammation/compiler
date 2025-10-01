@@ -583,7 +583,7 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 		raiseError("[Parser] Token not found");
 		
 
-	return -3;
+	return -3; // not found
 }
 
 

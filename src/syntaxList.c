@@ -124,6 +124,10 @@ Token SYNTAXLIST_PROPERTY[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_MEMBER},
 };
 
+Token SYNTAXLIST_PATH[] = {
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_MEMBER},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
+};
 
 
 
@@ -219,6 +223,7 @@ void syntaxList_init(void) {
 	init(SYNTAXLIST_FUNCTION_VARDECL);
 	init(SYNTAXLIST_EXPRESSION);
 	init(SYNTAXLIST_PROPERTY);
+	init(SYNTAXLIST_PATH);
 }
 
 
