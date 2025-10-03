@@ -48,7 +48,7 @@ void Syntax_thFile(ScopeFile* scope) {
 	scope->state_th = DEFINITIONSTATE_READING;
 
 	while (true) {
-		Token token = Parser_read(&parser, &_labelPool);
+		Token token = Parser_readAnnotated(&parser, &_labelPool);
 		
 		switch (TokenCompare(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
 		// function
@@ -152,13 +152,20 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 
 Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoot) {
+	Token token = Parser_read(parser, &_labelPool);
+	if (
+		isExpressionRoot &&
+		TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, SYNTAXFLAG_UNFOUND) == 0
+	) {
+		return NULL;
+	}	
+	
+	
 	Array lineArr; // type: Expression
 	Array_create(&lineArr, sizeof(Expression));
 
 	// Collect expressions
 	while (true) {
-		Token token = Parser_read(parser, &_labelPool);
-
 		const int syntaxIndex = TokenCompare(SYNTAXLIST_EXPRESSION, 0);
 		switch (syntaxIndex) {
 
@@ -266,8 +273,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 		case 4:
 		{
 			if (isExpressionRoot) {
-				raiseError("[Syntax] Closing parenthesis forbidden here");
-				return NULL;
+				Parser_saveToken(parser, &token);
 			}
 
 			goto processExpressions;
@@ -351,6 +357,8 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 			raiseError("[TODO] This expression is not handled");
 			break;
 		}
+	
+		token = Parser_read(parser, &_labelPool);
 	}
 
 	processExpressions:
@@ -482,7 +490,7 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 
 
 
-Class* Syntax_type(Parser* parser, Scope* scope, Prototype* proto, bool finishByComma) {
+Class* Syntax_proto(Parser* parser, Scope* scope, Prototype* proto, bool finishByComma) {
 	Token token = Parser_read(parser, &_labelPool);
 
 	// Get type name
@@ -533,9 +541,10 @@ Class* Syntax_type(Parser* parser, Scope* scope, Prototype* proto, bool finishBy
 
 			goto generate;
 
-		// Finish by end operator (or equal)
+		// Finish by end operator (or equal / lbrace)
 		case 4:
 		case 5:
+		case 6:
 			if (finishByComma)
 				raiseError("[SYNTAX] type should finish by a comma");
 
@@ -553,6 +562,7 @@ Class* Syntax_type(Parser* parser, Scope* scope, Prototype* proto, bool finishBy
 	Class* cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
 	if (!cl) {
 		raiseError("[UNKOWN] Class not found");
+		return NULL;
 	}
 
 	proto->cl = cl;
@@ -570,18 +580,38 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
 	bool definitionToRead;
+	Class* meta = NULL;
 	
 	// Handle annotations
 	/// TODO: complete annotations 
 	Array_loop(Annotation, parser->annotations, annotation) {
-		label_t annotName = annotation->name;
+		int annotType = annotation->type;
 
-		raiseError("[Syntax] Illegal annotation");
-		return;
+		switch (annotType) {
+		case ANNOTATION_META:
+		{
+			if (meta) {
+				raiseError("[Syntax] Meta already defined for this class declaration");
+				return;
+			}
+	
+			meta = Scope_search(scope, annotation->meta, NULL, SCOPESEARCH_CLASS);
+			if (meta == NULL) {
+				raiseError("[Unknown] @meta class not found");
+				return;
+			}
+			break;
+		}
 
-
-		finishAnnotation:
+		default:
+		{
+			raiseError("[Syntax] Illegal annotation");
+			return;
+		}
+		}
 	}
+
+	parser->annotations.length = 0; // clear annotations
 
 
 	// Read content
@@ -665,11 +695,13 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 			return;
 		}
 
+		cl->meta = meta;
+
 	} else {
-		/// TODO: handle if class is primitive or not 
 		cl = malloc(sizeof(Class));
 		Class_create(cl);
 		cl->name = name;
+		cl->meta = meta;
 		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
 		cl->isPrimitive = 0;
 		Scope_addClass(scope, scope->type, cl);
@@ -679,20 +711,30 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	// Read definition
 	if (definitionToRead) {
 		Syntax_classDefinition(scope, parser, cl);
+	} else if (meta) {
+		raiseError("[Syntax] @meta should be given in defintion");
+		return;
 	}
-
-
 }
+
+
 
 
 void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
 	cl->definitionState = DEFINITIONSTATE_READING;
 
-	ScopeClass classScope = {
-		.scope = {.parent = parentScope, .type = SCOPE_CLASS},
+	ScopeClass insideScope = {
+		.scope = {.parent = NULL, .type = SCOPE_CLASS},
 		.cl = cl,
 		.allowThis = true
 	};
+
+	ScopeClass outsideScope = {
+		.scope = {.parent = parentScope, .type = SCOPE_CLASS},
+		.cl = cl,
+		.allowThis = false
+	};
+
 
 	int offset = 0;
 	int maxMinimalSize = 0;
@@ -729,7 +771,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
 
 				variable->name = name;
 				
-				Class* tcl = Syntax_type(parser, &classScope.scope, &variable->proto, false);
+				Class* tcl = Syntax_proto(parser, &insideScope.scope, &variable->proto, false);
 	
 				// Finish by end operation
 				token = Parser_read(parser, &_labelPool);
@@ -773,7 +815,27 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
 
 				break;
 			}
+			
+			// function
+			case 1:
+			{
+				Syntax_FunctionDeclaration declData = {
+					.defaultName = name
+				};
+
+				Parser_saveToken(parser, &token);
+
+				Syntax_functionDeclaration(
+					&outsideScope.scope,
+					parser,
+					SYNTAXDATAFLAG_FNDCL_FORBID_NAME,
+					&declData
+				);
+
+				break;
 			}
+			}
+
 			break;
 		}
 
@@ -838,22 +900,22 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 	// Handle annotations
 	/// TODO: complete annotations 
 	Array_loop(Annotation, parser->annotations, annotation) {
-		label_t annotName = annotation->name;
-
-		// Function is described as name function
-		if (annotName == _commonLabels._main) {
-			/// TODO: check main declaration/definition validity
+		switch (annotation->type) {
+		case ANNOTATION_MAIN:
+		{
 			name = _commonLabels._main;
-			goto finishAnnotation;
+			break;
+		}	
+		
+		default:
+		{
+			raiseError("[Syntax] Illegal annotation\n");
+			return;
+		}	
 		}
-
-
-		raiseError("[Syntax] Illegal annotation\n");
-		return;
-
-
-		finishAnnotation:
 	}
+
+	parser->annotations.length = 0; // clear annotations
 
 
 	// Read content
@@ -880,6 +942,10 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 		
 		// Name
 		case 1:
+			if (flags & SYNTAXDATAFLAG_FNDCL_FORBID_NAME) {
+				raiseError("[Syntax] Name already given");
+				break;
+			}
 			name = token.label;
 			break;
 		
@@ -890,7 +956,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 
 		// Type
 		case 3:
-			Syntax_type(parser, scope, &returnType, false);
+			Syntax_proto(parser, scope, &returnType, false);
 			break;
 		
 		// Definition
@@ -979,6 +1045,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 		fn->name = name;
 		fn->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
 		fn->arguments = arguments;
+		fn->returnType = returnType;
 
 		Scope_addFunction(scope, scope->type, fn);
 	}
@@ -1016,7 +1083,7 @@ Array Syntax_functionArguments(Scope* scope, Parser* parser) {
 			variable->name = name;
 			variable->offset = -1;
 
-			Syntax_type(parser, scope, &variable->proto, true);
+			Syntax_proto(parser, scope, &variable->proto, true);
 			
 			break;
 		}
@@ -1042,15 +1109,16 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 	union {
 		ScopeClass cl;
+
 	} subScope;
 
 	char isFirstLabelState = 1;
 	Scope* subScopePtr = scope;
-	Token token;
+
 
 	while (true) {
 		// Get type
-		token = Parser_read(parser, &_labelPool);
+		Token token = Parser_read(parser, &_labelPool);
 		int syntaxResult = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 		switch (syntaxResult) {
 		// Object (or not found)
@@ -1117,19 +1185,102 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 			// Next label and next scope
 			label = token.label;
-
 			break;
 		}
 
 		// Function call
 		case 1:
 		{
-			raiseError("Handle fn call");
+			// Search function
+			/// TODO: search unsing args (for multiple fn calls)
+			ScopeSearchArgs searchArg;
+			Function* fn = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_FUNCTION);
+
+			if (!fn) {
+				raiseError("[Unknown] Function not defined");
+				return NULL;
+			}
+
+			/// TODO: create a subscope to handle words (of enums)
+			Array args; // type: Expression*
+			Array_create(&args, sizeof(Expression*));
+			while (true) {
+				Expression* expr = Syntax_expression(parser, scope, true);
+				if (expr) {
+					*Array_push(Expression*, &args) = expr;
+				}
+
+				token = Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_EXPRESSION_SEPARATOR, 0) == 1) {
+					break;
+				}
+			}
+
+			Expression_FnCall* call = malloc(sizeof(Expression_FnCall));
+			call->fn = fn;
+			if (args.length) {
+				size_t size = sizeof(Expression*) * args.length;
+				Expression** ae = malloc(size);
+				memcpy(ae, args.data, size);
+				call->argsLength = args.length;
+				call->args = ae;
+				free(args.data);
+				
+			} else {
+				call->argsLength = 0;
+			}
+
+			Expression* expr = Array_push(Expression, &expressions);
+			expr->type = EXPRESSION_FNCALL;
+			expr->data.fncall.object = call;
+
+
+			// Handle next call
+			Token token = Parser_read(parser, &_labelPool);
+			switch (TokenCompare(SYNTAXLIST_CONTINUE_FNCALL, SYNTAXFLAG_UNFOUND)) {
+			// member
+			case 0:
+			{
+				token = Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
+					return NULL;
+
+				Class* retCl = fn->returnType.cl;
+				if (retCl == NULL) {
+					raiseError("[Type] Cannot get result of a void function");
+					return NULL;
+				}
+
+				label = token.label;
+				subScope.cl.scope.parent = NULL;
+				subScope.cl.scope.type = SCOPE_CLASS;
+				subScope.cl.cl = retCl;
+				subScope.cl.allowThis = false;
+				subScopePtr = &subScope.cl.scope;
+				break;
+			}
+
+			// next call
+			case 1:
+			{
+				raiseError("[TODO] Fn call after a fn call is not handled");
+				return NULL;
+				break;
+			}
+
+			// not found
+			default:
+			{
+				Parser_saveToken(parser, &token);
+				goto exitWhile;
+			}
+			}
+
+
 			break;
 		}
 		}
 
-		label = token.label;
 		isFirstLabelState = 0;
 	}
 
@@ -1148,7 +1299,12 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			res->data.property.length = val->data.property.length;
 			res->data.property.next = i < subLength;
 			break;
-		/// TODO: handle fn call
+
+		case EXPRESSION_FNCALL:
+			res->type = EXPRESSION_FNCALL;
+			res->data.fncall.object = val->data.fncall.object;
+			res->data.fncall.next = i < subLength;
+			break;
 		}
 		
 	}
@@ -1191,7 +1347,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 		switch (syntaxIndex) {
 		// Type
 		case 0:
-			Syntax_type(parser, &scope->scope, &variable->proto, false);
+			Syntax_proto(parser, &scope->scope, &variable->proto, false);
 			break;
 
 		// Value
@@ -1403,7 +1559,6 @@ void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn) {
 	fn->definitionState = DEFINITIONSTATE_READING;
 
-
 	ScopeFunction fnScope = {
 		{scope, SCOPE_FUNCTION},
 		fn
@@ -1426,7 +1581,26 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 		return;
 
-	annotation->name = token.label;
+	if (token.label == _commonLabels._meta) {
+		annotation->type = ANNOTATION_META;
+
+		Token token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
+			return;
+		
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
+			return;
+
+		annotation->meta = token.label;
+
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
+			return;
+
+
+
+	}
 }
 
 

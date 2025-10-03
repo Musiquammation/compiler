@@ -84,6 +84,7 @@ Token SYNTAXLIST_TYPE[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RPAREN},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_END},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_ASSIGN},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LBRACE},
 };
 
 Token SYNTAXLIST_ARGS[] = {
@@ -102,6 +103,26 @@ Token SYNTAXLIST_SINGLETON_END[] = {
 Token SYNTAXLIST_SINGLETON_ASSIGN[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_ASSIGN},
 };
+
+Token SYNTAXLIST_SINGLETON_LPAREN[] = {
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
+};
+
+Token SYNTAXLIST_SINGLETON_RPAREN[] = {
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RPAREN},
+};
+
+Token SYNTAXLIST_EXPRESSION_SEPARATOR[] = {
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_COMMA},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RPAREN},
+};
+
+Token SYNTAXLIST_CONTINUE_FNCALL[] = {
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_MEMBER},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
+};
+
+
 
 Token SYNTAXLIST_FUNCTION[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_let},
@@ -202,6 +223,7 @@ static void initSyntaxList(Token tokens[], int length) {
 	}
 }
 
+
 #define init(list) initSyntaxList(list, sizeof(list)/sizeof(Token))
 void syntaxList_init(void) {
 	init(SYNTAXLIST_FILE);
@@ -219,11 +241,15 @@ void syntaxList_init(void) {
 	init(SYNTAXLIST_SINGLETON_COLON);
 	init(SYNTAXLIST_SINGLETON_END);
 	init(SYNTAXLIST_SINGLETON_ASSIGN);
+	init(SYNTAXLIST_SINGLETON_LPAREN);
+	init(SYNTAXLIST_SINGLETON_RPAREN);
 	init(SYNTAXLIST_FUNCTION);
 	init(SYNTAXLIST_FUNCTION_VARDECL);
 	init(SYNTAXLIST_EXPRESSION);
 	init(SYNTAXLIST_PROPERTY);
 	init(SYNTAXLIST_PATH);
+	init(SYNTAXLIST_EXPRESSION_SEPARATOR);
+	init(SYNTAXLIST_CONTINUE_FNCALL);
 }
 
 

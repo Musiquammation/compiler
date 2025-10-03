@@ -4,6 +4,7 @@
 #include "declarations.h"
 #include "TypeNode.h"
 #include "label_t.h"
+#include "Prototype.h"
 
 #include <tools/Array.h>
 

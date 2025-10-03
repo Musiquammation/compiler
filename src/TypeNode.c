@@ -234,7 +234,7 @@ TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value) {
 	} else {
 		node->length = 0;
 		if (value) {
-
+			/// TODO: handle this case
 		} else {
 			Type* type = Prototype_generateType(&v->proto);
 			node->value.type = type;

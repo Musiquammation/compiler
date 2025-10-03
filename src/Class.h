@@ -8,8 +8,15 @@
 
 #include <tools/Array.h>
 
+enum {
+	CLASSFLAGS_META = 1
+};
+
 struct Class {
 	Array variables; // type: Variable*
+	Array functions; // type: Function*
+
+	Class* meta;
 	definitionState_t definitionState;
 	label_t name;
 	char isPrimitive;

@@ -38,7 +38,11 @@ typedef struct {
 } Token;
 
 struct Annotation {
-	label_t name;
+	int type;
+
+	union {
+		label_t meta;
+	};
 };
 
 
@@ -177,6 +181,11 @@ enum {
 	TOKEN_OPERATORINDEX_3 = 0,
 	TOKEN_OPERATORINDEX_2 = 2,
 	TOKEN_OPERATORINDEX_1 = 25,
+};
+
+enum {
+	ANNOTATION_META,
+	ANNOTATION_MAIN,
 };
 
 

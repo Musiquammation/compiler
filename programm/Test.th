@@ -1,4 +1,0 @@
-class {
-    num: int;
-    dem: int;
-}

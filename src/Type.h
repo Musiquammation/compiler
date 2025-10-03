@@ -7,6 +7,7 @@
 struct Type {
 	Class* cl;
 	char isPrimitive;
+	void* data;
 };
 
 Type* Type_newCopy(Type* src);

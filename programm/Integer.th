@@ -1,0 +1,14 @@
+class Meta {
+	positive: int;
+	isValueKnown: bool;
+	isPositive(): bool;
+}
+
+@meta(Meta)
+class {
+	value: int;
+
+	add(factor: int): Integer;
+}
+
+

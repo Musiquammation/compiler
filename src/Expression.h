@@ -5,6 +5,12 @@
 #include "label_t.h"
 
 
+typedef struct  {
+	Expression** args;
+	Function* fn;
+	int argsLength;
+} Expression_FnCall;
+
 
 struct Expression {
 	int type;
@@ -38,6 +44,12 @@ struct Expression {
 		Expression* target;
 
 		struct {
+			Expression_FnCall* object;
+			/// TODO: add some fast access data (8 bytes)
+			bool next;
+		} fncall;
+
+		struct {
 			Variable** variableArr;
 			int length;
 			bool next;
@@ -47,12 +59,14 @@ struct Expression {
 
 
 
+
 enum {
 	EXPRESSION_NONE,
 	EXPRESSION_INVALID,
 	EXPRESSION_GROUP,
 
 	EXPRESSION_PROPERTY,
+	EXPRESSION_FNCALL,
 	EXPRESSION_PATH,
 
 	EXPRESSION_U8,

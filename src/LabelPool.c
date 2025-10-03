@@ -72,35 +72,40 @@ label_t LabelPool_search(const LabelPool* pool, const char* text) {
 
 
 void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
-	labels->_let      = LabelPool_push(pool, "let");
-	labels->_const    = LabelPool_push(pool, "const");
-	labels->_class    = LabelPool_push(pool, "class");
-	labels->_function = LabelPool_push(pool, "function");
-	labels->_if       = LabelPool_push(pool, "if");
-	labels->_else     = LabelPool_push(pool, "else");
-	labels->_for      = LabelPool_push(pool, "for");
-	labels->_while    = LabelPool_push(pool, "while");
-	labels->_switch   = LabelPool_push(pool, "switch");
+	#define def(n) labels->_ ##n = LabelPool_push(pool, #n);
 
-	labels->_module   = LabelPool_push(pool, "module");
-	labels->_main     = LabelPool_push(pool, "main");
+	def(let);
+	def(const);
+	def(class);
+	def(function);
+	def(if);
+	def(else);
+	def(for);
+	def(while);
+	def(switch);
 
-	labels->_i8       = LabelPool_push(pool, "i8");
-	labels->_u8       = LabelPool_push(pool, "u8");
-	labels->_i16      = LabelPool_push(pool, "i16");
-	labels->_u16      = LabelPool_push(pool, "u16");
-	labels->_i32      = LabelPool_push(pool, "i32");
-	labels->_u32      = LabelPool_push(pool, "u32");
-	labels->_i64      = LabelPool_push(pool, "i64");
-	labels->_u64      = LabelPool_push(pool, "u64");
-	labels->_f32      = LabelPool_push(pool, "f32");
-	labels->_f64      = LabelPool_push(pool, "f64");
+	def(module);
+	def(main);
+	def(meta);
 
-	labels->_char     = LabelPool_push(pool, "char");
-	labels->_bool     = LabelPool_push(pool, "bool");
-	labels->_short    = LabelPool_push(pool, "short");
-	labels->_int      = LabelPool_push(pool, "int");
-	labels->_long     = LabelPool_push(pool, "long");
-	labels->_float    = LabelPool_push(pool, "float");
-	labels->_double   = LabelPool_push(pool, "double");
+	def(i8);
+	def(u8);
+	def(i16);
+	def(u16);
+	def(i32);
+	def(u32);
+	def(i64);
+	def(u64);
+	def(f32);
+	def(f64);
+
+	def(char);
+	def(bool);
+	def(short);
+	def(int);
+	def(long);
+	def(float);
+	def(double);
+
+	#undef def
 }

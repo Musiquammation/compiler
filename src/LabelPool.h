@@ -28,6 +28,7 @@ struct CommonLabels {
 	
 	label_t _module;
 	label_t _main;
+	label_t _meta;
 	
 	label_t _i8;
 	label_t _u8;

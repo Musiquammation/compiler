@@ -1,0 +1,8 @@
+class Meta {
+
+}
+
+@meta(Meta)
+class {
+
+}

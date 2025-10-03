@@ -1,7 +1,5 @@
 @!module {
-	class Point;
-	class Pointer;
-	class Test;
-	function main(arg: int, arg2: int);
-
+	class Integer;
+	class Rational;
+	function main();
 }

@@ -264,19 +264,30 @@ void ScopeFile_create(ScopeFile* file) {
 void ScopeFile_free(ScopeFile* file) {
 	free(file->filepath);
 	
-	Array_loopPtr(Variable, file->variables, v)
-		Variable_delete(*v);
+	Array_loopPtr(Variable, file->variables, v) {
+		Variable* o = *v;
+		Variable_delete(o);
+		free(o);
+
+	}
 	
 	Array_free(file->variables);
 	
+	Array_loopPtr(Class, file->classes, c) {
+		Class* o = *c;
+		Class_delete(o);
+		free(o);
 
-	Array_loopPtr(Class, file->classes, c)
-		Class_delete(*c);
+	}
 	
 	Array_free(file->classes);
 	
-	Array_loopPtr(Function, file->functions, f)
-		Function_delete(*f);
+	Array_loopPtr(Function, file->functions, f) {
+		Function* o = *f;
+		Function_delete(o);
+		free(o);
+
+	}
 	
 	Array_free(file->functions);
 
@@ -326,11 +337,11 @@ void ScopeFile_addVariable(ScopeFile* file, Variable* v) {
 }
 
 void ScopeFile_addClass(ScopeFile* file, Class* cl) {
-	raiseError("[TODO]");
+	*Array_push(Class*, &file->classes) = cl;
 }
 
 void ScopeFile_addFunction(ScopeFile* file, Function* fn) {
-	raiseError("[TODO]");
+	*Array_push(Function*, &file->functions) = fn;
 }
 
 

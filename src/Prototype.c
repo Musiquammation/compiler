@@ -9,8 +9,22 @@ Type* Prototype_generateType(Prototype* proto) {
 		return primitives_getType(proto->cl);
 
 	Type* type = malloc(sizeof(Type));
-	type->cl = proto->cl;
+	Class* cl = proto->cl;
+	type->cl = cl;
 	type->isPrimitive = 0;
+
+	Class* meta = cl->meta;
+	if (meta) {
+		int size = meta->size;
+		if (size > 0) {
+			void* data = malloc(size);
+			type->data = data;
+		} else {
+			type->data = NULL;
+		}
+	} else {
+		type->data = NULL;
+	}
 	return type;
 }
 

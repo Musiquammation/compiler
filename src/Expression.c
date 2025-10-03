@@ -4,6 +4,7 @@
 #include "helper.h"
 
 #include <stddef.h>
+#include <tools/Array.h>
 
 void Expression_free(int type, Expression* e) {
 	restartFree:
@@ -16,6 +17,32 @@ void Expression_free(int type, Expression* e) {
 	{
 		free(e->data.property.variableArr);
 		if (e->data.property.next) {
+			e++;
+			type = e->type;
+			goto restartFree; // avoid recursion
+		}
+
+		break;
+	}
+
+	case EXPRESSION_FNCALL:
+	{
+		Expression_FnCall* call = e->data.fncall.object;
+		int argLength = call->argsLength;
+		if (argLength) {
+			typedef Expression* ptr_t;
+			Array_for(ptr_t, call->args, argLength, ptr) {
+				Expression* i = *ptr;
+				Expression_free(i->type, i);
+				free(i);
+			}
+
+			free(call->args);
+		}
+
+		free(call);
+
+		if (e->data.fncall.next) {
 			e++;
 			type = e->type;
 			goto restartFree; // avoid recursion
