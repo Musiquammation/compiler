@@ -5,17 +5,19 @@
 #include "TypeNode.h"
 #include "label_t.h"
 #include "Prototype.h"
+#include "definitionState_t.h"
+#include "Scope.h"
 
+#include <stdio.h>
 #include <tools/Array.h>
 
 struct Function {
     label_t name;
     definitionState_t definitionState;
 
-    Array arguments;
+    Array arguments; // type: Variable*
     Prototype returnType;
 };
-
 
 /// TODO: init defnodes
 struct ScopeFunction {
@@ -23,14 +25,20 @@ struct ScopeFunction {
 	Function* fn;
     TypeNode rootNode;
 
-    Array variables; // type: Variable*
-    
+    Array variables; // type: Variable*  
+};
+
+struct FunctionAssembly {
+    icounter_t* ic_ptr;
+    FILE* output;
+
+    icounter_t ic;
 };
 
 void Function_create(Function* fn);
 void Function_delete(Function* fn);
 
-
+void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 
 
 

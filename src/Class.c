@@ -4,6 +4,8 @@
 #include "Function.h"
 #include "Variable.h"
 
+#include "helper.h"
+
 void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
 	Array_create(&cl->functions, sizeof(Function*));

@@ -3,6 +3,8 @@
 #include "LabelPool.h"
 #include "globalLabelPool.h"
 
+#include "Syntax.h"
+
 #include "syntaxList.h"
 #include "helper.h"
 
@@ -188,7 +190,7 @@ static operator_t getOperator(const char* str, int length) {
 
 	if (length == 1) {
 		l1:
-		for (operator_t i = TOKEN_OPERATORINDEX_1; i < sizeof(PARSER_OPERATORS)/sizeof(PARSER_OPERATORS[0]); ++i) {
+		for (operator_t i = TOKEN_OPERATORINDEX_1; i < (operator_t)(sizeof(PARSER_OPERATORS)/sizeof(PARSER_OPERATORS[0])); ++i) {
 			if (str[0] == PARSER_OPERATORS[i][0]) {
 				return i;
 			}
@@ -457,7 +459,7 @@ void Token_println(const Token* token) {
 
 		// Operators
 		case TOKEN_TYPE_OPERATOR:
-			if(token->operator >= 0 && token->operator < (sizeof(PARSER_OPERATORS)/TOKEN_OPERATORMAXLENGTH)) {
+			if(token->operator >= 0 && token->operator < (operator_t)(sizeof(PARSER_OPERATORS)/TOKEN_OPERATORMAXLENGTH)) {
 				printf("operator");
 				printf("%.*s\n", TOKEN_OPERATORMAXLENGTH, PARSER_OPERATORS[token->operator]);
 			} else {

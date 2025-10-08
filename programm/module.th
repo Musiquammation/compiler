@@ -1,5 +1,5 @@
 @!module {
 	class Integer;
 	class Rational;
-	function main();
+	@main function;
 }

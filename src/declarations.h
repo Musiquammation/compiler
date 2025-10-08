@@ -3,6 +3,9 @@
 
 #include <tools/tools.h>
 
+
+typedef unsigned long long icounter_t;
+
 structdef(Scope);
 structdef(ScopeFile);
 structdef(ScopeFolder);
@@ -12,6 +15,9 @@ structdef(Module);
 structdef(Variable);
 structdef(Class);
 structdef(Function);
+
+structdef(FunctionAssembly);
+structdef(Trace);
 
 structdef(ScopeClass);
 structdef(ScopeFunction);

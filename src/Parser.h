@@ -5,6 +5,7 @@
 #include "declarations.h"
 
 #include <stdio.h>
+#include <tools/Array.h>
 
 typedef char token_t;
 typedef char operator_t;

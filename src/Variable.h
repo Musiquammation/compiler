@@ -10,11 +10,12 @@
 struct Variable {
 	label_t name;
 	Prototype proto;
-	int offset;
+	union {int offset; int id;};
 };
 
 void Variable_create(Variable* variable);
 void Variable_delete(Variable* variable);
 
+int Variable_getOffsetPath(Variable** path, int length);
 
 #endif

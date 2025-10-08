@@ -114,11 +114,17 @@ int main() {
 // Test
 int main(int argc, char *argv[]) {
 	if (argc < 2) {
-		printf("Fatal error: missing module path\n");
+		printf("Fatal error: missing module path and output folder\n");
+		return 1;
+	}
+
+	if (argc < 3) {
+		printf("Fatal error: missing output folder\n");
 		return 1;
 	}
 
 	Module module;
+	module.binFolder = argv[2];
 
 	LabelPool_create(&_labelPool);
 	
@@ -146,31 +152,3 @@ int main(int argc, char *argv[]) {
 #endif
 
 
-
-// Include C files
-#include "Scope.c"
-
-#include "LabelPool.c"
-#include "Module.c"
-#include "helper.c"
-
-
-#include "Expression.c"
-
-#include "Function.c"
-#include "Variable.c"
-#include "Class.c"
-
-#include "Parser.c"
-
-#include "Syntax.c"
-#include "globalLabelPool.c"
-
-#include "TypeNode.c"
-
-#include "Prototype.c"
-#include "Type.c"
-
-#include "primitives.c"
-
-#include "Expression_simplify.c"

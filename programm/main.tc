@@ -1,11 +1,26 @@
-function sum(a: int, b: int): Integer {
-	
+function sum(u: int, v: int): int {
+
+}
+
+function mul(u: int, v: int): int {
+
 }
 
 function {
-	let u: Integer;
-	let s: Integer;
-	s = u.add(u.value);
+	let s: int;
+	let a: int;
+	let b: int;
+
+	a = 10;
+	b = 20;
+
+	s = sum(a, b * 643);
+
+	let f: int;
+	f = mul(b + s, a) - 2 * a;
+
+
+
 }
 
 

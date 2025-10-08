@@ -7,7 +7,9 @@
 #include "definitionState_t.h"
 
 #include "label_t.h"
+
 #include <tools/Array.h>
+#include <stdio.h>
 
 
 struct Scope {
@@ -28,6 +30,11 @@ struct ScopeFile {
 	definitionState_t state_tc;
 	definitionState_t state_th;
 
+	char generationState;
+	char* id;
+	icounter_t icounter;
+	FILE* output;
+
 	Array variables; // type: Variable*
 	Array classes; // type: Class*
 	Array functions; // type: Function*
@@ -42,6 +49,7 @@ struct ScopeFolder {
 
 
 enum {
+	SCOPE_NONE,
 	SCOPE_MODULE,
 	SCOPE_FILE,
 	SCOPE_FOLDER,
@@ -50,9 +58,16 @@ enum {
 };
 
 
+enum {
+	SCOPEFILE_GENERATION_NONE,
+	SCOPEFILE_GENERATION_ID,
+	SCOPEFILE_GENERATION_ASM,
+};
+
 struct ScopeSearchArgs {
 	int resultType;
 };
+
 
 enum {
 	SCOPESEARCH_VARIABLE = 1,
@@ -65,8 +80,9 @@ enum {
 
 void* Scope_search(Scope* scope, label_t name, ScopeSearchArgs* args, int searchFlags);
 Module* Scope_reachModule(Scope* scope);
+ScopeFile* Scope_reachFile(Scope* scope);
 
-void Scope_defineOnFly(Scope* scope, label_t name);
+bool Scope_defineOnFly(Scope* scope, label_t name);
 
 
 Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
@@ -81,6 +97,10 @@ void Scope_addFunction(Scope* scope, int scopeType, Function* fn);
 
 void ScopeFile_create(ScopeFile* file);
 void ScopeFile_free(ScopeFile* file);
+
+char* ScopeFile_generateId(ScopeFile* file);
+char* ScopeFile_requireId(ScopeFile* file, char generationState);
+FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState);
 
 Variable* ScopeFile_searchVariable(ScopeFile* module, label_t name, ScopeSearchArgs* args);
 Class* ScopeFile_searchClass(ScopeFile* module, label_t name, ScopeSearchArgs* args);

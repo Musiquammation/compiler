@@ -13,8 +13,9 @@
 #include "Class.h"
 #include "Variable.h"
 #include "Function.h"
+#include "Trace.h"
 
-
+#include "primitives.h"
 #include "Type.h"
 #include "TypeNode.h"
 #include "Prototype.h"
@@ -466,6 +467,7 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 				break;
 			}
 
+			// class
 			case 2:
 			{
 				const Syntax_ClassDeclaration defaultData = {
@@ -559,10 +561,18 @@ Class* Syntax_proto(Parser* parser, Scope* scope, Prototype* proto, bool finishB
 
 	// Generate type
 	generate:
+	/// TODO: check this call
 	Class* cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
 	if (!cl) {
-		raiseError("[UNKOWN] Class not found");
-		return NULL;
+		if (!Scope_defineOnFly(scope, name))
+			goto classNotFound;
+		
+		cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
+		if (!cl) {
+			classNotFound:
+			raiseError("[UNKOWN] Class not found");
+			return NULL;
+		}
 	}
 
 	proto->cl = cl;
@@ -771,7 +781,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl) {
 
 				variable->name = name;
 				
-				Class* tcl = Syntax_proto(parser, &insideScope.scope, &variable->proto, false);
+				Class* tcl = Syntax_proto(parser, &outsideScope.scope, &variable->proto, false);
 	
 				// Finish by end operation
 				token = Parser_read(parser, &_labelPool);
@@ -894,7 +904,8 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
 	bool definitionToRead;
-	Array arguments = {.length = 0xffff}; // no args read
+	bool returnTypeAlreadyRead = false;
+	Array arguments = {.length = 0xffff}; // no args read ; type: Variable*
 	Prototype returnType = {.cl = NULL};
 	
 	// Handle annotations
@@ -903,10 +914,31 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 		switch (annotation->type) {
 		case ANNOTATION_MAIN:
 		{
+			// Set name
 			name = _commonLabels._main;
+
+			// Return type
+			returnType.cl = &_primitives.class_i32;
+			returnType.isPrimitive = true;
+			returnTypeAlreadyRead = true;
+
+			// Arguments
+			Variable** argList = malloc(1 * sizeof(Variable*));
+			Variable* argc = malloc(sizeof(Variable));
+			Variable_create(argc);
+			argc->id  -1;
+			argc->proto.cl = &_primitives.class_i32;
+			argc->proto.isPrimitive = true;
+			
+			/// TODO: edit this prototype (add char** argv)
+			argList[0] = argc;
+			arguments.data = argList;
+			arguments.size = sizeof(Variable*);
+			arguments.reserved = 1;
+			arguments.length = 1;
+
 			break;
-		}	
-		
+		}		
 		default:
 		{
 			raiseError("[Syntax] Illegal annotation\n");
@@ -951,11 +983,20 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 		
 		// Arguments
 		case 2:
+			if (arguments.length != 0xffff) {
+				raiseError("[Architecture] argument list already defined");
+				break;
+			}
 			arguments = Syntax_functionArguments(scope, parser);
 			break;
 
 		// Type
 		case 3:
+			if (returnTypeAlreadyRead) {
+				raiseError("[Architecture] return type defined");
+				break;
+			}
+			returnTypeAlreadyRead = true;
 			Syntax_proto(parser, scope, &returnType, false);
 			break;
 		
@@ -1081,7 +1122,7 @@ Array Syntax_functionArguments(Scope* scope, Parser* parser) {
 			*Array_push(Variable*, &arguments) = variable;
 
 			variable->name = name;
-			variable->offset = -1;
+			variable->id = -1;
 
 			Syntax_proto(parser, scope, &variable->proto, true);
 			
@@ -1317,14 +1358,14 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 }
 
 
-void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
+void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	Token token = Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 		return;
 
 	Variable* variable = malloc(sizeof(Variable));
 	variable->name = token.label;
-	variable->offset = -1;
+	variable->id = -1;
 	Variable_create(variable);
 	
 	int syntaxIndex = -1;
@@ -1347,8 +1388,11 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 		switch (syntaxIndex) {
 		// Type
 		case 0:
-			Syntax_proto(parser, &scope->scope, &variable->proto, false);
+		{
+			Class* cl = Syntax_proto(parser, &scope->scope, &variable->proto, false);
+			variable->id = (int)Trace_ins_create(trace, variable, cl->size);
 			break;
+		}
 
 		// Value
 		case 1:
@@ -1378,10 +1422,17 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Parser* parser) {
 }
 
 
-void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token token) {
+
+
+
+void Syntax_functionScope_freeLabel(
+	ScopeFunction* scope,
+	Parser* parser,
+	Token token,
+	Trace* trace
+) {
 	Expression* expression = Syntax_readPath(token.label, parser, &scope->scope);
 	int expressionType = expression->type;
-
 
 	// fill branches
 	switch (expressionType) {
@@ -1401,6 +1452,7 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 		Expression* const exprSource = expr;
 		int exprSourceType = expr->type;
 
+
 		switch (exprSourceType) {
 		case EXPRESSION_PATH:
 		{
@@ -1410,10 +1462,9 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 			{
 				/// TODO: handle this case
 				if (expr->data.property.next) {
-					raiseError("[TODO]: expr such that next==true not handled");
+					raiseError("[TODO]: expr such that next==true not handled for TypeNode");
 					return;
 				}
-				
 
 				TypeNode* operand = TypeNode_get(
 					&scope->rootNode,
@@ -1426,9 +1477,87 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 					operand,
 					expression->data.property.length
 				);
+
+				Variable** varrDest = expression->data.property.variableArr;
+				int subLength = expression->data.property.length - 1;
+				Trace_set(
+					trace,
+					expr,
+					varrDest[0]->id,
+					Variable_getOffsetPath(&varrDest[1], subLength),
+					varrDest[subLength]->proto.cl->size,
+					EXPRESSION_PROPERTY
+				);
+
 				break;
 			}
+
+			
+			case EXPRESSION_FNCALL:
+			{
+				/// TODO: handle TypeNode
+				Variable** varrDest = expression->data.property.variableArr;
+				int subLength = expression->data.property.length - 1;
+				Trace_set(
+					trace,
+					expr,
+					varrDest[0]->id,
+					Variable_getOffsetPath(&varrDest[1], subLength),
+					varrDest[subLength]->proto.cl->size,
+					EXPRESSION_FNCALL
+				);
+
+
+				break;
 			}
+
+
+			}
+
+			break;
+		}
+
+		case EXPRESSION_ADDITION:
+		case EXPRESSION_SUBSTRACTION:
+		case EXPRESSION_MULTIPLICATION:
+		case EXPRESSION_DIVISION:
+		case EXPRESSION_MODULO:
+		
+		case EXPRESSION_BITWISE_AND:
+		case EXPRESSION_BITWISE_OR:
+		case EXPRESSION_BITWISE_XOR:
+		case EXPRESSION_LEFT_SHIFT:
+		case EXPRESSION_RIGHT_SHIFT:
+
+		case EXPRESSION_LOGICAL_AND:
+		case EXPRESSION_LOGICAL_OR:
+
+		case EXPRESSION_EQUAL:
+		case EXPRESSION_NOT_EQUAL:
+		case EXPRESSION_LESS:
+		case EXPRESSION_LESS_EQUAL:
+		case EXPRESSION_GREATER:
+		case EXPRESSION_GREATER_EQUAL:
+		
+		case EXPRESSION_BITWISE_NOT:
+		case EXPRESSION_LOGICAL_NOT:
+		case EXPRESSION_POSITIVE:
+		case EXPRESSION_NEGATION:
+		case EXPRESSION_R_INCREMENT:
+		case EXPRESSION_R_DECREMENT:
+		case EXPRESSION_L_INCREMENT:
+		case EXPRESSION_L_DECREMENT:
+		{
+			Variable** varrDest = expression->data.property.variableArr;
+			int subLength = expression->data.property.length - 1;
+			Trace_set(
+				trace,
+				expr,
+				varrDest[0]->id,
+				Variable_getOffsetPath(&varrDest[1], subLength),
+				varrDest[subLength]->proto.cl->size,
+				exprSourceType
+			);
 
 			break;
 		}
@@ -1447,13 +1576,23 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 			if (valueNode) {
 				valueNode->value.i32 = expr->data.i32;
 				valueNode->length = TYPENODE_LENGTH_I32;
-				break;
+			} else {
+				valueNode = malloc(sizeof(TypeNode));
+				valueNode->length = TYPENODE_LENGTH_I32;
+				valueNode->usage = 0;
+				TypeNode_set(&scope->rootNode, variableArr, valueNode, length);
 			}
 			
-			valueNode = malloc(sizeof(TypeNode));
-			valueNode->length = TYPENODE_LENGTH_I32;
-			valueNode->usage = 0;
-			TypeNode_set(&scope->rootNode, variableArr, valueNode, length);
+
+			Variable** varr = expression->data.property.variableArr;
+			Trace_ins_def(
+				trace,
+				varr[0]->id,
+				Variable_getOffsetPath(&varr[1], expression->data.property.length - 1),
+				TRACETYPE_S32,
+				&expr->data.i32
+			);
+
 			
 			break;
 		}
@@ -1477,6 +1616,12 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 		break;
 	}
 
+	case EXPRESSION_FNCALL:
+	{
+		raiseError("[TODO] handle direct fn call in freelabel");
+		break;
+	}
+
 	default:
 		raiseError("[Syntax] invalid expression type in free label");
 		break;
@@ -1489,14 +1634,16 @@ void Syntax_functionScope_freeLabel(ScopeFunction* scope, Parser* parser, Token 
 
 
 
-void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
+void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
+	/// TODO: create trace (icounter)
+
 	while (true) {
 		Token token = Parser_read(parser, &_labelPool);
 		switch (TokenCompare(SYNTAXLIST_FUNCTION, 0)) {
 		// let
 		case 0:
 		{
-			Syntax_functionScope_varDecl(scope, parser);
+			Syntax_functionScope_varDecl(scope, trace, parser);
 			break;
 		}
 
@@ -1538,7 +1685,7 @@ void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 		// free label
 		case 6:
 		{
-			Syntax_functionScope_freeLabel(scope, parser, token);
+			Syntax_functionScope_freeLabel(scope, parser, token, trace);
 			break;
 		}
 
@@ -1551,7 +1698,17 @@ void Syntax_functionScope(ScopeFunction* scope, Parser* parser) {
 	}
 
 
+	// Remove variable traces
 	finishScope:
+	typedef Variable* vptr_t;
+	Array_loop(vptr_t, scope->variables, vptr) {
+		Variable* v = *vptr;
+		Trace_removeVariable(trace, v->id);
+	}
+
+	TracePack_print(trace->last);
+
+
 	return;
 }
 
@@ -1563,12 +1720,24 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn) {
 		{scope, SCOPE_FUNCTION},
 		fn
 	};
-	ScopeFunction_create(&fnScope);
 	
-	Syntax_functionScope(&fnScope, parser);
+	Trace trace;
+	{
+		ScopeFile* file = Scope_reachFile(scope);
+		trace.icounter = file->icounter;
+	}
+	Trace_create(&trace);
 
+	
+	ScopeFunction_create(&fnScope);	
+	Syntax_functionScope(&fnScope, &trace, parser);
 	ScopeFunction_delete(&fnScope);
+	
 
+	Trace_delete(&trace);
+
+	// FunctionAssembly fnAsm;
+	// FunctionAssembly_create(&fnAsm, &fnScope);
 
 	fn->definitionState = DEFINITIONSTATE_DONE;
 }
@@ -1598,9 +1767,15 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
 			return;
 
-
-
+		return;
 	}
+
+	if (token.label == _commonLabels._main) {
+		annotation->type = ANNOTATION_MAIN;
+		return;
+	}
+
+	raiseError("[Syntax] Unkown annotation");
 }
 
 

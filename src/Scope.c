@@ -4,6 +4,7 @@
 #include "Module.h"
 #include "Variable.h"
 #include "Class.h"
+#include "primitives.h"
 #include "Function.h"
 
 #include "Syntax.h"
@@ -11,7 +12,7 @@
 
 
 #include <stdio.h>
-
+#include <string.h>
 
 
 void Scope_delete(Scope* scope, int scopeType) {
@@ -111,27 +112,42 @@ Module* Scope_reachModule(Scope* scope) {
 	return (Module*)scope;
 }
 
+ScopeFile* Scope_reachFile(Scope* scope) {
+	int type = SCOPE_NONE;
+	while (true) {
+		type = scope->type;
+		if (type == SCOPE_FILE)
+			return (ScopeFile*)scope;
+		
+		scope = scope->parent;
+		if (scope == NULL) {
+			raiseError("[Architecture] Cannot reach file");
+			return NULL;
+		}
+	}
+}
 
-void Scope_defineOnFly(Scope* scope, label_t name) {
+
+bool Scope_defineOnFly(Scope* scope, label_t name) {
 	/// TODO: complete this function
 	ScopeFile* file = Module_findModuleFile(Scope_reachModule(scope), name);
 	if (!file) {
-		raiseError("[Architecture] Missing definition file\n");
-		return;
+		return false;
 	}
 
 	definitionState_t s = file->state_th;
 	if (s == DEFINITIONSTATE_READING) {
 		raiseError("[Architecture] Trying to read on fly a file being read");
-		return;
+		return false;
 	}
 
 	if (s == DEFINITIONSTATE_DONE) {
 		raiseError("[Architecture] Trying to read on fly a file already read");
-		return;
+		return false;
 	}
 
 	Syntax_thFile(file);
+	return true;
 }
 
 
@@ -256,6 +272,9 @@ void Scope_addFunction(Scope* scope, int scopeType, Function* fn) {
 
 void ScopeFile_create(ScopeFile* file) {
 	file->scope.type = SCOPE_FILE;
+	file->generationState = SCOPEFILE_GENERATION_NONE;
+	file->icounter = 0;
+
 	Array_create(&file->variables, sizeof(Variable*));
 	Array_create(&file->classes, sizeof(Class*));
 	Array_create(&file->functions, sizeof(Function*));
@@ -292,6 +311,66 @@ void ScopeFile_free(ScopeFile* file) {
 	Array_free(file->functions);
 
 }
+
+
+
+char* ScopeFile_generateId(ScopeFile* file) {
+	const char* fname = file->name;
+	const char* moduleName = Scope_reachModule(&file->scope)->name;
+	size_t len = strlen(moduleName) + 1   // '_'
+			+ strlen(fname) + 1;  // '\0'
+	
+	char* id = malloc(len);
+	sprintf(id, "%s_%s", moduleName, fname);
+	return id;
+}
+
+char* ScopeFile_requireId(ScopeFile* file, char generationState) {
+	if (generationState == SCOPEFILE_GENERATION_NONE) {
+		char* id = ScopeFile_generateId(file);
+		file->generationState = SCOPEFILE_GENERATION_ID;
+		file->id = id;
+		return id;
+	}
+
+	return file->id;
+}
+
+FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
+	switch (generationState) {
+	case SCOPEFILE_GENERATION_NONE:
+	case SCOPEFILE_GENERATION_ID:
+	{
+		ScopeFile_requireId(file, generationState);
+
+		// generate filename
+		char* binFolder = Scope_reachModule(&file->scope)->binFolder;
+		char* filepath = file->filepath;
+
+		size_t len = strlen(binFolder) + 1   // '/'
+	           + strlen(filepath) + 4;  // ".asm" + '\0'
+
+		char* path = malloc(len);
+
+		sprintf(path, "%s/%s.asm", binFolder, filepath);
+
+		FILE* f = fopen(path, "w");
+		file->output = f;
+		return f;
+	}
+
+	case SCOPEFILE_GENERATION_ASM:
+	{
+		return file->output;
+	}
+
+	}
+
+	return NULL;
+}
+
+
+
 
 
 

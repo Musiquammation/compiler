@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <tools/Array.h>
 
+#include <string.h>
+
 void Expression_free(int type, Expression* e) {
 	restartFree:
 	switch (type) {
@@ -611,7 +613,6 @@ bool Expression_canSimplify(int type, int op1, int op2) {
 	#undef scale
 
 }
-
 
 
 

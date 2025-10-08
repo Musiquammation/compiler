@@ -4,20 +4,28 @@
 #include "Scope.h"
 #include "TypeNode.h"
 
+#include "helper.h"
+
 
 void Function_create(Function* fn) {
 
 }
 
 void Function_delete(Function* fn) {
-    Array_loopPtr(Variable, fn->arguments, v) {
-        free(*v);
-    }
+	Array_loopPtr(Variable, fn->arguments, v) {
+		free(*v);
+	}
 
-    Array_free(fn->arguments);
+	Array_free(fn->arguments);
 }
 
+void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf) {
+	ScopeFile* file = Scope_reachFile(&sf->scope);
 
+	fa->ic_ptr = &file->icounter;
+	fa->output = ScopeFile_requireAssembly(file, file->generationState);
+	fa->ic = file->icounter;
+}
 
 
 

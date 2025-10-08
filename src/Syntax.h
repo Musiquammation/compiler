@@ -6,7 +6,7 @@
 
 #include "declarations.h"
 #include "label_t.h"
-
+#include <tools/Array.h>
 
 
 enum {

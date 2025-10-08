@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include <stdio.h>
+
 bool isNullPointerRef(const void* ptr) {
 	return (*((void**)ptr)) == NULL;
 }

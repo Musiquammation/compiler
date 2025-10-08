@@ -6,11 +6,14 @@
 #include "LabelPool.h"
 #include "Scope.h"
 
+
+
 struct Module {
 	Scope scope;
 	label_t name;
 	ScopeFile* files;
 	Function* mainFunction;
+	char* binFolder;
 	int fileLength;
 
 	Array classes; // type: Class*
