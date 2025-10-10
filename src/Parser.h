@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <tools/Array.h>
 
+#include "castable_t.h"
+
 typedef char token_t;
 typedef char operator_t;
 
@@ -17,20 +19,7 @@ typedef struct {
 	token_t type;
 
 	union {
-		char i8;
-		unsigned char u8;
-
-		short i16;
-		unsigned u16;
-
-		int i32;
-		unsigned u32;
-
-		float f32;
-		double f64;
-
-		long i64;
-		unsigned long u64;
+		castable_t num;
 
 		operator_t operator;
 		label_t label;

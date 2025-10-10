@@ -2,7 +2,6 @@
 #define COMPILER_FUNCTION_H_
 
 #include "declarations.h"
-#include "TypeNode.h"
 #include "label_t.h"
 #include "Prototype.h"
 #include "definitionState_t.h"
@@ -23,7 +22,7 @@ struct Function {
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
-    TypeNode rootNode;
+    TypeNode* rootNode;
 
     Array variables; // type: Variable*  
 };
@@ -57,3 +56,4 @@ TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expressi
 
 
 #endif
+

@@ -32,12 +32,9 @@ void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf) {
 
 void ScopeFunction_create(ScopeFunction* scope) {
 	Array_create(&scope->variables, sizeof(Variable*));
-	scope->rootNode.length = 0;
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
-	TypeNode_unfollow(&scope->rootNode, 1);
-
 	Array_loopPtr(Variable, scope->variables, v_ptr) {
 		Variable* v = *v_ptr;
 		Variable_delete(v);
@@ -85,5 +82,5 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 
 TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
 	*Array_push(Variable*, &scope->variables) = v;
-	return TypeNode_push(&scope->rootNode, v, value);
+	return TypeNode_push(scope->rootNode, v, value);
 }

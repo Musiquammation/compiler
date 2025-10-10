@@ -2,6 +2,7 @@
 #define COMPILER_TRACE_H_
 
 #include "declarations.h"
+#include "castable_t.h"
 
 #include "util/Stack.h"
 
@@ -95,7 +96,10 @@ uint Trace_pushVariable(Trace* trace);
 void Trace_removeVariable(Trace* trace, uint index);
 int Trace_reachFunction(Trace* trace, Function* fn);
 
+castable_t Trace_cast(castable_t value, int currentPackedType, int typePackedTarget);
 
+int Trace_packSize(int size);
+int Trace_packExprTypeToSize(int type);
 void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, int size, int exprType);
 
 trline_t* Trace_push(Trace* trace, int num);
@@ -105,8 +109,10 @@ void TracePack_print(const TracePack* pack);
 void Trace_addUsage(Trace* trace, uint variable, uint offset, bool readMode);
 
 uint Trace_ins_create(Trace* trace, Variable* variable, int size);
-void Trace_ins_def(Trace* trace, int variable, int offset, int packedSize, const void* value);
+void Trace_ins_def(Trace* trace, int variable, int offset, int packedSize, castable_t value);
 void Trace_ins_move(Trace* trace, int destVar, int destOffset, int srcVar, int srcOffset, int size);
+trline_t* Trace_ins_if(Trace* trace, uint destVar);
+void Trace_ins_jmp(Trace* trace, uint instruction);
 
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
 
@@ -281,7 +287,6 @@ enum {
 	 * +00: CODE
 	 * +10: OPERATION
 	 * +14: TYPE
-	 * +15: SIDE
 	 * +16: VALUE if TYPE < 2,
 	 * 
 	 * else if TYPE == 2:
@@ -292,13 +297,26 @@ enum {
 	 * 
 	 * +00: VALUE
 	 */
-	TRACECODE_LOGIC_IMM,
+	TRACECODE_LOGIC_IMM_LEFT,
+	TRACECODE_LOGIC_IMM_RIGHT,
 
 	/**
 	 * +00: CODE
 	 * +10: LABEL (on 22 bits)
 	 */
-	TRACECODE_FNCALL
+	TRACECODE_FNCALL,
+
+	/**
+	 * +00: CODE
+	 * +10: ADDR (22 bits)
+	 */
+	TRACECODE_IF,
+
+	/**
+	 * +00: CODE
+	 * +10: ADDR (22 bits)
+	 */
+	TRACECODE_JMP,
 };
 
 

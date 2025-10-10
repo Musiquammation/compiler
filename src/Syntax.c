@@ -187,52 +187,52 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, bool isExpressionRoo
 			switch (token.type) {
 			case TOKEN_TYPE_I8:
 				e->type = EXPRESSION_I8;
-				e->data.i8 = token.i8;
+				e->data.num.i8 = token.num.i8;
 				break;
 
 			case TOKEN_TYPE_U8:
 				e->type = EXPRESSION_U8;
-				e->data.u8 = token.u8;
+				e->data.num.u8 = token.num.u8;
 				break;
 
 			case TOKEN_TYPE_I16:
 				e->type = EXPRESSION_I16;
-				e->data.i16 = token.i16;
+				e->data.num.i16 = token.num.i16;
 				break;
 
 			case TOKEN_TYPE_U16:
 				e->type = EXPRESSION_U16;
-				e->data.u16 = token.u16;
+				e->data.num.u16 = token.num.u16;
 				break;
 
 			case TOKEN_TYPE_I32:
 				e->type = EXPRESSION_I32;
-				e->data.i32 = token.i32;
+				e->data.num.i32 = token.num.i32;
 				break;
 
 			case TOKEN_TYPE_U32:
 				e->type = EXPRESSION_U32;
-				e->data.u32 = token.u32;
+				e->data.num.u32 = token.num.u32;
 				break;
 
 			case TOKEN_TYPE_F32:
 				e->type = EXPRESSION_F32;
-				e->data.f32 = token.f32;
+				e->data.num.f32 = token.num.f32;
 				break;
 
 			case TOKEN_TYPE_F64:
 				e->type = EXPRESSION_F64;
-				e->data.f64 = token.f64;
+				e->data.num.f64 = token.num.f64;
 				break;
 
 			case TOKEN_TYPE_I64:
 				e->type = EXPRESSION_I64;
-				e->data.i64 = token.i64;
+				e->data.num.i64 = token.num.i64;
 				break;
 
 			case TOKEN_TYPE_U64:
 				e->type = EXPRESSION_U64;
-				e->data.u64 = token.u64;
+				e->data.num.u64 = token.num.u64;
 				break;
 
 			default:
@@ -1453,9 +1453,7 @@ void Syntax_functionScope_freeLabel(
 		int exprSourceType = expr->type;
 
 
-		switch (exprSourceType) {
-		case EXPRESSION_PATH:
-		{
+		if (exprSourceType == EXPRESSION_PATH) {
 			expr = expr->data.target;
 			switch (expr->type) {
 			case EXPRESSION_PROPERTY:
@@ -1467,12 +1465,12 @@ void Syntax_functionScope_freeLabel(
 				}
 
 				TypeNode* operand = TypeNode_get(
-					&scope->rootNode,
+					scope->rootNode,
 					expr->data.property.variableArr,
 					expr->data.property.length
 				);
 				TypeNode_set(
-					&scope->rootNode,
+					scope->rootNode,
 					expression->data.property.variableArr,
 					operand,
 					expression->data.property.length
@@ -1514,40 +1512,9 @@ void Syntax_functionScope_freeLabel(
 
 			}
 
-			break;
-		}
-
-		case EXPRESSION_ADDITION:
-		case EXPRESSION_SUBSTRACTION:
-		case EXPRESSION_MULTIPLICATION:
-		case EXPRESSION_DIVISION:
-		case EXPRESSION_MODULO:
 		
-		case EXPRESSION_BITWISE_AND:
-		case EXPRESSION_BITWISE_OR:
-		case EXPRESSION_BITWISE_XOR:
-		case EXPRESSION_LEFT_SHIFT:
-		case EXPRESSION_RIGHT_SHIFT:
-
-		case EXPRESSION_LOGICAL_AND:
-		case EXPRESSION_LOGICAL_OR:
-
-		case EXPRESSION_EQUAL:
-		case EXPRESSION_NOT_EQUAL:
-		case EXPRESSION_LESS:
-		case EXPRESSION_LESS_EQUAL:
-		case EXPRESSION_GREATER:
-		case EXPRESSION_GREATER_EQUAL:
 		
-		case EXPRESSION_BITWISE_NOT:
-		case EXPRESSION_LOGICAL_NOT:
-		case EXPRESSION_POSITIVE:
-		case EXPRESSION_NEGATION:
-		case EXPRESSION_R_INCREMENT:
-		case EXPRESSION_R_DECREMENT:
-		case EXPRESSION_L_INCREMENT:
-		case EXPRESSION_L_DECREMENT:
-		{
+		} else if (exprSourceType >= EXPRESSION_ADDITION && expressionType <= EXPRESSION_L_DECREMENT) {
 			Variable** varrDest = expression->data.property.variableArr;
 			int subLength = expression->data.property.length - 1;
 			Trace_set(
@@ -1559,47 +1526,39 @@ void Syntax_functionScope_freeLabel(
 				exprSourceType
 			);
 
-			break;
-		}
 
-		case EXPRESSION_I32:
-		{
-			/// TODO: handle casts
+		} else if (exprSourceType >= EXPRESSION_U8 && exprSourceType <= EXPRESSION_F64) {
 			Variable** variableArr = expression->data.property.variableArr;
 			int length = expression->data.property.length;
 			TypeNode* valueNode = TypeNode_tryReach(
-				&scope->rootNode,
+				scope->rootNode,
 				variableArr,
 				length
 			);
 
 			if (valueNode) {
-				valueNode->value.i32 = expr->data.i32;
+				valueNode->value.num = expr->data.num;
 				valueNode->length = TYPENODE_LENGTH_I32;
 			} else {
 				valueNode = malloc(sizeof(TypeNode));
 				valueNode->length = TYPENODE_LENGTH_I32;
 				valueNode->usage = 0;
-				TypeNode_set(&scope->rootNode, variableArr, valueNode, length);
+				TypeNode_set(scope->rootNode, variableArr, valueNode, length);
 			}
 			
 
 			Variable** varr = expression->data.property.variableArr;
+			int subLength = expression->data.property.length - 1;
 			Trace_ins_def(
 				trace,
 				varr[0]->id,
-				Variable_getOffsetPath(&varr[1], expression->data.property.length - 1),
-				TRACETYPE_S32,
-				&expr->data.i32
+				Variable_getOffsetPath(&varr[1], subLength),
+				Trace_packSize(varr[subLength]->proto.cl->size),
+				expr->data.num
 			);
 
-			
-			break;
-		}
-
-		default:
+		} else {
 			raiseError("[TODO]: this expression is not handled");
-			break;
 		}
 
 		// Free expression
@@ -1657,7 +1616,68 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// if
 		case 2:
 		{
-			raiseError("[TODO] in Syntax_functionScope: if");
+			// Require left parethesis
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
+				return;
+
+			Expression* expr = Syntax_expression(parser, &scope->scope, true);
+			// Require right parenthesis
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
+				return;
+
+			// Require left brace
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+				return;
+
+			/// TODO: follow each pair
+
+			ScopeFunction subScope = {
+				.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
+				.fn = scope->fn,
+				.rootNode = scope->rootNode
+			};
+			ScopeFunction_create(&subScope);
+
+
+			int exprType = expr->type;
+			uint dest = Trace_ins_create(trace, NULL, 4);
+			Trace_set(trace, expr, dest, 0, 4, exprType);
+
+			Expression_free(exprType, expr);
+			free(expr);
+
+			
+			trline_t* ifLine = Trace_ins_if(trace, dest);
+			Trace_removeVariable(trace, dest);
+
+			Syntax_functionScope(&subScope, trace, parser);
+
+			ScopeFunction_delete(&subScope);
+
+			/// TODO: compare new TypeNode with the else case => track similarities
+
+			
+			// Check else
+			token = Parser_read(parser, &_labelPool);
+			if (token.type != TOKEN_TYPE_LABEL|| token.label != _commonLabels._else) {
+				Parser_saveToken(parser, &token);
+				*ifLine |= (trace->instruction << 10);
+				break;
+			}
+
+			// Require left brace
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+				return;
+
+			ScopeFunction_create(&subScope);
+			Syntax_functionScope(&subScope, trace, parser);
+			ScopeFunction_delete(&subScope);
+
+			*ifLine |= (trace->instruction << 10);
 			break;
 		}
 
@@ -1671,7 +1691,54 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// while
 		case 4:
 		{
-			raiseError("[TODO] in Syntax_functionScope: while");
+			// Require left parethesis
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
+				return;
+
+			Expression* expr = Syntax_expression(parser, &scope->scope, true);
+			// Require right parenthesis
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
+				return;
+
+			// Require left brace
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+				return;
+
+			/// TODO: follow each pair
+
+			ScopeFunction subScope = {
+				.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
+				.fn = scope->fn,
+				.rootNode = scope->rootNode
+			};
+			ScopeFunction_create(&subScope);
+
+			
+			int startInstruction = trace->instruction;
+
+			int exprType = expr->type;
+			uint dest = Trace_ins_create(trace, NULL, 4);
+			Trace_set(trace, expr, dest, 0, 4, exprType);
+
+			Expression_free(exprType, expr);
+			free(expr);
+
+			
+			trline_t* ifLine = Trace_ins_if(trace, dest);
+			Trace_removeVariable(trace, dest);
+
+			Syntax_functionScope(&subScope, trace, parser);
+
+
+			Trace_ins_jmp(trace, startInstruction);
+			
+			*ifLine |= (trace->instruction << 10);
+
+			ScopeFunction_delete(&subScope);
+
 			break;
 		}
 
@@ -1706,9 +1773,6 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		Trace_removeVariable(trace, v->id);
 	}
 
-	TracePack_print(trace->last);
-
-
 	return;
 }
 
@@ -1730,9 +1794,18 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn) {
 
 	
 	ScopeFunction_create(&fnScope);	
+	fnScope.rootNode = malloc(sizeof(TypeNode));
+	fnScope.rootNode->length = 0;
+
 	Syntax_functionScope(&fnScope, &trace, parser);
-	ScopeFunction_delete(&fnScope);
 	
+	TypeNode_unfollow(fnScope.rootNode, 1);
+	free(fnScope.rootNode);
+	ScopeFunction_delete(&fnScope);
+
+
+	TracePack_print(trace.last);
+
 
 	Trace_delete(&trace);
 

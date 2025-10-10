@@ -266,22 +266,22 @@ static int collectNumber(const char* str, Token* token) {
 	if (is_float) {
 		double val = strtod(start, NULL);
 		switch (suffix) {
-			case 'f': token->type = TOKEN_TYPE_F32; token->f32 = (float)val; break;
-			case 'd': token->type = TOKEN_TYPE_F64; token->f64 = val; break;
-			default:  token->type = TOKEN_TYPE_F32; token->f32 = (float)val; break;
+			case 'f': token->type = TOKEN_TYPE_F32; token->num.f32 = (float)val; break;
+			case 'd': token->type = TOKEN_TYPE_F64; token->num.f64 = val; break;
+			default:  token->type = TOKEN_TYPE_F32; token->num.f32 = (float)val; break;
 		}
 	} else {
 		unsigned long val = strtoul(start, NULL, base);
 		switch (suffix) {
-			case 'c': token->type = TOKEN_TYPE_I8; token->i8 = (char)val; break;
-			case 'C': token->type = TOKEN_TYPE_U8; token->u8 = (unsigned char)val; break;
-			case 's': token->type = TOKEN_TYPE_I16; token->i16 = (short)val; break;
-			case 'S': token->type = TOKEN_TYPE_U16; token->u16 = (unsigned short)val; break;
-			case 'u': token->type = TOKEN_TYPE_U32; token->u32 = (unsigned int)val; break;
-			case 'l': token->type = TOKEN_TYPE_I64; token->i64 = (long)val; break;
-			case 'L': token->type = TOKEN_TYPE_U64; token->u64 = (unsigned long)val; break;
-			case 'd': token->type = TOKEN_TYPE_I32; token->i32 = (int)val; break;
-			default:  token->type = TOKEN_TYPE_I32; token->i32 = (int)val; break;
+			case 'c': token->type = TOKEN_TYPE_I8; token->num.i8 = (char)val; break;
+			case 'C': token->type = TOKEN_TYPE_U8; token->num.u8 = (unsigned char)val; break;
+			case 's': token->type = TOKEN_TYPE_I16; token->num.i16 = (short)val; break;
+			case 'S': token->type = TOKEN_TYPE_U16; token->num.u16 = (unsigned short)val; break;
+			case 'u': token->type = TOKEN_TYPE_U32; token->num.u32 = (unsigned int)val; break;
+			case 'l': token->type = TOKEN_TYPE_I64; token->num.i64 = (long)val; break;
+			case 'L': token->type = TOKEN_TYPE_U64; token->num.u64 = (unsigned long)val; break;
+			case 'd': token->type = TOKEN_TYPE_I32; token->num.i32 = (int)val; break;
+			default:  token->type = TOKEN_TYPE_I32; token->num.i32 = (int)val; break;
 		}
 	}
 
@@ -442,20 +442,20 @@ void Parser_saveToken(Parser* parser, const Token* token) {
 void Token_println(const Token* token) {
 	switch(token->type) {
 		// Signed integers
-		case TOKEN_TYPE_I8:  printf("number<i8>(%d)\n", token->i8); break;
-		case TOKEN_TYPE_I16: printf("number<i16>(%d)\n", token->i16); break;
-		case TOKEN_TYPE_I32: printf("number<i32>(%d)\n", token->i32); break;
-		case TOKEN_TYPE_I64: printf("number<i64>(%ld\n)", token->i64); break;
+		case TOKEN_TYPE_I8:  printf("number<i8>(%d)\n", token->num.i8); break;
+		case TOKEN_TYPE_I16: printf("number<i16>(%d)\n", token->num.i16); break;
+		case TOKEN_TYPE_I32: printf("number<i32>(%d)\n", token->num.i32); break;
+		case TOKEN_TYPE_I64: printf("number<i64>(%ld\n)", token->num.i64); break;
 
 		// Unsigned integers
-		case TOKEN_TYPE_U8:  printf("number<u8>(%u)\n", token->u8); break;
-		case TOKEN_TYPE_U16: printf("number<u16>(%u)\n", token->u16); break;
-		case TOKEN_TYPE_U32: printf("number<u32>(%u)\n", token->u32); break;
-		case TOKEN_TYPE_U64: printf("number<u64>(%lu\n)", token->u64); break;
+		case TOKEN_TYPE_U8:  printf("number<u8>(%u)\n", token->num.u8); break;
+		case TOKEN_TYPE_U16: printf("number<u16>(%u)\n", token->num.u16); break;
+		case TOKEN_TYPE_U32: printf("number<u32>(%u)\n", token->num.u32); break;
+		case TOKEN_TYPE_U64: printf("number<u64>(%lu\n)", token->num.u64); break;
 
 		// Floating-point numbers
-		case TOKEN_TYPE_F32: printf("number<f32>(%f)\n", token->f32); break;
-		case TOKEN_TYPE_F64: printf("number<f64>(%lf\n)", token->f64); break;
+		case TOKEN_TYPE_F32: printf("number<f32>(%f)\n", token->num.f32); break;
+		case TOKEN_TYPE_F64: printf("number<f64>(%lf\n)", token->num.f64); break;
 
 		// Operators
 		case TOKEN_TYPE_OPERATOR:

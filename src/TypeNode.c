@@ -260,16 +260,18 @@ void TypeNode_copyValue(TypeNode* dest, const TypeNode* src, int length) {
 
 
 	switch (length) {
-	TYPENODE_LENGTH_I8:  dest->value.i8 = src->value.i8; break; 
-	TYPENODE_LENGTH_U8:  dest->value.u8 = src->value.u8; break;
-	TYPENODE_LENGTH_I16: dest->value.i16 = src->value.i16; break;
-	TYPENODE_LENGTH_U16: dest->value.u16 = src->value.u16; break;
-	TYPENODE_LENGTH_I32: dest->value.i32 = src->value.i32; break;
-	TYPENODE_LENGTH_U32: dest->value.u32 = src->value.u32; break;
-	TYPENODE_LENGTH_I64: dest->value.i64 = src->value.i64; break;
-	TYPENODE_LENGTH_U64: dest->value.u64 = src->value.u64; break;
-	TYPENODE_LENGTH_F32: dest->value.f32 = src->value.f32; break;
-	TYPENODE_LENGTH_F64: dest->value.f64 = src->value.f64; break;
+	TYPENODE_LENGTH_I8:
+	TYPENODE_LENGTH_U8:
+	TYPENODE_LENGTH_I16:
+	TYPENODE_LENGTH_U16:
+	TYPENODE_LENGTH_I32:
+	TYPENODE_LENGTH_U32:
+	TYPENODE_LENGTH_I64:
+	TYPENODE_LENGTH_U64:
+	TYPENODE_LENGTH_F32:
+	TYPENODE_LENGTH_F64:
+		dest->value.num = src->value.num;
+		break;
 
 	TYPENODE_LENGTH_UNDEF_I8:
 	TYPENODE_LENGTH_UNDEF_U8:

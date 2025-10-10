@@ -148,6 +148,7 @@ void Trace_create(Trace* trace) {
 	
 	trace->first = pack;
 	trace->last = pack;
+	trace->instruction = 0;
 
 
 
@@ -202,6 +203,38 @@ int Trace_reachFunction(Trace* trace, Function* fn) {
 }
 
 
+castable_t Trace_cast(castable_t value, int currentPackedType, int typePackedTarget) {
+	if (currentPackedType >= typePackedTarget)
+		return value;
+		
+	switch (currentPackedType) {
+	case 0:
+		switch (typePackedTarget) {
+		case 1: return (castable_t){.u16 = value.u8};
+		case 2: return (castable_t){.u32 = value.u8};
+		case 3: return (castable_t){.u64 = value.u8};
+		}
+		break;
+
+	case 1:
+		switch (typePackedTarget) {
+		case 2: return (castable_t){.u32 = value.u16};
+		case 3: return (castable_t){.u64 = value.u16};
+		}
+		break;
+
+	case 2:
+		switch (typePackedTarget) {
+		case 3: return (castable_t){.u64 = value.u32};
+		}
+
+	break;
+	}
+
+	return (castable_t){.u64 = 0};
+}
+
+
 
 
 
@@ -252,11 +285,11 @@ void TracePack_print(const TracePack* pack) {
 				{
 					int type = (n >> 10) & 0x3;
 					if (type == TRACETYPE_S16) {
-						int value = (n >> 8) & 0xFFFF;
+						int value = (n >> 16) & 0xFFFF;
 						printf("[%04d] DEF value=%d (S16)\n", i, (int16_t)value);
 					}
 					else if (type == TRACETYPE_S8) {
-						int value = n & 0xFF;
+						int value = (n>>16) & 0xFF;
 						printf("[%04d] DEF value=%d (S8)\n", i, (int8_t)value);
 					}
 					else if (type == TRACETYPE_S32) {
@@ -334,7 +367,7 @@ void TracePack_print(const TracePack* pack) {
 						printf("on %s operand\n", side ? "RIGHT" : "LEFT");
 					} else {
 						if (type == 0 || type == 1) {
-							printf("VALUE=%u on %s operand\n", star & 0xFF, side ? "RIGHT" : "LEFT");
+							printf("VALUE=%u on %s operand\n", star, side ? "RIGHT" : "LEFT");
 						} else if (type == 2) {
 							i++;
 							printf("VALUE=%d (int) on %s operand\n", (int)pack->line[i], side ? "RIGHT" : "LEFT");
@@ -372,10 +405,11 @@ void TracePack_print(const TracePack* pack) {
 					printf(") type=%d\n", type);
 				} break;
 
-				case TRACECODE_LOGIC_IMM: {
+				case TRACECODE_LOGIC_IMM_LEFT:
+				case TRACECODE_LOGIC_IMM_RIGHT:
+				{
 					int op   = (n >> 10) & 0xF;
 					int type = (n >> 14) & 0x3;
-					int side = (n >> 15) & 0x1;
 
 					printf("[%04d] LOGIC/IMM op=%d (", i, op);
 					switch (op) {
@@ -394,21 +428,20 @@ void TracePack_print(const TracePack* pack) {
 						case TRACEOP_GREATER_EQUAL: printf("GREATER_EQUAL"); break;
 						default:                    printf("UNKNOWN"); break;
 					}
-					printf(") type=%d side=%d ", type, side);
+					printf(") type=%d immediate:%s ", type, next == TRACECODE_LOGIC_IMM_LEFT ? "LEFT" : "RIGHT");
 
 					if (type < 2) {
-						uint32_t value = (n >> 16) & 0xFFFF;
-						printf("VALUE=%u on %s operand\n", value, side ? "RIGHT" : "LEFT");
+						printf("VALUE=%u (int)\n", (unsigned int)(n >> 16));
 					} else if (type == 2) {
 						i++;
 						uint32_t value = pack->line[i];
-						printf("VALUE=%d (int) on %s operand\n", (int)value, side ? "RIGHT" : "LEFT");
+						printf("VALUE=%d (int)\n", (int)value);
 					} else {
 						i++;
 						uint32_t lo = pack->line[i];
 						i++;
 						uint32_t hi = pack->line[i];
-						printf("VALUE_LO=%u VALUE_HI=%u on %s operand\n", lo, hi, side ? "RIGHT" : "LEFT");
+						printf("VALUE_LO=%u VALUE_HI=%u\n", lo, hi);
 					}
 				} break;
 
@@ -416,6 +449,18 @@ void TracePack_print(const TracePack* pack) {
 				case TRACECODE_FNCALL:
 				{
 					printf("[%04d] FNCALL idx=%02d\n", i, n >> 10);
+					break;
+				}
+
+				case TRACECODE_IF:
+				{
+					printf("[%04d] IF to=%04d\n", i, n >> 10);
+					break;
+				}
+
+				case TRACECODE_JMP:
+				{
+					printf("[%04d] JMP to=%04d\n", i, n >> 10);
 					break;
 				}
 
@@ -473,62 +518,8 @@ void Trace_addUsage(Trace* trace, uint variable, uint offset, bool readMode) {
 
 
 
-typedef union {
-	unsigned char v8;
-	unsigned short v16;
-	unsigned int v32;
-	unsigned long long v64;
-} TraceImmediate;
 
-static int Trace_fillValueImmediate(Expression* expr , int type, TraceImmediate* value) {
-	switch (type) {
-	case EXPRESSION_U8:
-		value->v8 = expr->data.u8;
-		return TRACETYPE_S8;
-	case EXPRESSION_I8:
-		value->v8 = expr->data.i8;
-		return TRACETYPE_S8;
-
-	case EXPRESSION_U16:
-		value->v16 = expr->data.u16;
-		return TRACETYPE_S16;
-	case EXPRESSION_I16:
-		value->v16 = expr->data.i16;
-		return TRACETYPE_S16;
-
-	case EXPRESSION_U32:
-		value->v32 = expr->data.u32;
-		return TRACETYPE_S32;
-	case EXPRESSION_I32:
-		value->v32 = expr->data.i32;
-		return TRACETYPE_S32;
-	case EXPRESSION_F32:
-	{
-		union {unsigned int i; float f;} v;
-		v.f = expr->data.f32;
-		value->v32 = v.i;
-		return TRACETYPE_S32;
-	}
-
-	case EXPRESSION_U64:
-		value->v64 = expr->data.u64;
-		return TRACETYPE_S64;
-	case EXPRESSION_I64:
-		value->v64 = expr->data.i64;
-		return TRACETYPE_S64;
-	case EXPRESSION_F64:
-	{
-		union {unsigned long long i; double f;} v;
-		v.f = expr->data.f64;
-		value->v64 = v.i;
-		return TRACETYPE_S64;
-	}
-	}
-
-	return -1;
-}
-
-static int Trace_packSizeType(int size) {
+int Trace_packSize(int size) {
 	switch (size) {
 		case 1: return 0;
 		case 2: return 1;
@@ -536,6 +527,31 @@ static int Trace_packSizeType(int size) {
 		case 8: return 3;
 		default: raiseError("[Trace] Invalid size of operation"); return -1;
 	}
+}
+
+int Trace_packExprTypeToSize(int type) {
+	switch (type) {
+	case EXPRESSION_I8:
+	case EXPRESSION_U8:
+		return 0;
+
+	case EXPRESSION_I16:
+	case EXPRESSION_U16:
+		return 1;
+
+	case EXPRESSION_I32:
+	case EXPRESSION_U32:
+	case EXPRESSION_F32:
+		return 2;
+
+	case EXPRESSION_I64:
+	case EXPRESSION_U64:
+	case EXPRESSION_F64:
+		return 3;
+
+	}
+
+	return -1;
 }
 
 
@@ -586,7 +602,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 		// Output
 		Trace_addUsage(trace, destVar, destOffset, false);
 		*Trace_push(trace, 1) = TRACECODE_PLACE |
-			(Trace_packSizeType(size) << 10) |
+			(Trace_packSize(size) << 10) |
 			(1 << 12) |
 			TRACE_REGISTER_RAX;
 
@@ -663,30 +679,32 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 		int leftType = leftExpr->type;
 		int rightType = rightExpr->type;
 
-		int leftSize;
-		int rightSize;
+		bool leftValueGiven;
+		bool rightValueGiven;
 
-		TraceImmediate immValue;
+		castable_t immValue;
 
 		if (leftType >= EXPRESSION_U8 && leftType <= EXPRESSION_F64) {
-			leftSize = Trace_fillValueImmediate(leftExpr, leftType, &immValue);
+			leftValueGiven = true;
+			immValue = leftExpr->data.num;
 		} else {
-			leftSize = -1;
+			leftValueGiven = false;
 		}
 
 		if (rightType >= EXPRESSION_U8 && rightType <= EXPRESSION_F64) {
-			rightSize = Trace_fillValueImmediate(rightExpr, rightType, &immValue);
+			immValue = rightExpr->data.num;
+			rightValueGiven = true;
 		} else {
-			rightSize = -1;
+			rightValueGiven = false;
 		}
 
-		if (leftSize >= 0 && rightSize >= 0) {
+		if (leftValueGiven && rightValueGiven) {
 			raiseError("[Trace] left and right operands cannot be immediates");
 			return;
 		}
 
 		/// TODO: review cast logic
-		if (leftSize < 0 && rightSize < 0) {
+		if (!leftValueGiven && !rightValueGiven) {
 			uint leftVar = Trace_ins_create(trace, NULL, size);
 			Trace_set(trace, leftExpr, leftVar, 0, size, leftType);
 			
@@ -698,7 +716,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 			Trace_addUsage(trace, rightVar, 0, true);
 			Trace_addUsage(trace, destVar, destOffset, false);
 
-			int packedSize = Trace_packSizeType(size);
+			int packedSize = Trace_packSize(size);
 
 			// Add instruction
 			if (exprType <= EXPRESSION_MODULO) {
@@ -722,7 +740,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 			
 			uint variable = Trace_ins_create(trace, NULL, size);
 
-			if (leftSize < 0) {
+			if (rightValueGiven) {
 				// right operand only is an immediate
 				Trace_set(trace, leftExpr, variable, 0, size, leftType);
 			} else {
@@ -737,39 +755,43 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 			trline_t* ptr;
 			trline_t first;
 
-			if (exprType <= EXPRESSION_MODULO) {
-				first = TRACECODE_ARITHMETIC_IMM |
-					((exprType - (EXPRESSION_ADDITION - TRACEOP_ADDITION)) << 10) |
-					(1<<15);
+			int decPos;
 
+			if (exprType <= EXPRESSION_MODULO) {
+				decPos = 13;
+				first = TRACECODE_ARITHMETIC_IMM |
+				((exprType - (EXPRESSION_ADDITION - TRACEOP_ADDITION)) << 10) |
+				(1<<15);
+				
 			} else {
-				first = TRACECODE_LOGIC_IMM |
-					((exprType - (EXPRESSION_BITWISE_AND - TRACEOP_BITWISE_AND)) << 10) |
-					(leftSize < 0 ? (1<<15) : 0);
+				decPos = 14;
+				first = (leftValueGiven ? TRACECODE_LOGIC_IMM_LEFT : TRACECODE_LOGIC_IMM_RIGHT) |
+					((exprType - (EXPRESSION_BITWISE_AND - TRACEOP_BITWISE_AND)) << 10);
 			}
 
+			/// TODO: cast immValue using leftValueGiven => pack
 			switch (size) {
 			case 1:
 				ptr = Trace_push(trace, 1);
-				ptr[0] = first | (0 << 13) | (immValue.v8 << 16);
+				ptr[0] = first | (0 << decPos) | (immValue.u8 << 16);
 				break;
 
 			case 2:
 				ptr = Trace_push(trace, 1);
-				ptr[0] = first | (1 << 13) | (immValue.v16 << 16);
+				ptr[0] = first | (1 << decPos) | (immValue.u16 << 16);
 				break;
 
 			case 4:
 				ptr = Trace_push(trace, 2);
-				ptr[0] = first | (2 << 13);
-				ptr[1] = immValue.v32;
+				ptr[0] = first | (2 << decPos);
+				ptr[1] = immValue.u32;
 				break;
 				
 			case 8:
 				ptr = Trace_push(trace, 3);
-				ptr[0] = first | (3 << 10);
-				ptr[1] = immValue.v64;
-				ptr[2] = immValue.v64 >> 32;
+				ptr[0] = first | (3 << decPos);
+				ptr[1] = immValue.u64;
+				ptr[2] = immValue.u64 >> 32;
 				break;
 			}
 
@@ -782,50 +804,25 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, in
 
 
 	case EXPRESSION_I8:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S8, &expr->data.i8);
-		break;
-
 	case EXPRESSION_U8:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S8, &expr->data.u8);
-		break;
-
 	case EXPRESSION_I16:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S16, &expr->data.i16);
-		break;
-
 	case EXPRESSION_U16:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S16, &expr->data.u16);
-		break;
-
 	case EXPRESSION_I32:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S32, &expr->data.i32);
-		break;
-
 	case EXPRESSION_U32:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S32, &expr->data.u32);
-		break;
-
-	case EXPRESSION_F32: {
-		union { float f; uint32_t u; } conv;
-		conv.f = expr->data.f32;
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S32, &conv.u);
-		break;
-	}
-
+	case EXPRESSION_F32:
 	case EXPRESSION_I64:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S64, &expr->data.i64);
-		break;
-
 	case EXPRESSION_U64:
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S64, &expr->data.u64);
-		break;
-
-	case EXPRESSION_F64: {
-		union { double f; uint64_t u; } conv;
-		conv.f = expr->data.f64;
-		Trace_ins_def(trace, destVar, destOffset, TRACETYPE_S64, &conv.u);
+	case EXPRESSION_F64:
+	{
+		int p = Trace_packExprTypeToSize(exprType);
+		Trace_ins_def(
+			trace,destVar, destOffset, Trace_packSize(size),
+			Trace_cast(expr->data.num, p, Trace_packSize(size))
+		);
 		break;
 	}
+
+	
 
 
 
@@ -856,31 +853,34 @@ uint Trace_ins_create(Trace* trace, Variable* variable, int size) {
 }
 
 
-void Trace_ins_def(Trace* trace, int variable, int offset, int packedSize, const void* value) {
+void Trace_ins_def(Trace* trace, int variable, int offset, int packedSize, castable_t value) {
 	Trace_addUsage(trace, variable, offset, false);
+
+
 
 	trline_t* ptr;
 	switch (packedSize) {
 	case TRACETYPE_S8:
 	 	ptr = Trace_push(trace, 1);
-		ptr[0] = TRACECODE_DEF | (TRACETYPE_S8 << 10) | ((*(uchar*)value) << 16);
+		ptr[0] = TRACECODE_DEF | (TRACETYPE_S8 << 10) | (value.u8 << 16);
 		break;
 
 	case TRACETYPE_S16:
 	 	ptr = Trace_push(trace, 1);
-		ptr[0] = TRACECODE_DEF | (TRACETYPE_S16 << 10) | ((*(ushort*)value) << 16);
+		ptr[0] = TRACECODE_DEF | (TRACETYPE_S16 << 10) | (value.u16 << 16);
 		break;
 		
 	case TRACETYPE_S32:
 		ptr = Trace_push(trace, 2);
 		ptr[0] = TRACECODE_DEF | (TRACETYPE_S32 << 10);
-		ptr[1] = *(uint*)value;
+		ptr[1] = value.u32;
 		break;
 
 	case TRACETYPE_S64:
 		ptr = Trace_push(trace, 3);
 		ptr[0] = TRACECODE_DEF | (TRACETYPE_S64 << 10);
-		memcpy(&ptr[1], value, sizeof(int)*2);
+		ptr[1] = value.u64 & 0xffffffff;
+		ptr[2] = (value.u64 >> 32) & 0xffffffff;
 		break;
 	}
 }
@@ -891,6 +891,17 @@ void Trace_ins_move(Trace* trace, int destVar, int destOffset, int srcVar, int s
 	Trace_addUsage(trace, destVar, destOffset, false);
 
 	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16);
+}
+
+trline_t* Trace_ins_if(Trace* trace, uint destVar) {
+	Trace_addUsage(trace, destVar, 0, true);
+	trline_t* l = Trace_push(trace, 1);
+	*l = TRACECODE_IF;
+	return l;
+}
+
+void Trace_ins_jmp(Trace* trace, uint instruction) {
+	*Trace_push(trace, 1) = TRACECODE_JMP | (instruction << 10);
 }
 
 

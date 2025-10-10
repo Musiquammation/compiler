@@ -3,7 +3,7 @@
 
 #include "declarations.h"
 #include "label_t.h"
-
+#include "castable_t.h"
 
 typedef struct  {
 	Expression** args;
@@ -19,20 +19,7 @@ struct Expression {
 		Function* method;
 		char* string;
 
-		char i8;
-		unsigned char u8;
-
-		short i16;
-		unsigned short u16;
-
-		int i32;
-		unsigned int u32;
-
-		float f32;
-		double f64;
-
-		long i64;
-		unsigned long u64;
+		castable_t num;
 
 		struct {
 			Expression* left;

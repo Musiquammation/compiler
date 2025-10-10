@@ -7,20 +7,16 @@ function mul(u: int, v: int): int {
 }
 
 function {
-	let s: int;
-	let a: int;
-	let b: int;
+	let num: int;
+	num = 72;
 
-	a = 10;
-	b = 20;
+	if (num <= 10) {
+		num = num + 1;
+	} else {
+		num = num + 2;
+	}
 
-	s = sum(a, b * 643);
-
-	let f: int;
-	f = mul(b + s, a) - 2 * a;
-
-
-
+	num = num * 2;
 }
 
 

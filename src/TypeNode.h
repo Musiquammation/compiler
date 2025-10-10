@@ -2,6 +2,7 @@
 #define COMPILER_TYPENODE_H_
 
 #include "declarations.h"
+#include "castable_t.h"
 #include "Expression.h"
 
 #include <tools/Array.h>
@@ -29,20 +30,7 @@ struct TypeNode {
 	union {
 		Type* type;
 
-		char i8;
-		unsigned char u8;
-
-		short i16;
-		unsigned u16;
-
-		int i32;
-		unsigned u32;
-
-		float f32;
-		double f64;
-
-		long i64;
-		unsigned long u64;
+		castable_t num;
 	} value;
 };
 
