@@ -6,7 +6,7 @@
 
 struct Type {
 	Class* cl;
-	char isPrimitive;
+	char primitiveSizeCode;
 	void* data;
 };
 

@@ -576,7 +576,7 @@ Class* Syntax_proto(Parser* parser, Scope* scope, Prototype* proto, bool finishB
 	}
 
 	proto->cl = cl;
-	proto->isPrimitive = canBePrimitive ? cl->isPrimitive : false;
+	proto->primitiveSizeCode = canBePrimitive ? cl->primitiveSizeCode : 0;
 	return cl;
 }
 
@@ -713,7 +713,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		cl->name = name;
 		cl->meta = meta;
 		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
-		cl->isPrimitive = 0;
+		cl->primitiveSizeCode = 0;
 		Scope_addClass(scope, scope->type, cl);
 	}
 
@@ -919,7 +919,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 
 			// Return type
 			returnType.cl = &_primitives.class_i32;
-			returnType.isPrimitive = true;
+			returnType.primitiveSizeCode = true;
 			returnTypeAlreadyRead = true;
 
 			// Arguments
@@ -928,7 +928,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 			Variable_create(argc);
 			argc->id  -1;
 			argc->proto.cl = &_primitives.class_i32;
-			argc->proto.isPrimitive = true;
+			argc->proto.primitiveSizeCode = true;
 			
 			/// TODO: edit this prototype (add char** argv)
 			argList[0] = argc;
@@ -1390,7 +1390,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		case 0:
 		{
 			Class* cl = Syntax_proto(parser, &scope->scope, &variable->proto, false);
-			variable->id = (int)Trace_ins_create(trace, variable, cl->size);
+			variable->id = (int)Trace_ins_create(trace, variable, cl->size, 0);
 			break;
 		}
 
@@ -1478,12 +1478,14 @@ void Syntax_functionScope_freeLabel(
 
 				Variable** varrDest = expression->data.property.variableArr;
 				int subLength = expression->data.property.length - 1;
+				int signedSize = Prototype_getSignedSize(&varrDest[subLength]->proto);
+
 				Trace_set(
 					trace,
 					expr,
 					varrDest[0]->id,
-					Variable_getOffsetPath(&varrDest[1], subLength),
-					varrDest[subLength]->proto.cl->size,
+					Variable_getPathOffset(&varrDest[1], subLength),
+					signedSize,	
 					EXPRESSION_PROPERTY
 				);
 
@@ -1500,8 +1502,8 @@ void Syntax_functionScope_freeLabel(
 					trace,
 					expr,
 					varrDest[0]->id,
-					Variable_getOffsetPath(&varrDest[1], subLength),
-					varrDest[subLength]->proto.cl->size,
+					Variable_getPathOffset(&varrDest[1], subLength),
+					Prototype_getSignedSize(&varrDest[subLength]->proto),
 					EXPRESSION_FNCALL
 				);
 
@@ -1521,8 +1523,8 @@ void Syntax_functionScope_freeLabel(
 				trace,
 				expr,
 				varrDest[0]->id,
-				Variable_getOffsetPath(&varrDest[1], subLength),
-				varrDest[subLength]->proto.cl->size,
+				Variable_getPathOffset(&varrDest[1], subLength),
+				Prototype_getSignedSize(&varrDest[subLength]->proto),
 				exprSourceType
 			);
 
@@ -1549,12 +1551,19 @@ void Syntax_functionScope_freeLabel(
 
 			Variable** varr = expression->data.property.variableArr;
 			int subLength = expression->data.property.length - 1;
+			/// TODO: check sizes
+			int signedSize = Prototype_getSignedSize(&varr[subLength]->proto);
+
 			Trace_ins_def(
 				trace,
 				varr[0]->id,
-				Variable_getOffsetPath(&varr[1], subLength),
-				Trace_packSize(varr[subLength]->proto.cl->size),
-				expr->data.num
+				Variable_getPathOffset(&varr[1], subLength),
+				signedSize,
+				castable_cast(
+					Expression_getSignedSize(exprSourceType),
+					signedSize,
+					expr->data.num
+				)
 			);
 
 		} else {
@@ -1643,7 +1652,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 
 			int exprType = expr->type;
-			uint dest = Trace_ins_create(trace, NULL, 4);
+			uint dest = Trace_ins_create(trace, NULL, 4, 0);
 			Trace_set(trace, expr, dest, 0, 4, exprType);
 
 			Expression_free(exprType, expr);
@@ -1720,7 +1729,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			int startInstruction = trace->instruction;
 
 			int exprType = expr->type;
-			uint dest = Trace_ins_create(trace, NULL, 4);
+			uint dest = Trace_ins_create(trace, NULL, 4, 0);
 			Trace_set(trace, expr, dest, 0, 4, exprType);
 
 			Expression_free(exprType, expr);

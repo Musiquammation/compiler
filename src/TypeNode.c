@@ -223,7 +223,7 @@ TypeNode* TypeNode_push(TypeNode* root, Variable* v, Expression* value) {
 	TypeNode* node = malloc(sizeof(TypeNode));
 	node->usage = 0;
 
-	if (v->proto.isPrimitive) {
+	if (v->proto.primitiveSizeCode) {
 		if (value) {
 			/// TODO: set value
 			node->length = TypeNode_getPrimitiveLength(v->proto.cl, true);
@@ -317,7 +317,7 @@ void TypeNode_copy(TypeNode* dest, const TypeNode* src) {
 }
 
 bool TypeNode_fillValue(TypeNode* node, Prototype* proto) {
-	if (proto->isPrimitive) {
+	if (proto->primitiveSizeCode) {
 		node->length = TypeNode_getPrimitiveLength(proto->cl, false);
 		return false;
 	}
@@ -332,17 +332,17 @@ bool TypeNode_fillValue(TypeNode* node, Prototype* proto) {
 
 int TypeNode_getPrimitiveLength(const Class* primitiveClass, bool isDefined) {
 	int result;
-	switch (primitiveClass->isPrimitive) {
-	case  1: result = TYPENODE_LENGTH_I8;  break;
-	case  2: result = TYPENODE_LENGTH_U8;  break;
-	case  3: result = TYPENODE_LENGTH_I16; break;
-	case  4: result = TYPENODE_LENGTH_U16; break;
-	case  5: result = TYPENODE_LENGTH_I32; break;
-	case  6: result = TYPENODE_LENGTH_U32; break;
-	case  7: result = TYPENODE_LENGTH_I64; break;
+	switch (primitiveClass->primitiveSizeCode) {
+	case -1: result = TYPENODE_LENGTH_I8;  break;
+	case  1: result = TYPENODE_LENGTH_U8;  break;
+	case -2: result = TYPENODE_LENGTH_I16; break;
+	case  2: result = TYPENODE_LENGTH_U16; break;
+	case -4: result = TYPENODE_LENGTH_I32; break;
+	case  4: result = TYPENODE_LENGTH_U32; break;
+	case -8: result = TYPENODE_LENGTH_I64; break;
 	case  8: result = TYPENODE_LENGTH_U64; break;
-	case  9: result = TYPENODE_LENGTH_F32; break;
-	case 10: result = TYPENODE_LENGTH_F64; break;
+	case  5: result = TYPENODE_LENGTH_F32; break;
+	case  9: result = TYPENODE_LENGTH_F64; break;
 
 	default:
 		return -1;
@@ -426,7 +426,8 @@ bool TypeNode_checkProto(Prototype* prototype, TypeNode* node) {
 		return true;
 	}
 
-	raiseError("[Type] Type refused");
+	/// TODO: raise this error
+	// raiseError("[Type] Type refused");
 	return false;
 }
 

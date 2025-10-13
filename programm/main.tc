@@ -2,21 +2,18 @@ function sum(u: int, v: int): int {
 
 }
 
-function mul(u: int, v: int): int {
+function square(u: int): int {
 
 }
 
 function {
-	let num: int;
-	num = 72;
+	let a: int;
+	let r: int;
+	a = a + r;
+	r = square(r);
 
-	if (num <= 10) {
-		num = num + 1;
-	} else {
-		num = num + 2;
-	}
-
-	num = num * 2;
+	let s: int;
+	s = r * 7;
 }
 
 

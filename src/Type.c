@@ -4,13 +4,13 @@
 #include <string.h>
 
 Type* Type_newCopy(Type* src) {
-	if (src->isPrimitive)
+	if (src->primitiveSizeCode)
 		return src;
 
 	Type* dest = malloc(sizeof(Type));
 	Class* cl = src->cl;
 	dest->cl = cl;
-	dest->isPrimitive = 0;
+	dest->primitiveSizeCode = 0;
 
 
 	void* srcData = src->data;
@@ -28,7 +28,7 @@ Type* Type_newCopy(Type* src) {
 
 
 void Type_free(Type* type) {
-	if (type->isPrimitive)
+	if (type->primitiveSizeCode)
 		return;
 	
 	if (type->data)

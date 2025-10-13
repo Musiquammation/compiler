@@ -96,11 +96,10 @@ uint Trace_pushVariable(Trace* trace);
 void Trace_removeVariable(Trace* trace, uint index);
 int Trace_reachFunction(Trace* trace, Function* fn);
 
-castable_t Trace_cast(castable_t value, int currentPackedType, int typePackedTarget);
 
 int Trace_packSize(int size);
 int Trace_packExprTypeToSize(int type);
-void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, int size, int exprType);
+void Trace_set(Trace* trace, Expression* expr, uint destVar, uint destOffset, int signedSize, int exprType);
 
 trline_t* Trace_push(Trace* trace, int num);
 
@@ -108,8 +107,8 @@ void TracePack_print(const TracePack* pack);
 
 void Trace_addUsage(Trace* trace, uint variable, uint offset, bool readMode);
 
-uint Trace_ins_create(Trace* trace, Variable* variable, int size);
-void Trace_ins_def(Trace* trace, int variable, int offset, int packedSize, castable_t value);
+uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags);
+void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value);
 void Trace_ins_move(Trace* trace, int destVar, int destOffset, int srcVar, int srcOffset, int size);
 trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
@@ -180,13 +179,16 @@ enum {
 
 	/**
 	 * +00: CODE
-	 * +10: [blank]
+	 * +10: FLAGS (6 bits)
 	 * +16: VARIABLE
 	 * +28: [blank]
 	 * 
-	 * +22: NEXT
-	 * +16: [blank]
 	 * +00: SIZE
+	 * +16: [blank]
+	 * +22: NEXT
+	 * 
+	 * FLAGS are:
+	 * +0: CASTABLE
 	 */
 	TRACECODE_CREATE,
 
@@ -235,7 +237,7 @@ enum {
 	 * +00: CODE
 	 * +10: TYPE
 	 * +12: EDIT (0=register edited ; 1=var edited)
-	 * +14: [blank]
+	 * +13: [blank]
 	 * +16: register id
 	 * +24: [blank]
 	 */
@@ -317,6 +319,19 @@ enum {
 	 * +10: ADDR (22 bits)
 	 */
 	TRACECODE_JMP,
+
+	/**
+	 * +00: CODE
+	 * +10: src  signed?
+	 * +11: src  float?
+	 * +12: dest signed?
+	 * +13: dest float?
+	 * +14: [blank]
+	 * +16: src  size (packed)
+	 * +18: dest size (packed)
+	 * +20
+	 */
+	TRACECODE_CAST
 };
 
 

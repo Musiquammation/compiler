@@ -19,22 +19,22 @@ void primitives_init(void) {
     #define def(id, s, k) \
         _primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
         _primitives.class_##id##s.name = _commonLabels._##id##s; \
-        _primitives.class_##id##s.isPrimitive = k; \
+        _primitives.class_##id##s.primitiveSizeCode = k; \
         _primitives.class_##id##s.size = s/8; \
         _primitives.class_##id##s.maxMinimalSize = s/8; \
         _primitives.type_##id##s.cl = &_primitives.class_##id##s; \
-        _primitives.type_##id##s.isPrimitive = k;\
+        _primitives.type_##id##s.primitiveSizeCode = k;\
         
-    def(i, 8,  1);
-    def(u, 8,  2);
-    def(i, 16, 3);
-    def(u, 16, 4);
-    def(i, 32, 5);
-    def(u, 32, 6);
-    def(i, 64, 7);
+    def(i, 8,  -1);
+    def(u, 8,  1);
+    def(i, 16, -2);
+    def(u, 16, 2);
+    def(i, 32, -4);
+    def(u, 32, 4);
+    def(i, 64, -8);
     def(u, 64, 8);
-    def(f, 32, 9);
-    def(f, 64, 10);
+    def(f, 32, 126);
+    def(f, 64, 127);
 
     #undef def
 

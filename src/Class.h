@@ -19,7 +19,7 @@ struct Class {
 	Class* meta;
 	definitionState_t definitionState;
 	label_t name;
-	char isPrimitive;
+	char primitiveSizeCode;
 	int size;
 	int maxMinimalSize;
 };

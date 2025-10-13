@@ -2,6 +2,8 @@
 
 #include "declarations.h"
 #include "helper.h"
+#include "Function.h"
+#include "Variable.h"
 
 #include <stddef.h>
 #include <tools/Array.h>
@@ -617,6 +619,51 @@ bool Expression_canSimplify(int type, int op1, int op2) {
 
 
 
+int Expression_getSignedSize(int exprType) {
+	switch (exprType) {
+	case EXPRESSION_U8:  return 1;
+	case EXPRESSION_I8:  return -1;
+	case EXPRESSION_U16: return -2;
+	case EXPRESSION_I16: return 2;
+	case EXPRESSION_U32: return 4;
+	case EXPRESSION_I32: return -4;
+	case EXPRESSION_F32: return 5;
+	case EXPRESSION_U64: return 8;
+	case EXPRESSION_I64: return -8;
+	case EXPRESSION_F64: return 9;
+	default: return 0;
+}
+}
 
+int Expression_reachSignedSize(int type, const Expression* expr) {
+	restart:
+	switch (type) {
+	case EXPRESSION_U8:  return 1;
+	case EXPRESSION_I8:  return -1;
+	case EXPRESSION_U16: return -2;
+	case EXPRESSION_I16: return 2;
+	case EXPRESSION_U32: return 4;
+	case EXPRESSION_I32: return -4;
+	case EXPRESSION_F32: return 5;
+	case EXPRESSION_U64: return 8;
+	case EXPRESSION_I64: return -8;
+	case EXPRESSION_F64: return 9;
 
+	case EXPRESSION_PATH:
+		expr = expr->data.target;
+		type = expr->type;
+		goto restart;
+
+	case EXPRESSION_FNCALL:
+		return Prototype_getSignedSize(&expr->data.fncall.object->fn->returnType);
+
+	case EXPRESSION_PROPERTY:
+	{
+		int subLength = expr->data.property.length - 1;
+		return Prototype_getSignedSize(&expr->data.property.variableArr[subLength]->proto);
+	}
+
+	default: return 0;
+	}
+}
 

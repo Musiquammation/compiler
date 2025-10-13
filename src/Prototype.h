@@ -5,12 +5,14 @@
 
 struct Prototype {
 	Class* cl;
-	char isPrimitive;
+	char primitiveSizeCode;
 };
 
 
 Type* Prototype_generateType(Prototype* proto);
 
 bool Prototype_accepts(const Prototype* proto, const Type* type);
+
+int Prototype_getSignedSize(const Prototype* proto);
 
 #endif

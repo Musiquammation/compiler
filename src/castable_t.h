@@ -18,7 +18,13 @@ typedef union {
 	unsigned long u64;
 } castable_t;
 
+enum {
+	CASTABLE_INVALID = 0x7fffffff,
+	CASTABLE_FLOAT = 5,
+	CASTABLE_DOUBLE = 9,
+};
 
+castable_t castable_cast(int srcType, int destType, castable_t value);
 
 
 #endif

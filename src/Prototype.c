@@ -5,13 +5,13 @@
 
 
 Type* Prototype_generateType(Prototype* proto) {
-	if (proto->isPrimitive)
+	if (proto->primitiveSizeCode)
 		return primitives_getType(proto->cl);
 
 	Type* type = malloc(sizeof(Type));
 	Class* cl = proto->cl;
 	type->cl = cl;
-	type->isPrimitive = 0;
+	type->primitiveSizeCode = proto->primitiveSizeCode;
 
 	Class* meta = cl->meta;
 	if (meta) {
@@ -34,3 +34,8 @@ bool Prototype_accepts(const Prototype* proto, const Type* type) {
 	return proto->cl == type->cl;
 }
 
+
+int Prototype_getSignedSize(const Prototype* proto) {
+	int s = proto->primitiveSizeCode;
+	return s ? s : proto->cl->size;
+}

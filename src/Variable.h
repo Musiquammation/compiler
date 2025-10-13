@@ -16,6 +16,7 @@ struct Variable {
 void Variable_create(Variable* variable);
 void Variable_delete(Variable* variable);
 
-int Variable_getOffsetPath(Variable** path, int length);
+int Variable_getPathOffset(Variable** path, int length);
+
 
 #endif
