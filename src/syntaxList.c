@@ -10,6 +10,7 @@
 #define k_else "else"
 #define k_for "for"
 #define k_while "while"
+#define k_return "return"
 #define k_switch "switch"
 #define k_module "module"
 #define k_main "main"
@@ -138,6 +139,7 @@ Token SYNTAXLIST_FUNCTION[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_if},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_for},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_while},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = k_return},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_switch},
 	{.type = TOKEN_CTYPE_LABEL},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RBRACE},

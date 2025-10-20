@@ -1,22 +1,11 @@
-function sum(u: int, v: int): int {
-
-}
-
-function square(u: int): int {
-
-}
-
 function {
 	let a: int;
-	let r: int;
-	a = a + r;
-	r = square(r);
+	let b: int;
+	let c: int;
 
-	let s: int;
-	s = r * 7;
+	a = 5;
+	a = a + 12;
+	return a;
+	
 }
-
-
-
-
-
+	

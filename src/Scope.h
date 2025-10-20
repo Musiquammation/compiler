@@ -32,7 +32,6 @@ struct ScopeFile {
 
 	char generationState;
 	char* id;
-	icounter_t icounter;
 	FILE* output;
 
 	Array variables; // type: Variable*

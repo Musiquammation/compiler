@@ -22,11 +22,13 @@ void Function_delete(Function* fn) {
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf) {
 	ScopeFile* file = Scope_reachFile(&sf->scope);
 
-	fa->ic_ptr = &file->icounter;
 	fa->output = ScopeFile_requireAssembly(file, file->generationState);
-	fa->ic = file->icounter;
+	fa->fn = sf->fn;
 }
 
+void FunctionAssembly_delete(FunctionAssembly* fa) {
+
+}
 
 
 

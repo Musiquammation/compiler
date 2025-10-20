@@ -663,6 +663,37 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 		return Prototype_getSignedSize(&expr->data.property.variableArr[subLength]->proto);
 	}
 
+	case EXPRESSION_ADDITION:
+	case EXPRESSION_SUBSTRACTION:
+	case EXPRESSION_MULTIPLICATION:
+	case EXPRESSION_DIVISION:
+	case EXPRESSION_MODULO:
+	
+	case EXPRESSION_BITWISE_AND:
+	case EXPRESSION_BITWISE_OR:
+	case EXPRESSION_BITWISE_XOR:
+	case EXPRESSION_LEFT_SHIFT:
+	case EXPRESSION_RIGHT_SHIFT:
+	{
+		int signedLeft = Expression_reachSignedSize(
+			expr->data.operands.left->type,
+			expr->data.operands.left
+		);
+
+		int signedRight = Expression_reachSignedSize(
+			expr->data.operands.right->type,
+			expr->data.operands.right
+		);
+
+		int left = signedLeft >= 0 ? signedLeft : -signedLeft;
+		int right = signedRight >= 0 ? signedRight : -signedRight;
+		return left <= right ? signedLeft : signedRight;
+	}
+
+
+	/// TODO: logical operations (max of operands)
+
+
 	default: return 0;
 	}
 }

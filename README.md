@@ -1,6 +1,6 @@
 # Présentation
 ## Introduction
-`Mirra` est un compilateur *a priori* ordinaire, à la différence près que chaque variable peut intégrer des données connues à la compilation pour faire des vérifications, ou assurer que des tests ont bien été effectués.
+`Look` est un langage de programmation compilé qui, à chaque variable, permet d'intégrer des données connues à la compilation pour faire des vérifications, ou assurer que des tests ont bien été effectués.
 En ce sens, on peut voir ce langage comme un version compilée et plus poussée de `TypeScript`.
 
 ## Un premier exemple en C
@@ -36,7 +36,7 @@ Alors, plusieurs problèmes peuvent survenir :
 - si l'on inclue des vérifications sur la weapon au moment de `Player_useWeapon`, et qu'on l'utilise plusieurs fois, des instructions seront redondantes, augmentant le temps d'execution (bien sûr, ici cela est négligeable, mais sûr des sections plus critiques, mais on peut chercher à réduire le nombre d'instructions redondantes). On pourrait alors faire un test hors de `Player_useWeapon`, mais il y a là encore risque d'oubli.
 
 ## Solution
-L'idée de `Mirra` est de charger le compilateur de faire toutes ces vérifications pour nous. Pour cela, chaque classe peut intégrer une *meta class*, qui possède des données stockées à la compilation mais inexistantes au moment de l'execution.
+L'idée de `Look` est de charger le compilateur de faire toutes ces vérifications pour nous. Pour cela, chaque classe peut intégrer une *meta class*, qui possède des données stockées à la compilation mais inexistantes au moment de l'execution.
 Ainsi, la *meta class* (que l'on rédigera) se chargera de faire toutes les vérifications pour nous.
 
 ## Implémentation
@@ -147,7 +147,7 @@ De plus, l'utilisation des pointeurs n'est pas parfaite (notemment avec `get()`)
 
 Enfin, on peut remarquer que si au runtime on modifie les données de weapon pour y mettre un type invalide, alors on peut executer useWeapon avec des données invalides.
 
-Bien sûr, `Mirra` offre des outils pour lutter contre cela, que nous verrons par la suite.
+Bien sûr, `Look` offre des outils pour lutter contre cela, que nous verrons par la suite.
 
 
 # Structure

@@ -11,34 +11,32 @@
 #include <tools/Array.h>
 
 struct Function {
-    label_t name;
-    definitionState_t definitionState;
+	label_t name;
+	definitionState_t definitionState;
 
-    Array arguments; // type: Variable*
-    Prototype returnType;
+	Array arguments; // type: Variable*
+	Prototype returnType;
 };
 
 /// TODO: init defnodes
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
-    TypeNode* rootNode;
+	TypeNode* rootNode;
 
-    Array variables; // type: Variable*  
+	Array variables; // type: Variable*  
 };
 
 struct FunctionAssembly {
-    icounter_t* ic_ptr;
-    FILE* output;
-
-    icounter_t ic;
+	Function* fn;
+	FILE* output;
 };
 
 void Function_create(Function* fn);
 void Function_delete(Function* fn);
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
-
+void FunctionAssembly_delete(FunctionAssembly* fa);
 
 
 void ScopeFunction_create(ScopeFunction* scope);

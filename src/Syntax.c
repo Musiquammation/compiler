@@ -1484,7 +1484,6 @@ void Syntax_functionScope_freeLabel(
 					trace,
 					expr,
 					varrDest[0]->id,
-					Variable_getPathOffset(&varrDest[1], subLength),
 					signedSize,	
 					EXPRESSION_PROPERTY
 				);
@@ -1502,7 +1501,6 @@ void Syntax_functionScope_freeLabel(
 					trace,
 					expr,
 					varrDest[0]->id,
-					Variable_getPathOffset(&varrDest[1], subLength),
 					Prototype_getSignedSize(&varrDest[subLength]->proto),
 					EXPRESSION_FNCALL
 				);
@@ -1523,7 +1521,6 @@ void Syntax_functionScope_freeLabel(
 				trace,
 				expr,
 				varrDest[0]->id,
-				Variable_getPathOffset(&varrDest[1], subLength),
 				Prototype_getSignedSize(&varrDest[subLength]->proto),
 				exprSourceType
 			);
@@ -1557,7 +1554,6 @@ void Syntax_functionScope_freeLabel(
 			Trace_ins_def(
 				trace,
 				varr[0]->id,
-				Variable_getPathOffset(&varr[1], subLength),
 				signedSize,
 				castable_cast(
 					Expression_getSignedSize(exprSourceType),
@@ -1653,7 +1649,9 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 			int exprType = expr->type;
 			uint dest = Trace_ins_create(trace, NULL, 4, 0);
-			Trace_set(trace, expr, dest, 0, 4, exprType);
+			
+			/// TODO: handle size
+			Trace_set(trace, expr, dest, -4, exprType);
 
 			Expression_free(exprType, expr);
 			free(expr);
@@ -1728,9 +1726,10 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			
 			int startInstruction = trace->instruction;
 
+			/// TODO: handle size
 			int exprType = expr->type;
 			uint dest = Trace_ins_create(trace, NULL, 4, 0);
-			Trace_set(trace, expr, dest, 0, 4, exprType);
+			Trace_set(trace, expr, dest, -4, exprType);
 
 			Expression_free(exprType, expr);
 			free(expr);
@@ -1751,22 +1750,52 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			break;
 		}
 
-		// switch
+		// return
 		case 5:
+		{
+			Expression* expr = Syntax_expression(parser, &scope->scope, true);
+			int exprType = expr->type;
+			int signedSize = Prototype_getSignedSize(&scope->fn->returnType);
+			int size = signedSize >= 0 ? signedSize : -signedSize;
+			uint variable = Trace_ins_create(trace, NULL, size, 0);
+
+			
+			// Set value
+			Trace_set(trace, expr, variable, signedSize, exprType);
+			Expression_free(exprType, expr);
+			free(expr);
+			
+			// Place value in rax
+			Trace_ins_place(trace, variable, TRACE_REG_RAX, Trace_packSize(size), 0);
+			
+			Trace_removeVariable(trace, variable);
+
+			*Trace_push(trace, 1) = TRACECODE_STAR | (2<<10);
+
+
+			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
+				return;
+
+			break;
+		}
+
+		// switch
+		case 6:
 		{
 			raiseError("[TODO] in Syntax_functionScope: switch");
 			break;
 		}
 
 		// free label
-		case 6:
+		case 7:
 		{
 			Syntax_functionScope_freeLabel(scope, parser, token, trace);
 			break;
 		}
 
 		// finish scope
-		case 7:
+		case 8:
 		{
 			goto finishScope;
 		}
@@ -1795,10 +1824,6 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn) {
 	};
 	
 	Trace trace;
-	{
-		ScopeFile* file = Scope_reachFile(scope);
-		trace.icounter = file->icounter;
-	}
 	Trace_create(&trace);
 
 	
@@ -1812,15 +1837,30 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn) {
 	free(fnScope.rootNode);
 	ScopeFunction_delete(&fnScope);
 
+	*Trace_push(&trace, 1) = TRACECODE_STAR;
 
-	TracePack_print(trace.last);
+
+	TracePack* pack = trace.first;
+	int position = 0;
+	while (pack) {
+		TracePack_print(pack, position);
+		position += pack->completion+1;
+		pack = pack->next;
+	}
 
 
+	Trace_placeRegisters(&trace);
+
+	
+	
+	FunctionAssembly fnAsm;
+	FunctionAssembly_create(&fnAsm, &fnScope);
+	
+	Trace_generateAssembly(&trace, &fnAsm);
+	FunctionAssembly_delete(&fnAsm);
+
+	
 	Trace_delete(&trace);
-
-	// FunctionAssembly fnAsm;
-	// FunctionAssembly_create(&fnAsm, &fnScope);
-
 	fn->definitionState = DEFINITIONSTATE_DONE;
 }
 

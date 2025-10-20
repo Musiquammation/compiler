@@ -39,12 +39,15 @@ clean:
 
 # Débogage avec gdb
 debug: $(TARGET)
-	gdb --args ./$(TARGET) programm out
+	gdb --args ./$(TARGET) $(ARGS)
 
 # Par défaut
 ARGS ?= programm out
 
 run: all
 	clear
-	./$(TARGET) $(ARGS)
+	./$(TARGET) $(ARGS) | tee draft/output.txt
 
+print: all
+	clear
+	./$(TARGET) $(ARGS)

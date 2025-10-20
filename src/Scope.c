@@ -1,5 +1,6 @@
 #include "Scope.h"
 
+
 #include "Expression.h"
 #include "Module.h"
 #include "Variable.h"
@@ -13,6 +14,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 
 void Scope_delete(Scope* scope, int scopeType) {
@@ -273,7 +276,6 @@ void Scope_addFunction(Scope* scope, int scopeType, Function* fn) {
 void ScopeFile_create(ScopeFile* file) {
 	file->scope.type = SCOPE_FILE;
 	file->generationState = SCOPEFILE_GENERATION_NONE;
-	file->icounter = 0;
 
 	Array_create(&file->variables, sizeof(Variable*));
 	Array_create(&file->classes, sizeof(Class*));
@@ -283,6 +285,12 @@ void ScopeFile_create(ScopeFile* file) {
 void ScopeFile_free(ScopeFile* file) {
 	free(file->filepath);
 	
+	switch (file->generationState) {
+	case SCOPEFILE_GENERATION_ID:
+		free(file->id);
+		break;
+	}
+
 	Array_loopPtr(Variable, file->variables, v) {
 		Variable* o = *v;
 		Variable_delete(o);
@@ -336,6 +344,42 @@ char* ScopeFile_requireId(ScopeFile* file, char generationState) {
 	return file->id;
 }
 
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+
+int mkdir_p(const char *path) {
+    if (!path || !*path) return -1;
+
+    size_t len = strlen(path);
+    char *tmp = malloc(len + 1);
+    if (!tmp) return -1;
+    strcpy(tmp, path);
+
+    if (len > 0 && tmp[len - 1] == '/')
+        tmp[len - 1] = '\0';
+
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, 0755) && errno != EEXIST) {
+                free(tmp);
+                return -1;
+            }
+            *p = '/';
+        }
+    }
+
+    free(tmp);
+    return 0;
+}
+
+
+
 FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 	switch (generationState) {
 	case SCOPEFILE_GENERATION_NONE:
@@ -347,14 +391,26 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 		char* binFolder = Scope_reachModule(&file->scope)->binFolder;
 		char* filepath = file->filepath;
 
-		size_t len = strlen(binFolder) + 1   // '/'
-	           + strlen(filepath) + 4;  // ".asm" + '\0'
+		size_t len = strlen(binFolder) + strlen(filepath) + 6;
 
 		char* path = malloc(len);
 
 		sprintf(path, "%s/%s.asm", binFolder, filepath);
+		mkdir_p(path);
 
 		FILE* f = fopen(path, "w");
+		printf("path: %s\n", path);
+		free(path);
+		
+		if (f == NULL) {
+			raiseError("[File] Cannot create assembly file");
+			return NULL;
+		}
+		
+
+		// Write text section
+		fprintf(f, "section .text\n\n\n");
+
 		file->output = f;
 		return f;
 	}
@@ -366,6 +422,7 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 
 	}
 
+	raiseError("[Architecture] Cannot require assembly");
 	return NULL;
 }
 

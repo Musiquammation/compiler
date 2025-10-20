@@ -4,7 +4,6 @@
 #include <tools/tools.h>
 
 
-typedef unsigned long long icounter_t;
 
 structdef(Scope);
 structdef(ScopeFile);
