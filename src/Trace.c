@@ -1,5 +1,7 @@
 #include "Trace.h"
 
+#include "TraceStackHandler.h"
+
 #include "Variable.h"
 #include "Function.h"
 #include "Class.h"
@@ -522,6 +524,16 @@ int Trace_packSize(int size) {
 		case 2: return 1;
 		case 4: return 2;
 		case 8: return 3;
+		default: raiseError("[Trace] Invalid size of operation"); return -1;
+	}
+}
+
+int Trace_unpackSize(int psize) {
+	switch (psize) {
+		case 0: return 1;
+		case 1: return 2;
+		case 2: return 4;
+		case 3: return 8;
 		default: raiseError("[Trace] Invalid size of operation"); return -1;
 	}
 }
@@ -1143,6 +1155,7 @@ void Trace_ins_place(Trace* trace, int variable, int reg, int packedSize, int se
 
 enum {
 	NO_VICTIM = 0xffffffff,
+	STACK_BLOCKS = 64
 };
 
 typedef struct {
@@ -1153,6 +1166,13 @@ typedef struct {
 	int source; // stack region to free
 	int victimStackId; // for the victim
 } Replace;
+
+
+
+
+
+
+
 
 
 int Trace_reg_chooseFast(const TraceRegister regs[]) {
@@ -1446,12 +1466,15 @@ static const char* ARITHMETIC_NAMES[] = {
 	"neg"
 };
 
-void Trace_printUsage(Trace* trace, FILE* output, int type, int use) {
+void Trace_printUsage(Trace* trace, FILE* output, int psize, int use) {
 	if (use >= 0) {
-		fprintf(output, "%s[rsp-%d]", REGISTER_SIZENAMES[type], use);
+		printf("use %d\n", use);
+		int size = Trace_unpackSize(psize);
+		int pos = TraceStackHandler_guarantee(&trace->stackHandler, size, size, use);
+		fprintf(output, "%s[rsp-%d]", REGISTER_SIZENAMES[psize], pos);
 	} else {
 		if (use >= TRACE_REG_NONE) {use = 0;}
-		fprintf(output, "%s", REGISTER_NAMES[type][-use]);
+		fprintf(output, "%s", REGISTER_NAMES[psize][-use]);
 	}	
 } 
 
@@ -1462,6 +1485,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	// Init data
 	VarInfoTrace* varInfos = trace->varInfos;
 	TraceRegister* regs = trace->regs;
+	TraceStackHandler stackHandler;
+	TraceStackHandler_create(&trace->stackHandler, trace->stackId);
 
 
 	fprintf(output, "fn_%p: ; %s\n", fnAsm->fn, fnAsm->fn->name);
@@ -1488,9 +1513,11 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			if (victim >= 0) {
 				fprintf(output, "\tmov ");
 				int psize = Trace_packSize(varInfos[victim].size);
+				int victimStackId = replace->victimStackId;
+
 				Trace_printUsage(
 					trace, output, psize,
-					replace->victimStackId
+					victimStackId
 				);
 				fprintf(output, ", ");
 				Trace_printUsage(
@@ -1499,11 +1526,12 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				);
 				fprintf(output, "; replacement\n");
 
-				varInfos[victim].store = replace->victimStackId;
+				varInfos[victim].store = victimStackId;
 			}
 
 			int source = replace->source;
-			/// TODO: free source region
+			
+			/// TODO: free source region ?
 
 			replace++;
 		}
@@ -1515,9 +1543,17 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		// Usage
 		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
 			trline_t varIdx = line >> 10;
-			uses[usageCompletion] = varInfos[varIdx].store;
+			int store = varInfos[varIdx].store;
+			if (store >= 0 && code == 0) {
+				printf("rem %d\n" , store);
+				store = TraceStackHandler_remove(
+					&trace->stackHandler,
+					store,
+					varInfos[varIdx].size
+				);
+			}
+			uses[usageCompletion] = store;
 			usageCompletion++;
-
 			continue;
 		}
 
@@ -1718,6 +1754,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				uint64_t value = (uint64_t)lo | (((uint64_t)hi) << 32);
 				fprintf(output, ", %ld\n", value);
 
+
 			}
 			}
 
@@ -1761,9 +1798,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	}
 
 	finishWhile:
+	TraceStackHandler_free(&trace->stackHandler);
 
 	fprintf(output, "\tret\n");
-
 }
 
 

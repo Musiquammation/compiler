@@ -3,6 +3,7 @@
 
 #include "declarations.h"
 #include "castable_t.h"
+#include "TraceStackHandler.h"
 
 #include "util/Stack.h"
 
@@ -80,6 +81,7 @@ typedef struct {
 	int store; // positive => stackId, negative => register
 } VarInfoTrace;
 
+
 struct Trace {
 	int instruction;
 
@@ -91,14 +93,16 @@ struct Trace {
 			Array variables; // type: VariableTrace
 			Stack varPlacements; // type: uint
 		};
-
+		
 		struct {
 			Array replaces; // type: Replace
 			VarInfoTrace* varInfos; // type: VarInfo
 			TraceRegister* regs;
 			int stackId;
+			TraceStackHandler stackHandler;
 		};
 	};
+
 	TraceFunctionMap calledFunctions;
 
 	int tempRegisters[TRACE_TEMP_REGISTERS];
@@ -116,6 +120,7 @@ int Trace_reachFunction(Trace* trace, Function* fn);
 
 
 int Trace_packSize(int size);
+int Trace_unpackSize(int psize);
 int Trace_packExprTypeToSize(int type);
 void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int exprType);
 
