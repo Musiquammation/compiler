@@ -1,163 +1,221 @@
 # Présentation
 ## Introduction
-`Look` est un langage de programmation compilé qui, à chaque variable, permet d'intégrer des données connues à la compilation pour faire des vérifications, ou assurer que des tests ont bien été effectués.
+`Look` est un langage de programmation compilé qui, à chaque variable, permet d'intégrer des données connues à la compilation, et modifiables, afin de faire des vérifications, ou assurer que des tests ont bien été effectués.
 En ce sens, on peut voir ce langage comme un version compilée et plus poussée de `TypeScript`.
 
-## Un premier exemple en C
-Supposons que l'on travaille avec un `Player` qui puisse avoir *(ou non)* une `Weapon` à la main.
-
-Une manière classique de représenter cela en C serait avec le code suivante :
+## Motivation
+Supposons par exemple que l'on souhaite créer une fonction `gmean` qui renvoit $\sqrt{ab}$ si $a\ge0$ et $b\ge0$.
+Une implémentation en C serait suivante :
 ```c
-typedef struct {
-	int type;
+int gmean(int a, int b) {
+	if (a >= 0 && b >= 0) {
+		return sqrt(a*b); // from <math.h>
+	} else {
+		return -1;
+	}
+}
 
-	// some large data
+void test(void) {
+	printf("%d\n", gmean(8,2)); // output: 4
+	printf("%d\n", gmean(-9, 9)); // output: -1
+}
+```
 
-	union {
-		// data according to the type of the weapon
-	} data;
-} Weapon;
+Mais on peut voir deux problèmes à cette implémentation :
+- on doit systématiquement vérifier si $a\ge0$ et $b\ge0$, alors que dans la plupart des appels, cela sera vrai (ou pire si on appelle plusieurs fois `gmean` avec un même nombre le test sera redondant)
+- on ne voit les erreurs qu'au *runtime*, alors qu'elles auraient pu facilement être anticipées.
 
-typedef struct {
-	Weapon* weapon;
-} Player;
 
-void Player_useWeapon(Player* player);
+## Résolution
+Pour cela, l'idée est de ne définir `gmean` à la compilation qu'à condition que `a` et `b` soient positifs. Ainsi, si `a` ou `b` est négatif, alors `gmean` ne sera tout simplement pas définie.
+
+Pour cela, on crée une classe `Integer` *(qui dans le langage est standard et plus fournie)* qui au runtime ne contient qu'un `int` (la valeur), mais à la compilation contient une information sur le signe.
+
+
+```look
+class Integer {
+	// compilation-time data
+	for {
+		sign: enum {UNKNOWN, ZERO, POSITIVE, NEGATIVE};
+
+		@test
+		isPositive{sign == $ZERO || $POSITIVE}
+	}
+
+	// runtime data
+	value: i32;
+}
+
+function gmean(a: Integer[isPositive], b: Integer[isPositive]) {
+	return std::sqrt(a.value * b.value);
+}
+
+function test() {
+	const a1 = Integer{8}; // isPositive returns true
+	const b1 = Integer{2};
+	sys::println(gmean(a1, b1));
+
+	const a2 = Integer{-9}; // isPositive returns false
+	const b2 = Integer{9};
+	sys::println(gmean(a2, b2)); // throws a compile-time error
+}
 
 
 ```
 
-Mais le problème est le suivant : supposons qu'il faille rédiger `Player_useWeapon`
-Pour cela, il faut s'assurer que l'arme puisse être utilisée par le joueur *(si dans notre jeu il y a des armes que notre joueur ne peut pas utiliser)*. Et de plus, il faut s'assurer que le pointeur sur weapon est valide.
-
-Alors, plusieurs problèmes peuvent survenir :
-- le développeur oublie qu'il faut effectuer ces vérifications, causant une *segfault* ou des *undefined behaviors*
-- l'objet `Player` n'a pas été initalisé, resultant en une erreur
-- si l'on inclue des vérifications sur la weapon au moment de `Player_useWeapon`, et qu'on l'utilise plusieurs fois, des instructions seront redondantes, augmentant le temps d'execution (bien sûr, ici cela est négligeable, mais sûr des sections plus critiques, mais on peut chercher à réduire le nombre d'instructions redondantes). On pourrait alors faire un test hors de `Player_useWeapon`, mais il y a là encore risque d'oubli.
-
-## Solution
-L'idée de `Look` est de charger le compilateur de faire toutes ces vérifications pour nous. Pour cela, chaque classe peut intégrer une *meta class*, qui possède des données stockées à la compilation mais inexistantes au moment de l'execution.
-Ainsi, la *meta class* (que l'on rédigera) se chargera de faire toutes les vérifications pour nous.
-
-## Implémentation
-Voici une première implémentation naïve sans les outils qu'offre le langage.
-
-```mirra
-function isPlayerType(type: int): bool; // we don't care of the content
-
-class MetaWeapon {
-	typeKnown: bool = false;
-	typeForPlayer: enum {UNKNOWN, TRUE, FALSE} = $UNKNOWN;
-	type: int;
+> On verra plus tard comment les données dans `sign` sont définies.
 
 
-	setType(type: int) {
-		this.typeKnown = true;
-		this.type = type;
+On remarque même qu'en connaissant la valeur pendant la compilation, on pourrait directement appeler `gmean` à la compilation et remplacer l'appel directement par le résultat.
+Voyons justement comment faire.
 
-		if (isPlayerType(type)) {
-			this.typeForPlayer = $TRUE;
-		} else {
-			this.typeForPlayer = $FALSE.
-		}
+
+
+# Données 
+## Surchage
+Il est possible de surcharger des fonctions afin de faire des optimisations.
+Voici un exemple, où l'on enregistre les données à la compilation, et où l'on peut tenter de calculer directement à la compilation.
+
+Il est néanmoins à noter que les données peuvent être lues mais ne peuvent pas être modifiées avec cette méthode.
+
+```look
+class Integer {
+	for {
+		val: i32;
+		val_known: bool;
+		sign: enum {UNKNOWN, POSITIVE, NEGATIVE};
+
+		@test
+		isPositive{sign == $POSITIVE}
 	}
 
-	markAsPlayerValid() {
-		this.isForPlayer = $TRUE;
-	}
+	value: i32;
 }
 
-@meta(MetaWeapon)
-class Weapon {
-	type: int;
-	// add some other data
+// default function
+function gmean(a: Integer[isPositive], b: Integer[isPositive]) {
+	return Integer<sign=$POSITIVE>{std::sqrt(a.value * b.value)};
+}
 
-	isPlayerType() {
-		// Optimization
-		if (this::type == $TRUE) {
-			return true;
-		}
+// optimized function
+class KnownPositiveInteger = Integer[val_known, isPositive];
 
-		if (this::type == $FALSE) {
-			return false;
-		}
+@predictible // result known at compile-time
+function geman(a: KnownPositiveInteger, b: KnownPositiveInteger) {
+	const value = gmean(a::value, b::value);
+	return Integer<sign=$POSITIVE, val=value>{value};
+}
 
-		// Test at runtime
-		return isPlayerType(type);
-	}
+function test() {
+	const a1 = Integer{8}; // type: Integer<sign=$POSITIVE, value=8, val_known=true>
+	const b1 = Integer{2};
+	const m1 = gmean(a1, b1); type: Integer<sign=$POSITIVE, value=4, val_known=true>
 
-	setType(type: int) {
-		this.type = type;
-		this::setType(type);
-	}
-
-	@require(isPlayerType)
-	useAsPlayer(player: Player);
+	const direct = m1.value; // compiled as "direct = 4;"
 }
 
 
+```
+
+On interdit que des fonctions puissent modifier le type de leurs arguments. C'est aux classes de gérer leurs arguments.
 
 
+## Méthodes
+Une classe peut contenir des méthodes. Ces dernières sont déclarées dans la défintion de la classe, elle-même dans un fichier `.th`, et sont définies dans un fichier `.tc`, un peu comme en C.
 
+Créeons par exemple une méthode qui met un `Integer` à sa valeur absolue :
+```look
+// Integer.th
+class {
+	for {
+		val: i32;
+		val_known: bool;
+		sign: enum {UNKNOWN, POSITIVE, NEGATIVE};
 
-class MetaPlayer {
-	isValidWeapon: enum {UNKNOWN, TRUE, FALSE} = UNKNOWN;
-}
-
-@meta(MetaPlayer)
-class Player {
-	weapon: Pointer<Weapon, $nullable, $readonly>;
-
-
-	@require(this.weapon::isReadable == $TRUE)
-	@require(this.weapon.get()::type == $TRUE)
-	useWeapon() {
-		/** no errors because:
-		 * this.weapon is readable
-		 * and this.weapon.get() satisfies useAsPlayer.
-		 *
-		 * required members have be set to true
-		*/
-		this.weapon.get().useAsPlayer(this);
+		@test
+		isPositive{sign == $POSITIVE}
 	}
 
+	value: i32;
+
+	setToAbsolute();
 }
+```
 
-
-@main
-function {
-	let weapon: Weapon;
-	weapon.setType(3); // it is a valid type for player
-	compiler::println(weapon::typeForPlayer); // output: TRUE
-	
-
-	let player: Player;
-	player.useWeapon(Pointer::to($weapon));
-
-	// So we can call useWeapon
-	player.useWeapon();
+```look
+// Integer.tc
+function setToAbsolute {
+	if (this.value < 0) {
+		this.value = -this.value;
+	}
 }
 ```
 
 
-## Limites de l'implémentation
+Mais cette implémentation ne modifie pas sign au compile time. On pourrait ainsi avoir :
+```look
+function test() {
+	let a = Integer{-42};
+	a.setToAbsolute(); // we should set sign from NEGATIVE to POSITIVE
+	gmean(a, 10); // compile-time error because sign is NEGATIVE
+}
+```
 
-Notons qu'on aurait même pû exiger que le membre weapon soit valide directement en mettant, dans setWeapon, un @require(weapon::typeForPlayer == `$TRUE`).
-De plus, l'utilisation des pointeurs n'est pas parfaite (notemment avec `get()`). On verra par la suite comment l'améliorer.
+On doit ainsi rajouter une fonction de contrôle pour spécifier qu'il y a des opérations à faire à la compilation.
 
-Enfin, on peut remarquer que si au runtime on modifie les données de weapon pour y mettre un type invalide, alors on peut executer useWeapon avec des données invalides.
+On aura ainsi la classe suivante :
+```look
+class {
+	for {
+		val: i32;
+		val_known: bool;
+		sign: enum {UNKNOWN, POSITIVE, NEGATIVE};
 
-Bien sûr, `Look` offre des outils pour lutter contre cela, que nous verrons par la suite.
+		@test
+		isPositive{sign == $POSITIVE}
+	}
+
+	value: i32;
+
+	@controlled
+	setToAbsolute();
+}
+```
+
+On a ainsi ce code :
+```look
+// for compilation
+@control
+function setToAbsolute {
+	this.sign = POSITIVE;
+	if (this.val_known && this.val < 0) {
+		this.val = -this.val;
+	}
+}
+
+// for runtime
+function setToAbsolute {
+	if (this.value < 0) {
+		this.value = -this.value;
+	}
+}
+```
 
 
-# Structure
+Ainsi, dans l'exemple `test`, l'erreur de compilation disparaîtra.
+
+
+## Appels à des fonctions controllées
 
 
 
 
 
+# Librairie standard
 
 
+
+# Pointeurs
 
 
 
