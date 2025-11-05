@@ -78,6 +78,7 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(const);
 	def(class);
 	def(function);
+	def(this);
 	def(if);
 	def(else);
 	def(for);
@@ -86,7 +87,7 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 
 	def(module);
 	def(main);
-	def(meta);
+	def(control);
 
 	def(i8);
 	def(u8);

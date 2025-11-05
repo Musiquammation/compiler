@@ -17,13 +17,21 @@ static int cmpLabelPtr(const void* a, const void* b) {
 
 void primitives_init(void) {
     #define def(id, s, k) \
-        _primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
         _primitives.class_##id##s.name = _commonLabels._##id##s; \
+        _primitives.class_##id##s.meta = NULL; \
+        _primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
         _primitives.class_##id##s.primitiveSizeCode = k; \
+        _primitives.class_##id##s.isRegistrable = true; \
         _primitives.class_##id##s.size = s/8; \
         _primitives.class_##id##s.maxMinimalSize = s/8; \
-        _primitives.type_##id##s.cl = &_primitives.class_##id##s; \
+        _primitives.proto_##id##s.size = s/8; \
+        _primitives.proto_##id##s.maxMinimalSize = s/8; \
+        _primitives.proto_##id##s.meta_size = -2; \
+        _primitives.proto_##id##s.meta_maxMinimalSize = -2; \
+        _primitives.proto_##id##s.primitiveSizeCode = k; \
+        _primitives.type_##id##s.proto = &_primitives.proto_##id##s; \
         _primitives.type_##id##s.primitiveSizeCode = k;\
+        _primitives.type_##id##s.data = NULL;\
         
     def(i, 8,  -1);
     def(u, 8,  1);

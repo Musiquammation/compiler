@@ -24,11 +24,18 @@ enum {
 
 typedef struct {
 	label_t defaultName;	
-} Syntax_FunctionDeclaration;
+	Class* definedClass;
+} Syntax_FunctionDeclarationArg;
 
 typedef struct {
 	label_t defaultName;
-} Syntax_ClassDeclaration;
+} Syntax_ClassDeclarationArg;
+
+typedef struct {
+	Array controlFunctions; // type: label_t
+} Syntax_ClassDefinitionArg;
+
+
 
 void Syntax_thFile(ScopeFile* scope);
 void Syntax_tcFile(ScopeFile* scope);
@@ -37,12 +44,13 @@ void Syntax_module(Module* module, const char* filepath);
 void Syntax_order(Scope* scope, Parser* parser);
 void Syntax_declarationList(Scope* scope, Parser* parser);
 
-void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_ClassDeclaration* defaultData);
-void Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl);
+void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_ClassDeclarationArg* defaultData);
+void Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs);
 
-void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_FunctionDeclaration* defaultData);
-Array Syntax_functionArguments(Scope* scope, Parser* parser);
-bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn);
+void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
+Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);
+void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* expr);
+bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
 
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope);
 void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool);

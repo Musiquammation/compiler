@@ -20,6 +20,7 @@ struct CommonLabels {
 	label_t _const;
 	label_t _class;
 	label_t _function;
+	label_t _this;
 	label_t _if;
 	label_t _else;
 	label_t _for;
@@ -28,7 +29,7 @@ struct CommonLabels {
 	
 	label_t _module;
 	label_t _main;
-	label_t _meta;
+	label_t _control;
 	
 	label_t _i8;
 	label_t _u8;

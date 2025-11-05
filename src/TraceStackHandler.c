@@ -125,7 +125,6 @@ int TraceStackHandler_reach(TraceStackHandler* handler, int label) {
 	return handler->labels[label];
 }
 
-
 int TraceStackHandler_guarantee(TraceStackHandler* handler, int size, int anchor, int label) {
 	if (handler->labels[label] >= 0) {
 		return handler->labels[label];
@@ -191,6 +190,6 @@ int TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
 	// Insérer le nouveau trou fusionné
 	insertHole(handler, newPos, newSize);
 	
-	return 0;
+	return label;
 }
 

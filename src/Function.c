@@ -2,9 +2,12 @@
 
 #include "Variable.h"
 #include "Scope.h"
-#include "TypeNode.h"
+#include "Class.h"
 
 #include "helper.h"
+
+#include <string.h>
+
 
 
 void Function_create(Function* fn) {
@@ -33,26 +36,52 @@ void FunctionAssembly_delete(FunctionAssembly* fa) {
 
 
 void ScopeFunction_create(ScopeFunction* scope) {
-	Array_create(&scope->variables, sizeof(Variable*));
+	// Add defintions
+	int argLength = scope->fn->arguments.length;
+	Array_create(&scope->types, sizeof(TypeDefinition));
+
+	Variable** arguments = scope->fn->arguments.data;
+	for (int i = 0; i < argLength; i++) {
+		Variable* v = arguments[i];
+		TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
+		Prototype_reachSize(&v->proto, &scope->scope);
+
+		Type* type = Prototype_generateType(&v->proto);
+		printf("generate %p\n", type);
+		def->variable = v;
+		def->type = type;
+	}
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
-	Array_loopPtr(Variable, scope->variables, v_ptr) {
-		Variable* v = *v_ptr;
-		Variable_delete(v);
-		free(v);
-	} 
-
-	Array_free(scope->variables);
+	int arglen = scope->fn->arguments.length;
+	int typelen = scope->types.length;
+	TypeDefinition* types = scope->types.data;
+	
+	for (int i = 0; i < typelen; i++) {
+		TypeDefinition* td = &types[i];
+		Type_free(td->type);
+		
+		if (i >= arglen) {
+			Variable* v = td->variable;
+			Variable_delete(v);
+			free(v);
+		}
+	}
+	
+	Array_free(scope->types);
+	
 }
 
 
 
 Variable* ScopeFunction_searchVariable(ScopeFunction* scope, label_t name, ScopeSearchArgs* args) {
-	Array_loopPtr(Variable, scope->variables, ptr) {
-		Variable* v = *ptr;
-		if (v->name == name)
-			return v;
+	if (name == _commonLabels._this && scope->thisvar)
+		return scope->thisvar;
+
+	Array_loop(TypeDefinition, scope->types, td) {
+		if (td->variable->name == name)
+			return td->variable;
 	}
 
 	return NULL;
@@ -69,7 +98,7 @@ Function* ScopeFunction_searchFunction(ScopeFunction* scope, label_t name, Scope
 
 void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v) {
 	/// TODO: let this code ?
-	ScopeFunction_pushVariable(scope, v, NULL)->value.type = NULL;
+	ScopeFunction_pushVariable(scope, v, NULL);
 }
 
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
@@ -82,7 +111,20 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 }
 
 
-TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
-	*Array_push(Variable*, &scope->variables) = v;
-	return TypeNode_push(scope->rootNode, v, value);
+Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
+	TypeDefinition* td = Array_push(TypeDefinition, &scope->types);
+	Type* type = Prototype_generateType(&v->proto);
+	td->type = type;
+	td->variable = v;
+
+	return type;
+}
+
+
+Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variable) {
+	Array_loop(TypeDefinition, scope->types, m)
+		if (m->variable == variable)
+			return m->type;
+
+	return NULL;
 }

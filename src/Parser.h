@@ -31,7 +31,7 @@ struct Annotation {
 	int type;
 
 	union {
-		label_t meta;
+		
 	};
 };
 
@@ -174,8 +174,8 @@ enum {
 };
 
 enum {
-	ANNOTATION_META,
 	ANNOTATION_MAIN,
+	ANNOTATION_CONTROL,
 };
 
 
@@ -193,6 +193,8 @@ void Parser_saveToken(Parser* parser, const Token* token);
 void Token_println(const Token* token);
 
 int Token_compare(Token token, const Token comparators[], int length, char raise);
+
+
 
 
 #endif

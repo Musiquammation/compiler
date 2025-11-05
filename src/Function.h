@@ -6,6 +6,7 @@
 #include "Prototype.h"
 #include "definitionState_t.h"
 #include "Scope.h"
+#include "Type.h"
 
 #include <stdio.h>
 #include <tools/Array.h>
@@ -22,15 +23,23 @@ struct Function {
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
-	TypeNode* rootNode;
 
-	Array variables; // type: Variable*  
+	Variable* thisvar;
+	Class* thisclass;
+	Array types; // type: TypeDefinition
 };
+
+
 
 struct FunctionAssembly {
 	Function* fn;
 	FILE* output;
 };
+
+typedef struct {
+	Variable* variable;
+	Type* type;
+} TypeDefinition;
 
 void Function_create(Function* fn);
 void Function_delete(Function* fn);
@@ -50,7 +59,10 @@ void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v);
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl);
 void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn);
 
-TypeNode* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value);
+Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value);
+
+Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variable);
+
 
 
 #endif

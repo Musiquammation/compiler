@@ -193,6 +193,7 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing module file\n");
 		}
 
+
 		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_NOT)
 			Syntax_tcFile(file);
 	}

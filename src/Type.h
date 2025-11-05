@@ -4,10 +4,12 @@
 #include "declarations.h"
 #include <tools/Array.h>
 
+typedef void* mblock_t;
+
 struct Type {
-	Class* cl;
+	Prototype* proto;
+	mblock_t data;
 	char primitiveSizeCode;
-	void* data;
 };
 
 Type* Type_newCopy(Type* src);

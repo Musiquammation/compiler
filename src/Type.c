@@ -1,5 +1,6 @@
 #include "Type.h"
 #include "Class.h"
+#include "Prototype.h"
 
 #include <string.h>
 
@@ -8,15 +9,14 @@ Type* Type_newCopy(Type* src) {
 		return src;
 
 	Type* dest = malloc(sizeof(Type));
-	Class* cl = src->cl;
-	dest->cl = cl;
+	Prototype* proto = src->proto;
+	dest->proto = proto;
 	dest->primitiveSizeCode = 0;
 
 
 	void* srcData = src->data;
 	if (srcData) {
-		Class* meta = cl->meta;
-		int size = meta->size;
+		size_t size = Prototype_getMetaSize(proto);
 		void* data = malloc(size);
 		memcpy(data, src->data, size);
 		dest->data = data;

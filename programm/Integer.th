@@ -1,14 +1,19 @@
-class Meta {
-	positive: int;
-	isValueKnown: bool;
-	isPositive(): bool;
-}
-
-@meta(Meta)
 class {
+	for {
+		val: int;
+		value_known: bool;
+		positive: char;
+
+		isPositive(): bool;
+
+		@control add;
+		@control setToZero;
+	}
+
 	value: int;
 
-	add(factor: int): Integer;
+	add(factor: Integer);
+	setToZero();
 }
 
 

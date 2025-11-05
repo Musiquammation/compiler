@@ -1,18 +1,19 @@
-function {
-	let a: int;
-	let b: int;
-	let c: int;
-	let d: int;
-	let e: int;
-	let f: int;
-
-	a = 10;
-	b = 20;
-	c = 30;
-	d = 40;
-	e = 50;
-	f = 60;
-
-	return a+b+c+d+e+f;
-}
+function twoArg(a: int, b: int): int {
+	let result: int;
+	result = a & b;
+	return result;
 	
+}
+
+function main {
+	let v0: int;
+	let v1: int;
+	v0 = 78;
+	v1 = 38;
+
+	twoArg(50, v1+2);
+
+	return v0+v1;
+	
+}
+

@@ -4,6 +4,7 @@
 #include "declarations.h"
 
 #include "Class.h"
+#include "Prototype.h"
 #include "Type.h"
 
 typedef struct {
@@ -17,6 +18,17 @@ typedef struct {
 	Class class_u64;
 	Class class_f32;
 	Class class_f64;
+
+	Prototype proto_i8;
+	Prototype proto_u8;
+	Prototype proto_i16;
+	Prototype proto_u16;
+	Prototype proto_i32;
+	Prototype proto_u32;
+	Prototype proto_i64;
+	Prototype proto_u64;
+	Prototype proto_f32;
+	Prototype proto_f64;
 
 	Type type_i8;
 	Type type_u8;

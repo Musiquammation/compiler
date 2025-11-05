@@ -10,11 +10,17 @@ void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
 	Array_create(&cl->functions, sizeof(Function*));
 	cl->definitionState = DEFINITIONSTATE_NOT;
-	cl->size = -1; // size is undefined
+	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
 }
 
 
 void Class_delete(Class* cl) {
+	if (cl->meta) {
+		Class_delete(cl->meta);
+		free(cl->meta);
+	}
+
+
 	// Delete variables
 	Array_loopPtr(Variable, cl->variables, ptr) {
 		Variable* i = *ptr;
@@ -32,6 +38,7 @@ void Class_delete(Class* cl) {
 	}
 
 	Array_free(cl->functions);
+
 }
 
 

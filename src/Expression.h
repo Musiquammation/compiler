@@ -11,6 +11,10 @@ typedef struct  {
 	int argsLength;
 } Expression_FnCall;
 
+typedef struct {
+	void* value;
+	Prototype* proto;
+} Expression_Value;
 
 struct Expression {
 	int type;
@@ -31,6 +35,11 @@ struct Expression {
 		Expression* target;
 
 		struct {
+			Expression_Value* value;
+			bool next;
+		} value;
+
+		struct {
 			Expression_FnCall* object;
 			/// TODO: add some fast access data (8 bytes)
 			bool next;
@@ -39,11 +48,10 @@ struct Expression {
 		struct {
 			Variable** variableArr;
 			int length;
-			bool next;
+			char next; // 0: no, 1: any, 2: scope
 		} property;
 	} data;
 };
-
 
 
 
@@ -52,6 +60,7 @@ enum {
 	EXPRESSION_INVALID,
 	EXPRESSION_GROUP,
 
+	EXPRESSION_VALUE,
 	EXPRESSION_PROPERTY,
 	EXPRESSION_FNCALL,
 	EXPRESSION_PATH,
@@ -135,5 +144,8 @@ castable_t Expression_cast(int srcType, int destType, castable_t value);
 
 int Expression_getSignedSize(int exprType);
 int Expression_reachSignedSize(int type, const Expression* expr);
+
+int Expression_evalNextLength(const Expression* arr);
+
 
 #endif

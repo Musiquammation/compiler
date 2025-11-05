@@ -60,6 +60,7 @@ Token SYNTAXLIST_CLASS_DECLARATION[] = {
 Token SYNTAXLIST_CLASS_DEFINITION[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_function},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_class},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = k_for},
 	{.type = TOKEN_CTYPE_LABEL},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_ORDER},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RBRACE},
@@ -158,6 +159,7 @@ Token SYNTAXLIST_PROPERTY[] = {
 Token SYNTAXLIST_PATH[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_MEMBER},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_SCOPE},
 };
 
 

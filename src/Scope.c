@@ -287,6 +287,7 @@ void ScopeFile_free(ScopeFile* file) {
 	
 	switch (file->generationState) {
 	case SCOPEFILE_GENERATION_ID:
+	case SCOPEFILE_GENERATION_ASM:
 		free(file->id);
 		break;
 	}
@@ -399,7 +400,6 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 		mkdir_p(path);
 
 		FILE* f = fopen(path, "w");
-		printf("path: %s\n", path);
 		free(path);
 		
 		if (f == NULL) {
@@ -410,8 +410,9 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 
 		// Write text section
 		fprintf(f, "section .text\n\n\n");
-
+		
 		file->output = f;
+		file->generationState = SCOPEFILE_GENERATION_ASM;
 		return f;
 	}
 

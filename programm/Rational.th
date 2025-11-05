@@ -1,9 +1,0 @@
-class Meta {
-
-}
-
-@meta(Meta)
-class {
-    num: Integer;
-    dem: Integer;
-}

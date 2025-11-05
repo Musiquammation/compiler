@@ -17,6 +17,18 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_INVALID:
 		break;
 
+	case EXPRESSION_VALUE:
+	{
+		free(e->data.value.value);
+
+		if (e->data.value.next) {
+			e++;
+			type = e->type;
+			goto restartFree; // avoid recursion
+		}
+		break;
+	}
+
 	case EXPRESSION_PROPERTY:
 	{
 		free(e->data.property.variableArr);
@@ -650,6 +662,7 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	case EXPRESSION_F64: return 9;
 
 	case EXPRESSION_PATH:
+	case EXPRESSION_GROUP:
 		expr = expr->data.target;
 		type = expr->type;
 		goto restart;
@@ -662,6 +675,7 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 		int subLength = expr->data.property.length - 1;
 		return Prototype_getSignedSize(&expr->data.property.variableArr[subLength]->proto);
 	}
+
 
 	case EXPRESSION_ADDITION:
 	case EXPRESSION_SUBSTRACTION:
@@ -698,3 +712,33 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	}
 }
 
+
+
+
+int Expression_evalNextLength(const Expression* arr) {
+	int length = 1;
+	for (const Expression* e = arr; true; e++) {
+		switch (e->type) {
+		case EXPRESSION_VALUE:
+			if (!e->data.value.next) {goto stop;}
+			break;
+			
+		case EXPRESSION_PROPERTY:
+			if (!e->data.property.next) {goto stop;}
+			break;
+			
+		case EXPRESSION_FNCALL:
+			if (!e->data.fncall.next) {goto stop;}
+			break;
+
+		default:
+			goto stop;
+		}
+		
+		length++;
+		continue;
+
+		stop:
+		return length;
+	}
+}

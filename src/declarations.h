@@ -25,7 +25,6 @@ structdef(ScopeFunction);
 structdef(ScopeSearchArgs);
 
 structdef(Expression);
-structdef(TypeNode);
 
 structdef(LabelPool);
 structdef(CommonLabels);

@@ -12,6 +12,13 @@ enum {
 	CLASSFLAGS_META = 1
 };
 
+enum {
+	CLASSSIZE_UNDEFINED = -1,
+	CLASSSIZE_NOEXIST = -2,
+	CLASSSIZE_UNDIRECT = -3,
+	CLASSSIZE_LATER = -4,
+};
+
 struct Class {
 	Array variables; // type: Variable*
 	Array functions; // type: Function*
@@ -19,7 +26,10 @@ struct Class {
 	Class* meta;
 	definitionState_t definitionState;
 	label_t name;
+	
 	char primitiveSizeCode;
+	bool isRegistrable;
+
 	int size;
 	int maxMinimalSize;
 };

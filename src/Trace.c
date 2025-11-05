@@ -24,93 +24,118 @@
 
 
 
+static const int ARGUMENT_REGISTERS[] = {
+	TRACE_REG_RCX,
+	TRACE_REG_R11,
+};
+enum {
+	ARGUMENT_REGISTERS_LENGTH = sizeof(ARGUMENT_REGISTERS)/sizeof(int)
+};
+
+
 static size_t hash_ptr(void* ptr) {
-    uintptr_t val = (uintptr_t)ptr;
-    return (val >> 3) % TRACE_FUNCTIONMAP_LENGTH;
+	uintptr_t val = (uintptr_t)ptr;
+	return (val >> 5) % TRACE_FUNCTIONMAP_LENGTH;
 }
 
 
 static void TraceFunctionMap_create(TraceFunctionMap* map) {
 	map->position = 0;
 
-    for (int i = 0; i < TRACE_FUNCTIONMAP_LENGTH; ++i) {
-        map->buckets[i].key = NULL;
-        map->buckets[i].position = -1;
-        map->buckets[i].next = NULL;
-    }
+	for (int i = 0; i < TRACE_FUNCTIONMAP_LENGTH; ++i) {
+		map->buckets[i].key = NULL;
+		map->buckets[i].position = -1;
+		map->buckets[i].next = NULL;
+	}
 }
 
 
 static void TraceFunctionMap_insert(TraceFunctionMap* map, Function* fn) {
-    size_t idx = hash_ptr(fn);
-    TraceFunctionMapEntry* entry = &map->buckets[idx];
+	size_t idx = hash_ptr(fn);
+	TraceFunctionMapEntry* entry = &map->buckets[idx];
 
-    if (entry->position == -1) {
-        entry->key = fn;
-        entry->position = map->position++;
-        entry->next = NULL;
-    } else {
-        TraceFunctionMapEntry* new_entry = malloc(sizeof(TraceFunctionMapEntry));
-        new_entry->key = fn;
-        new_entry->position = map->position++;
-        new_entry->next = entry->next;
-        entry->next = new_entry;
-    }
+	if (entry->position == -1) {
+		entry->key = fn;
+		entry->position = map->position++;
+		entry->next = NULL;
+	} else {
+		TraceFunctionMapEntry* new_entry = malloc(sizeof(TraceFunctionMapEntry));
+		new_entry->key = fn;
+		new_entry->position = map->position++;
+		new_entry->next = entry->next;
+		entry->next = new_entry;
+	}
 }
 
 
 static int TraceFunctionMap_get(TraceFunctionMap* map, Function* fn) {
-    size_t idx = hash_ptr(fn);
-    TraceFunctionMapEntry* entry = &map->buckets[idx];
+	size_t idx = hash_ptr(fn);
+	TraceFunctionMapEntry* entry = &map->buckets[idx];
 
-    while (entry) {
-        if (entry->key == fn) return entry->position;
-        entry = entry->next;
-    }
-    return -1;
+	while (entry) {
+		if (entry->key == fn) return entry->position;
+		entry = entry->next;
+	}
+	return -1;
 }
 
 
 static int TraceFunctionMap_reach(TraceFunctionMap* map, Function* fn) {
-    size_t idx = hash_ptr(fn);
-    TraceFunctionMapEntry* entry = &map->buckets[idx];
+	size_t idx = hash_ptr(fn);
+	TraceFunctionMapEntry* entry = &map->buckets[idx];
 
-    
-    while (entry) {
-        if (entry->key == fn) return entry->position;
-        if (!entry->next) break; 
-        entry = entry->next;
-    }
+	
+	while (entry) {
+		if (entry->key == fn) return entry->position;
+		if (!entry->next) break; 
+		entry = entry->next;
+	}
 
-    
-    TraceFunctionMapEntry* new_entry = malloc(sizeof(TraceFunctionMapEntry));
-    new_entry->key = fn;
+	
+	TraceFunctionMapEntry* new_entry = malloc(sizeof(TraceFunctionMapEntry));
+	new_entry->key = fn;
 	int p = map->position++;
-    new_entry->position = p;
-    new_entry->next = NULL;
+	new_entry->position = p;
+	new_entry->next = NULL;
 
-    if (entry->position == -1) {
-        
-        *entry = *new_entry;
-        free(new_entry); 
-    } else {
-        entry->next = new_entry;
-    }
+	if (entry->position == -1) {
+		
+		*entry = *new_entry;
+		free(new_entry); 
+	} else {
+		entry->next = new_entry;
+	}
 
-    return p;
+	return p;
+}
+
+
+static Function* TraceFunctionMap_getIdx(TraceFunctionMap* map, int idx) {
+	if (idx < 0 || idx >= map->position) return NULL; // index invalide
+
+	for (int i = 0; i < TRACE_FUNCTIONMAP_LENGTH; ++i) {
+		TraceFunctionMapEntry* entry = &map->buckets[i];
+
+		while (entry) {
+			if (entry->position == idx) return entry->key;
+			entry = entry->next;
+		}
+	}
+
+	return NULL; // pas trouvé
 }
 
 
 void TraceFunctionMap_free(TraceFunctionMap* map) {
-    for (int i = 0; i < TRACE_FUNCTIONMAP_LENGTH; ++i) {
-        TraceFunctionMapEntry* entry = map->buckets[i].next;
-        while (entry) {
-            TraceFunctionMapEntry* next = entry->next;
-            free(entry);
-            entry = next;
-        }
-        map->buckets[i].next = NULL;
-    }
+	for (int i = 0; i < TRACE_FUNCTIONMAP_LENGTH; ++i) {
+		TraceFunctionMapEntry* entry = map->buckets[i].next;
+		while (entry) {
+			TraceFunctionMapEntry* next = entry->next;
+			free(entry);
+			entry = next;
+		}
+		map->buckets[i].next = NULL;
+	}
 }
 
 
@@ -139,6 +164,8 @@ typedef struct {
 
 
 
+
+typedef int fnplacement_t[TRACE_REG_R11 - TRACE_REG_RAX];
 
 void Trace_create(Trace* trace) {
 	TracePack* pack = malloc(sizeof(TracePack));
@@ -205,8 +232,20 @@ int Trace_reachFunction(Trace* trace, Function* fn) {
 	return TraceFunctionMap_reach(&trace->calledFunctions, fn);
 }
 
+Function* Trace_getFunction(Trace* trace, int index) {
+	return TraceFunctionMap_getIdx(&trace->calledFunctions, index);
+}
 
 
+void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
+	for (int i = 0; i < arglen; i++) {
+		Variable* v = args[i];
+		
+		// '2' for argument
+		Trace_ins_create(trace, v, v->proto.size, 2, v->proto.cl->isRegistrable);
+	}
+
+}
 
 
 
@@ -237,6 +276,9 @@ trline_t* Trace_push(Trace* trace, int num) {
 
 
 void TracePack_print(const TracePack* pack, int position) {
+	int registrables_len = 32;
+	char* registrables = malloc(registrables_len);
+
 	for (int i = 0; true; i++) {
 		trline_t n = pack->line[i];
 		int next = n & 0x3FF; // always extract next (10 bits)
@@ -245,17 +287,38 @@ void TracePack_print(const TracePack* pack, int position) {
 		if (next > TRACE_USAGE_OUT_OF_BOUNDS) {
 			switch (next) {
 				case TRACECODE_STAR:
-					printf("[%04d] END action=%d\n", i+position, (n>>10)&0x3);
+					printf("[%04d] STAR action=%d\n", i+position, (n>>10)&0x3);
 					if ((n>>10) == 0)
-						return;
+						goto finish;
 					break;
 
 				case TRACECODE_CREATE: {
-					uint32_t n2 = pack->line[++i];
-					int variable = (n >> 16) & 0xFFF;
-					int size     = n2 >> 16;
-					int next2    = n2& 0x3FF;
-					printf("[%04d] CREATE v%d size=%d next=+%d\n", i-1+position, variable, size, next2);
+					uint32_t n2   = pack->line[++i];
+					int variable  = (n >> 16) & 0xFFF;
+					int size      = n2 >> 16;
+					int regable   = n & (1<<28);
+					int next2     = n2& 0x3FF;
+					printf(
+						"[%04d] CREATE v%d size=%d next=+%d %s\n",
+						i-1+position,
+						variable,
+						size,
+						next2,
+						regable ? "registrable" : "complex"
+					);
+
+					if (variable >= registrables_len) {
+						int nl = variable * 2;
+						char* bff = malloc(nl);
+						memcpy(bff, registrables, nl);
+						registrables_len = nl;
+
+						free(registrables);
+						registrables = bff;
+					}
+
+					registrables[variable] = regable ? 1 : 0;
+
 				} break;
 
 
@@ -471,6 +534,7 @@ void TracePack_print(const TracePack* pack, int position) {
 						break;
 				}
 
+
 				default:
 					printf("[%04d] UNKNOWN INSTRUCTION code=%d\n", i+position, next);
 					break;
@@ -481,14 +545,26 @@ void TracePack_print(const TracePack* pack, int position) {
 		} else {
 			// Usage mode
 			int variable = n >> 10;
-
 			if (next == TRACE_USAGE_LAST) {
-				printf("[%04d] !f v%d\n", i+position, variable);
+				printf("[%04d] !f v%d", i+position, variable);
 			} else {
-				printf("[%04d] !u v%d next=+%d\n", i+position, variable, next);
+				printf("[%04d] !u v%d next=+%d", i+position, variable, next);
 			}
+
+			if (registrables[variable]) {
+				printf("\n");
+			} else {
+				i++;
+				n = pack->line[i];
+				printf(" offset=%d\n", n);
+			}
+
 		}
 	}	
+
+
+	finish:
+	free(registrables);
 }
 
 
@@ -509,9 +585,19 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 	vt->lastUsePtr = ptr;
 }
 
-void Trace_addUsage(Trace* trace, uint variable, bool readMode) {
-	trline_t* ptr = Trace_push(trace, 1);
-	Trace_addUsageAt(trace, variable, readMode, ptr);
+void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode) {
+	printf("usage %2d %2d | %s\n", variable, offset, readMode ? "read" : "write");
+
+	if (offset < 0) {
+		trline_t* ptr = Trace_push(trace, 1);
+		Trace_addUsageAt(trace, variable, readMode, ptr);
+	} else {
+		trline_t* ptr = Trace_push(trace, 2);
+		Trace_addUsageAt(trace, variable, readMode, &ptr[0]);
+		ptr[1] = (uint)offset;
+
+	}
+
 }
 
 
@@ -566,7 +652,7 @@ int Trace_packExprTypeToSize(int type) {
 
 
 
-void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int exprType) {
+void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int signedSize, int exprType) {
 	int size = signedSize >= 0 ? signedSize : -signedSize;
 
 	switch (exprType) {
@@ -585,8 +671,9 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 				signedObjSize = primitiveSizeCode;
 			}
 		} else {
-			signedObjSize = varr[subLength]->proto.cl->size;
+			signedObjSize = Prototype_getSize(&varr[subLength]->proto);
 		}
+
 
 		// Size matches
 		if (signedObjSize == signedSize) {
@@ -594,6 +681,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 				trace,
 				destVar,
 				varr[0]->id,
+				destOffset,
+				Prototype_getVariableOffset(varr, subLength),
 				size
 			);
 			return;
@@ -601,16 +690,18 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 
 		// Let's cast
 		int objSize = signedObjSize >= 0 ? signedObjSize : -signedObjSize;
-		uint tempVar = Trace_ins_create(trace, NULL, objSize, 0);
+		uint tempVar = Trace_ins_create(trace, NULL, objSize, 0, true);
 		Trace_ins_move(
 			trace,
 			tempVar,
 			varr[0]->id,
+			-1,
+			destOffset,
 			objSize
 		);
 
-		Trace_addUsage(trace, tempVar, true);
-		Trace_addUsage(trace, destVar, false);
+		Trace_addUsage(trace, tempVar, TRACE_OFFSET_NONE, true);
+		Trace_addUsage(trace, destVar, destOffset, false);
 
 		/// TODO: handle floating numbers
 		*Trace_push(trace, 1) = TRACECODE_CAST |
@@ -637,29 +728,53 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 
 		for (int i = 0; i < fncall.argsLength; i++) {
 			/// TODO: check sizes
-			uint v = Trace_ins_create(
-				trace,
-				NULL,
-				arguments[i]->proto.cl->size,
-				0
-			);
-			variables[i] = v;
-
+			printf("%d\n", i);
+			printf("args_are %p for %s\n", arguments, fncall.fn->name);
+			char isRegistrable = arguments[i]->proto.cl->isRegistrable;
+			int size = Prototype_getSize(&arguments[i]->proto);
+			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
+			
 			Trace_set(
 				trace,
 				fncall.args[i],
-				v,
+				bufferVar,
+				arguments[i]->proto.cl->isRegistrable ? TRACE_OFFSET_NONE : 0,
 				Prototype_getSignedSize(&arguments[i]->proto),
 				fncall.args[i]->type
 			);
+
+			uint finalVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
+			variables[i] = finalVar;
+			
+			if (i < ARGUMENT_REGISTERS_LENGTH) {
+				Trace_ins_place(
+					trace,
+					bufferVar,
+					finalVar,
+					ARGUMENT_REGISTERS[i],
+					Trace_packSize(size),
+					0
+				);
+			} else {
+				raiseError("[TODO] handle a lot of arguements");
+				return;
+			}
+
+			Trace_removeVariable(trace, bufferVar);
 		}
+
+			
 
 		/// TODO: use rax for output
 		int fnIndex = Trace_reachFunction(trace, fncall.fn);
 
 		// Add usages
 		for (int i = 0; i < fncall.argsLength; i++) {
-			Trace_addUsage(trace, variables[i], true);
+			Trace_addUsage(
+				trace, variables[i],
+				arguments[i]->proto.cl->isRegistrable ? TRACE_OFFSET_NONE : 0,
+				true
+			);
 		}
 
 		// Function call
@@ -671,34 +786,36 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 		}
 
 		// Output
-		int signedOutputSize = Prototype_getSignedSize(&fncall.fn->returnType);
-		if (signedOutputSize == signedSize) {
-			Trace_ins_place(trace, destVar, TRACE_REG_RAX, Trace_packSize(size), 1);				
-
-		} else {
-			int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
-			uint temp = Trace_ins_create(trace, NULL, outputSize, 0);
-
-			// Put output in temp variable
-			Trace_ins_place(trace, temp, TRACE_REG_RAX, Trace_packSize(size), 1);
-
-			Trace_addUsage(trace, temp, true);
-			Trace_addUsage(trace, destVar, true);
-			*Trace_push(trace, 1) = TRACECODE_CAST |
-				(signedOutputSize < 0 ? (1<<10) : 0) |
-				(0<<11) |
-				(signedSize < 0 ? (1<<12) : 0) |
-				(0<<13) |
-				Trace_packSize(outputSize) << 16 |
-				Trace_packSize(size) << 18;
-
-
-			Trace_removeVariable(trace, temp);
+		if (destVar != TRACE_VARIABLE_NONE) {
+			int signedOutputSize = Prototype_getSignedSize(&fncall.fn->returnType);
+			if (signedOutputSize == signedSize) {
+				Trace_ins_place(trace, TRACE_VARIABLE_NONE, destVar, TRACE_REG_RAX, Trace_packSize(size), 1);				
+	
+			} else {
+				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
+				uint temp = Trace_ins_create(
+					trace, NULL, outputSize, 0,
+					fncall.fn->returnType.cl->isRegistrable
+				);
+	
+				// Put output in temp variable
+				/// TODO: check TRACE_VARIABLE_NONE
+				Trace_ins_place(trace, TRACE_VARIABLE_NONE, temp, TRACE_REG_RAX, Trace_packSize(size), 1);
+	
+				Trace_addUsage(trace, temp, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, destVar, destOffset, true);
+				*Trace_push(trace, 1) = TRACECODE_CAST |
+					(signedOutputSize < 0 ? (1<<10) : 0) |
+					(0<<11) |
+					(signedSize < 0 ? (1<<12) : 0) |
+					(0<<13) |
+					Trace_packSize(outputSize) << 16 |
+					Trace_packSize(size) << 18;
+	
+	
+				Trace_removeVariable(trace, temp);
+			}
 		}
-
-
-		
-
 
 		free(variables);
 
@@ -721,19 +838,26 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 			}
 
 			/// TODO: check size
-			Trace_set(trace, real, destVar, signedSize, EXPRESSION_PROPERTY);
+			Trace_set(trace, real, destVar, destOffset, signedSize, EXPRESSION_PROPERTY);
 			return;
 
 		}
 
 		case EXPRESSION_FNCALL:
 		{
-			Trace_set(trace, real, destVar, signedSize, EXPRESSION_FNCALL);
+			Trace_set(trace, real, destVar, destOffset, signedSize, EXPRESSION_FNCALL);
 			return;
 		}
 
 		}
 
+		break;
+	}
+
+	case EXPRESSION_GROUP:
+	{
+		Expression* target = expr->data.target;
+		Trace_set(trace, target, destVar, destOffset, signedSize, target->type);
 		break;
 	}
 
@@ -794,7 +918,6 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 		if (!leftValueGiven && !rightValueGiven) {
 			int signedLeftSize = Expression_reachSignedSize(leftType, leftExpr);
 			int signedRightSize = Expression_reachSignedSize(rightType, rightExpr);
-			printf("sign %d %d\n", signedLeftSize, leftType);
 
 			int leftSize = signedLeftSize >= 0 ? signedLeftSize : -signedLeftSize;
 			int rightSize = signedRightSize >= 0 ? signedRightSize : -signedRightSize;
@@ -816,24 +939,24 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 				maxSize = rightSize;
 			}
 			
-			uint leftVar = Trace_ins_create(trace, NULL, maxSize, 0);
-			Trace_set(trace, leftExpr, leftVar, signedMaxSize, leftType);
+			uint leftVar = Trace_ins_create(trace, NULL, maxSize, 0, true);
+			Trace_set(trace, leftExpr, leftVar, TRACE_OFFSET_NONE, signedMaxSize, leftType);
 
-			uint rightVar = Trace_ins_create(trace, NULL, maxSize, 0);
-			Trace_set(trace, rightExpr, rightVar, signedMaxSize, rightType);
+			uint rightVar = Trace_ins_create(trace, NULL, maxSize, 0, true);
+			Trace_set(trace, rightExpr, rightVar, TRACE_OFFSET_NONE, signedMaxSize, rightType);
 
 			int tempDestVar;
 			
 			// Add usages
 			if (signedMaxSize == signedSize) {
-				Trace_addUsage(trace, leftVar, true);
-				Trace_addUsage(trace, rightVar, true);
-				Trace_addUsage(trace, destVar, false);
+				Trace_addUsage(trace, leftVar, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, rightVar, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, destVar, destOffset, false);
 			} else {
-				tempDestVar = Trace_ins_create(trace, NULL, maxSize, 0);
-				Trace_addUsage(trace, leftVar, true);
-				Trace_addUsage(trace, rightVar, true);
-				Trace_addUsage(trace, tempDestVar, false);
+				tempDestVar = Trace_ins_create(trace, NULL, maxSize, 0, true);
+				Trace_addUsage(trace, leftVar, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, rightVar, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, tempDestVar, destOffset, false);
 			}
 			
 			// Perform operation
@@ -853,8 +976,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 
 			// Add cast
 			if (signedMaxSize != signedSize) {
-				Trace_addUsage(trace, tempDestVar, true);
-				Trace_addUsage(trace, destVar, false);
+				Trace_addUsage(trace, tempDestVar, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, destVar, destOffset, false);
 				
 
 				/// TODO: handle floating numbers
@@ -863,8 +986,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 					(0<<11) |
 					(signedSize < 0 ? (1<<12) : 0) |
 					(0<<13) |
-					packedMaxSize << 16 |
-					Trace_packSize(size) << 18;
+					(packedMaxSize << 16) |
+					(Trace_packSize(size) << 18);
 
 
 				Trace_removeVariable(trace, tempDestVar);
@@ -898,25 +1021,25 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 			/// TODO: handle case for same size but different sign
 			if (notCast) {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0);
+				variable = Trace_ins_create(trace, NULL, size, 0, true);
 				signedDestImmediateSize = signedSize;
-				Trace_set(trace, operand, variable, signedSize, operandType);
+				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedSize, operandType);
 
 				// Add usages
-				Trace_addUsage(trace, variable, true);
-				Trace_addUsage(trace, destVar, false);
+				Trace_addUsage(trace, variable, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, destVar, destOffset, false);
 
 			} else {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0);
+				variable = Trace_ins_create(trace, NULL, size, 0, true);
 				signedDestImmediateSize = signedOperandSize;
-				Trace_set(trace, operand, variable, signedOperandSize, operandType);
+				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedOperandSize, operandType);
 
-				resultVariable = Trace_ins_create(trace, NULL, size, 0);
+				resultVariable = Trace_ins_create(trace, NULL, size, 0, true);
 
 				// Add usages
-				Trace_addUsage(trace, variable, true);
-				Trace_addUsage(trace, resultVariable, false);
+				Trace_addUsage(trace, variable, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, resultVariable, TRACE_OFFSET_NONE, false);
 			}
 
 			// Perform operation
@@ -978,8 +1101,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 
 			// Perform final cast
 			if (!notCast) {
-				Trace_addUsage(trace, resultVariable, true);
-				Trace_addUsage(trace, destVar, false);
+				Trace_addUsage(trace, resultVariable, TRACE_OFFSET_NONE, true);
+				Trace_addUsage(trace, destVar, destOffset, false);
 
 				*Trace_push(trace, 1) = TRACECODE_CAST |
 					(signedOperandSize < 0 ? (1<<10) : 0) |
@@ -1015,10 +1138,9 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 		int signedObjSize = Expression_getSignedSize(exprType);
 		int objSize = signedObjSize >= 0 ? signedObjSize : -signedObjSize;
 
-
 		// Size matches
 		Trace_ins_def(
-			trace, destVar, signedSize,
+			trace, destVar, destOffset, signedSize,
 			castable_cast(signedObjSize, signedSize, expr->data.num)
 		);
 
@@ -1037,7 +1159,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int
 }
 
 
-uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags) {
+uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, bool registrable) {
 	if (size >= 0xffff) {
 		raiseError("[TODO] handle create big size variables");
 		return -1;
@@ -1045,7 +1167,7 @@ uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags) {
 
 	uint id = Trace_pushVariable(trace);
 	trline_t* ptr = Trace_push(trace, 2);
-	ptr[0] = TRACECODE_CREATE | (flags << 10) | (id << 16);
+	ptr[0] = TRACECODE_CREATE | (flags << 10) | (id << 16) | (registrable ? (1<<28) : 0);
 	ptr[1] = TRACE_USAGE_LAST | (size << 16);
 	
 	VariableTrace* vt = Array_get(VariableTrace, trace->variables, id);
@@ -1057,8 +1179,8 @@ uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags) {
 }
 
 
-void Trace_ins_def(Trace* trace, int variable, int signedSize, castable_t value) {
-	Trace_addUsage(trace, variable, false);
+void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value) {
+	Trace_addUsage(trace, variable, offset, false);
 
 	trline_t* ptr;
 	switch (signedSize) {
@@ -1094,15 +1216,15 @@ void Trace_ins_def(Trace* trace, int variable, int signedSize, castable_t value)
 }
 
 
-void Trace_ins_move(Trace* trace, int destVar, int srcVar, int size) {
-	Trace_addUsage(trace, srcVar, true);
-	Trace_addUsage(trace, destVar, false);
+void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size) {
+	Trace_addUsage(trace, srcVar, srcOffset, true);
+	Trace_addUsage(trace, destVar, destOffset, false);
 
 	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16);
 }
 
 trline_t* Trace_ins_if(Trace* trace, uint destVar) {
-	Trace_addUsage(trace, destVar, true);
+	Trace_addUsage(trace, destVar, TRACE_OFFSET_NONE, true);
 	trline_t* l = Trace_push(trace, 1);
 	*l = TRACECODE_IF;
 	return l;
@@ -1112,8 +1234,12 @@ void Trace_ins_jmp(Trace* trace, uint instruction) {
 	*Trace_push(trace, 1) = TRACECODE_JMP | (instruction << 10);
 }
 
-void Trace_ins_place(Trace* trace, int variable, int reg, int packedSize, int setVariable) {
-	Trace_addUsage(trace, variable, true);
+void Trace_ins_place(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize, int setVariable) {
+	*Trace_push(trace, 1) = TRACECODE_STAR | (3<<10); // forbid read
+
+	/// TODO: check if variable is registrable
+	Trace_addUsage(trace, srcVariable, TRACE_OFFSET_NONE, true);
+	Trace_addUsage(trace, dstVariable, TRACE_OFFSET_NONE, false);
 	
 	*Trace_push(trace, 1) = TRACECODE_PLACE |
 		(packedSize << 10) |
@@ -1154,18 +1280,9 @@ void Trace_ins_place(Trace* trace, int variable, int reg, int packedSize, int se
 
 
 enum {
-	NO_VICTIM = 0xffffffff,
 	STACK_BLOCKS = 64
 };
 
-typedef struct {
-	int instruction;
-	uint variable;
-	int victim;
-	int destRegister;
-	int source; // stack region to free
-	int victimStackId; // for the victim
-} Replace;
 
 
 
@@ -1175,12 +1292,18 @@ typedef struct {
 
 
 
-int Trace_reg_chooseFast(const TraceRegister regs[]) {
-	int biggerNextUse = 0;
+
+static int Trace_reg_chooseFast(const TraceRegister regs[], int biggerNextUse) {
+	printf("choose: ");
+	for (int i = TRACE_REG_RAX; i <= TRACE_REG_R11; i++) {
+		printf("%d ", regs[i].nextUse);
+	}
+	printf("\n");
+
 	int index = TRACE_REG_NONE;
 	for (int i = TRACE_REG_RAX; i <= TRACE_REG_R11; i++) {
 		int nu = regs[i].nextUse;
-		if (nu < 0) {
+		if (nu == -1) {
 			return -i;
 		}
 
@@ -1194,49 +1317,135 @@ int Trace_reg_chooseFast(const TraceRegister regs[]) {
 }
 
 
-int Trace_reg_place(Trace* trace, TraceRegister regs[], int ip, int variable, int source, int nextUse, int reg) {
-	Replace* replace = Array_push(Replace, &trace->replaces);
+
+int Trace_reg_place(Trace* trace, TraceRegister regs[], int ip, uint variable, int source, int nextUse, int reg) {
+	if (trace->varInfos[variable].store == -reg)
+		return reg;
+		
+	TraceReplace* replace;
+	
+	// regs[reg].replace = replace;
+	
 	
 	if (reg >= 0) {
-		uint victim = regs[reg].variable;
-		replace->victim = victim;
+		printf("replace(%d:v%d) v%d in %d / %d\n", -reg, regs[reg].variable, variable, trace->varInfos[variable].store, nextUse);
+		// regs[reg].replace = replace;
 
-		if (victim != NO_VICTIM) {
+
+		uint victim = regs[reg].variable;
+		
+		if (victim == TRACE_VARIABLE_NONE) {
+			replace = Array_push(TraceReplace, &trace->replaces);
+			replace->victim = -TRACE_REG_NONE;
+		} else {
+			replace = Array_push(TraceReplace, &trace->replaces);
 			int stackId = trace->stackId;
-			replace->victimStackId = stackId;
+			replace->victimStore = stackId;
 			trace->varInfos[victim].store = stackId;
 			trace->stackId++;
+			replace->victim = victim;
+
+			/// TODO: develop this comment
+
+			/*int victimNextUse = regs[reg].nextUse;
+			regs[reg].nextUse = -3; // temporary: to forbid reg in Trace_reg_chooseFast
+
+			int victimRegister = Trace_reg_chooseFast(regs, nextUse);
+			if (victimRegister == TRACE_REG_NONE) {
+				replace = Array_push(TraceReplace, &trace->replaces);
+				
+				int stackId = trace->stackId;
+				replace->victimStore = stackId;
+				trace->varInfos[victim].store = stackId;
+				trace->stackId++;
+				replace->victim = victim;
+			} else {
+				printf("nextvictim %d, %d %d\n", victim, reg, victimNextUse);
+				victimRegister = Trace_reg_place(trace, regs, ip, victim, -reg, victimNextUse, victimRegister);
+				replace = Array_push(TraceReplace, &trace->replaces);
+				replace->victim = victim;
+				replace->victimStore = -victimRegister;
+
+			}*/
 		}
 
 		
 	} else {
+		printf("replace(%d) v%d in %d\n", reg, variable, trace->varInfos[variable].store);
 		// No victim
-		replace->victim = NO_VICTIM;
+
+		replace = Array_push(TraceReplace, &trace->replaces);
+		replace->victim = -TRACE_REG_NONE;
 		reg = -reg;
+		
 	}
 
 
 	replace->instruction = ip;
 	replace->variable = variable;
-	replace->destRegister = reg;
-	replace->source = source;
+	replace->destination = -reg;
+	// replace->source = source;
 	
 	trace->varInfos[variable].nextUse = nextUse;
 	trace->varInfos[variable].store = -reg;
 	
-
 	regs[reg].nextUse = nextUse;
 	regs[reg].variable = variable;
+	// regs[reg].replace = replace;
+
 	return reg;
 }
 
 
+typedef struct {
+	int nextUse;
+	int pos;
+} IndexedTraceRegister;
 
+static int IndexedTraceRegister_compare(const void* pa, const void* pb) {
+	int a = ((const IndexedTraceRegister*)pa)->nextUse;
+	int b = ((const IndexedTraceRegister*)pb)->nextUse;
+
+	if (a < 0 && b < 0)
+		return 0;
+
+	if (a < 0)
+		return 1;
+
+	if (b < 0)
+		return -1;
+
+	if (a > b)
+		return 1;
+
+	if (a < b)
+		return -1;
+
+	return 0;
+}
 
 void Trace_placeRegisters(Trace* trace) {
 	// Generate next data
 	VarInfoTrace* varInfos = malloc(sizeof(VarInfoTrace) * trace->variables.length);
 	TraceRegister* regs = malloc(TRACE_REG_NONE * sizeof(TraceRegister));
+	int slowRegisters = 0;
+	int placedRegisters = 0;
+	int argumentPosition = 0;
+	
+	/*
+		int* fncallPositionsOrigin;
+		int* fncallPositionPtr;
+		int currentFncallPosition;
+		if (trace->fncallPositions.length == 0) {
+			fncallPositionsOrigin = NULL;
+			currentFncallPosition = -1;
+		} else {
+			fncallPositionsOrigin = trace->fncallPositions.data;
+			currentFncallPosition = *fncallPositionsOrigin;
+			fncallPositionPtr = fncallPositionsOrigin + 1;
+		}
+	*/
+
 	Array_for(VarInfoTrace, varInfos, trace->variables.length, v) {
 		v->size = -1;
 		v->nextUse = -1;
@@ -1245,7 +1454,11 @@ void Trace_placeRegisters(Trace* trace) {
 
 	Array_free(trace->variables);
 	Stack_free(trace->varPlacements);
-	Array_create(&trace->replaces, sizeof(Replace));
+
+	Array_create(&trace->replaces, sizeof(TraceReplace));
+	Array_create(&trace->fncallPlacements, sizeof(fnplacement_t));
+	trace->fncallPlacements.data = NULL;
+
 	trace->varInfos = varInfos;
 	trace->regs = regs;
 	trace->stackId = 0;
@@ -1253,6 +1466,8 @@ void Trace_placeRegisters(Trace* trace) {
 
 	for (int i = 1; i < TRACE_REG_NONE; i++) {
 		regs[i].nextUse = -1;
+		regs[i].variable = TRACE_VARIABLE_NONE;
+		// regs[i].replace = NULL;
 	}
 
 
@@ -1261,18 +1476,27 @@ void Trace_placeRegisters(Trace* trace) {
 	TracePack* pack = trace->first;
 	trline_t* linePtr = pack->line;
 
+	enum {USAGE_BUFFER_LEN = 4};
+	trline_t usageBuffer[USAGE_BUFFER_LEN];
+	int usageBufferLine = 0;
+	bool movesAllowed = true;
+
 	while (true) {
-		trline_t previousLine = line;
+		printf("> at %d\n", ip);
 		line = *linePtr;
 		linePtr++;
 		trline_t code = line & 0x3ff;
 
 		// Usage
 		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
+			usageBuffer[usageBufferLine] = line;
+			usageBufferLine++;
+
 			trline_t varIdx = line >> 10;
 			VarInfoTrace* vi = &varInfos[varIdx];
 			int store = vi->store;
 
+			printf("rememb %d\n", vi->store);
 
 			if (code == 0) {
 				// Last usage => destroy variable
@@ -1280,17 +1504,15 @@ void Trace_placeRegisters(Trace* trace) {
 
 				if (store == -TRACE_REG_NONE)
 					goto continueWhile;
-
+				
 				// Register
 				if (store < 0) {
+					printf("destroy %d (v%d == v%d) \n", store, varIdx, regs[-store].variable);
 					regs[-store].nextUse = -1;
 					regs[-store].variable = -1;
 					vi->store = -TRACE_REG_NONE;
 					goto continueWhile;
 				}
-
-				/// TODO: free stack
-
 
 				goto continueWhile;
 			}
@@ -1301,19 +1523,22 @@ void Trace_placeRegisters(Trace* trace) {
 			vi->nextUse = nextUse;
 			
 			
-			
-			if (store >= 0 || store == -TRACE_REG_NONE) {
-				int reg = Trace_reg_chooseFast(regs);
-				vi->store = -Trace_reg_place(trace, regs, ip, varIdx, store, nextUse, reg);
-			} else {
-				regs[-store].nextUse = nextUse;
+			if (movesAllowed && varInfos[varIdx].registrable) {
+				if (store >= 0 || store == -TRACE_REG_NONE) {
+					printf("placedRegisters %d\n", placedRegisters);
+					int reg = Trace_reg_chooseFast(regs, -1);
+					vi->store = -Trace_reg_place(trace, regs, ip, varIdx, store, nextUse, reg);
+				} else {
+					regs[-store].nextUse = nextUse;
+				}
 			}
 
 			goto continueWhile;
 		}
 
-
 		
+		usageBufferLine = 0;
+		movesAllowed = true;
 
 		// Simple instruction
 		switch (code) {
@@ -1333,7 +1558,11 @@ void Trace_placeRegisters(Trace* trace) {
 			case 1: // quick skip
 				break;
 			
-			case 2: // place signal
+			case 2: // return
+				break;
+
+			case 3: // forbid moves
+				movesAllowed = false;
 				break;
 
 			}
@@ -1342,13 +1571,41 @@ void Trace_placeRegisters(Trace* trace) {
 
 		case TRACECODE_CREATE:
 		{
+			char registrable = (line >> 28) & 1;
+			char argument = (line >> 11) & 1;
 			trline_t size = line >> 16;
+			trline_t variable = (line >> 16) & 0xFFF;
+
 			line = *linePtr;
 			linePtr++;
 			ip++;
 
 			trline_t next = line & 0x3FF;
-			trline_t variable = (line >> 16) & 0xFFF;
+			int nextUse = next == 0 ? -1 : next;
+
+			printf("create %d\n", variable);
+			varInfos[variable].size = size;
+			varInfos[variable].nextUse = nextUse;
+			varInfos[variable].registrable = registrable;
+			if (registrable) {
+				if (argument && nextUse > 0) {
+					int reg = ARGUMENT_REGISTERS[argumentPosition];
+					varInfos[variable].store = -reg;
+					regs[reg].nextUse = ip + nextUse;
+					regs[reg].variable = variable;
+					argumentPosition++;
+				} else {
+					varInfos[variable].store = -TRACE_REG_NONE;
+				}
+			} else {
+				if (argument) {
+					raiseError("[TODO] handle args on stack");
+				} else {
+					varInfos[variable].store = trace->stackId;
+					trace->stackId++;
+				}
+			}
+
 
 			break;	
 		};
@@ -1365,6 +1622,7 @@ void Trace_placeRegisters(Trace* trace) {
 
 		case TRACECODE_MOVE:
 		{
+			
 			break;
 		}
 
@@ -1375,10 +1633,22 @@ void Trace_placeRegisters(Trace* trace) {
 				raiseError("[TODO]: PLACE > edit variable");
 			} else {
 				int reg = line >> 16;
-				uint variable = previousLine >> 10;
-				int source = varInfos[variable].store;
-				int nextUse = 1;
-				Trace_reg_place(trace, regs, ip, variable, source, nextUse, reg);
+				uint srcVar = usageBuffer[0] >> 10;
+				uint destVar = usageBuffer[1] >> 10;
+				int source = varInfos[srcVar].store;
+				printf("plce %d|%d src %d(%d) ; dst %d(%d)\n", regs[TRACE_REG_R11].variable, reg, srcVar, source, destVar, varInfos[destVar].store);
+				varInfos[srcVar].nextUse = -1;
+				varInfos[srcVar].store = -TRACE_REG_NONE;
+
+				if (source >= 0) {
+					/// TODO: free stack
+				} else if (source != -TRACE_REG_NONE) {
+					regs[-source].nextUse = -1;
+					regs[-source].variable = TRACE_VARIABLE_NONE;
+				}
+
+				Trace_reg_place(trace, regs, ip, destVar, source, -2, reg);
+				placedRegisters |= 1<<reg;
 			}
 
 			break;
@@ -1391,6 +1661,11 @@ void Trace_placeRegisters(Trace* trace) {
 
 		case TRACECODE_ARITHMETIC_IMM:
 		{
+			int psize = (line >> 13) & 0x3;
+			if (psize >= 2) {
+				linePtr++;
+				ip++;
+			}
 			break;	
 		}
 
@@ -1402,18 +1677,91 @@ void Trace_placeRegisters(Trace* trace) {
 		case TRACECODE_LOGIC_IMM_LEFT:
 		case TRACECODE_LOGIC_IMM_RIGHT:
 		{
-			break;	
+			int psize = (line >> 14) & 0x3;
+			if (psize >= 2) {
+				linePtr++;
+				ip++;
+			}
+			break;
 		};
 
 
 
 		case TRACECODE_FNCALL:
 		{
+			printf("situat: ");
+			for (int i = TRACE_REG_RAX; i <= TRACE_REG_R11; i++) {
+				printf("%d ", regs[i].nextUse);
+			}
+			printf("\n");
+
+			fnplacement_t* placement = Array_push(fnplacement_t, &trace->fncallPlacements);
+	
+			// generate IndexedTraceRegister list
+			IndexedTraceRegister sorted[TRACE_REG_R11];
+			for (int i = 0; i < TRACE_REG_R11; i++) {
+				int j = i+TRACE_REG_RAX;
+				sorted[i].pos = j;
+				sorted[i].nextUse = regs[j].nextUse;
+			}
+			
+			qsort(sorted, TRACE_REG_R11, sizeof(IndexedTraceRegister), IndexedTraceRegister_compare);
+			int keptRegisters = 0;
+
+			// Use rbx, etc.
+			int regPos = TRACE_REG_RBX;
+			for (int i = 0; i < TRACE_REG_R15 - TRACE_REG_RBX + 1; i++) {			
+				int p = sorted[i].pos;
+				if (sorted[p-1].nextUse == -1)
+					continue;
+
+				if (sorted[p-1].nextUse == -2) {
+					printf("REFUSE %d\n", p);
+					keptRegisters |= 1 << (p-1);
+					(*placement)[p-1] = -TRACE_REG_NONE;
+					continue;
+				}
+				
+				int flag = 1<<i;
+				if (sorted[p-1].nextUse <= ip + TRACE_CALLESAVED_LIMIT || (slowRegisters & flag)) {
+					keptRegisters |= 1 << (p-1);
+					slowRegisters |= flag;
+					
+					regs[regPos].variable = regs[p].variable;
+					regs[regPos].nextUse = regs[p].nextUse;
+					// regs[j].replace = regs[p].replace;
+
+					regs[p].variable = TRACE_VARIABLE_NONE;
+					regs[p].nextUse = -1;
+
+					printf("give %d\n", -regPos);
+					(*placement)[p-1] = -regPos;
+					regPos++;
+				}
+			}
+
+			// Save lost registers
+			for (int i = 0; i < TRACE_REG_R11 - TRACE_REG_RAX+1; i++) {
+				if ((keptRegisters & (1<<i)))
+					continue;
+				
+				int j = i+TRACE_REG_RAX;
+				if (regs[j].variable == TRACE_VARIABLE_NONE) {
+					((int*)placement)[i] = -TRACE_REG_NONE;
+				} else {
+					((int*)placement)[i] = trace->stackId;
+					trace->stackId++;
+					regs[j].variable = TRACE_VARIABLE_NONE;
+					regs[j].nextUse = -1;
+				}
+			}
+
 			break;
 		}
 
 		case TRACECODE_IF:
 		{
+
 			break;
 		}
 
@@ -1426,6 +1774,7 @@ void Trace_placeRegisters(Trace* trace) {
 		{
 			break;
 		}
+
 		}
 	
 		continueWhile:
@@ -1434,6 +1783,8 @@ void Trace_placeRegisters(Trace* trace) {
 
 
 	finishWhile:
+	// if (fncallPositionsOrigin)
+		// free(fncallPositionsOrigin);
 	
 }
 
@@ -1442,10 +1793,10 @@ void Trace_placeRegisters(Trace* trace) {
 
 
 static const char* REGISTER_NAMES[][TRACE_REG_NONE] = {
-	{"Zl", "al", "cl", "r11b"},
-	{"Zx", "ax", "cx", "r11w"},
-	{"eZx", "eax", "ecx", "r11d"},
-	{"rZx", "rax", "rcx", "r11"},
+	{"Zl", "al", "cl", "r11b", "bl", "r15b"},
+	{"Zx", "ax", "cx", "r11w", "bx", "r15w"},
+	{"eZx", "eax", "ecx", "r11d", "ebx", "r15d"},
+	{"rZx", "rax", "rcx", "r11", "rbx", "r15"},
 };
 
 static const char* REGISTER_SIZENAMES[] = {
@@ -1466,20 +1817,42 @@ static const char* ARITHMETIC_NAMES[] = {
 	"neg"
 };
 
-void Trace_printUsage(Trace* trace, FILE* output, int psize, int use) {
-	if (use >= 0) {
-		printf("use %d\n", use);
+
+static const char* LOGIC_NAMES[] = {
+	"and",
+	"or",
+	"xor",
+	"shl",
+	"shr",
+	NULL, // logical and
+	NULL, // logical or
+	"sete",
+	"setne",
+	"setl",
+	"setle",
+	"setg",
+	"setge",
+};
+
+typedef struct {
+	int store;
+	int offset;
+} Use;
+
+void Trace_printUsage(Trace* trace, FILE* output, int psize, Use use) {
+	if (use.store >= 0) {
 		int size = Trace_unpackSize(psize);
-		int pos = TraceStackHandler_guarantee(&trace->stackHandler, size, size, use);
+		int pos = TraceStackHandler_guarantee(&trace->stackHandler, size, size, use.store);
+		pos += use.offset;
 		fprintf(output, "%s[rsp-%d]", REGISTER_SIZENAMES[psize], pos);
 	} else {
-		if (use >= TRACE_REG_NONE) {use = 0;}
-		fprintf(output, "%s", REGISTER_NAMES[psize][-use]);
+		if (use.store == -TRACE_REG_NONE) {use.store = 0;}
+		int s = -use.store;
+		fprintf(output, "%s", REGISTER_NAMES[psize][s]);
 	}	
 } 
 
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
-	int labelCounter = 0;
 	FILE* output = fnAsm->output;
 
 	// Init data
@@ -1488,17 +1861,22 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	TraceStackHandler stackHandler;
 	TraceStackHandler_create(&trace->stackHandler, trace->stackId);
 
-
 	fprintf(output, "fn_%p: ; %s\n", fnAsm->fn, fnAsm->fn->name);
 	
-	Replace* replace = trace->replaces.data;
-	Replace* finalReplace = &replace[trace->replaces.length];
+	fnplacement_t* const placementsObj = trace->fncallPlacements.data;
+	fnplacement_t* placement = placementsObj;
+	TraceReplace* replace = trace->replaces.data;
+	TraceReplace* finalReplace = &replace[trace->replaces.length];
 	TracePack* pack = trace->first;
 	trline_t* linePtr = pack->line;
 
-	int uses[4];
+	int labelCounter = 0;
+	int slowRegisters = 0;
+	int argumentPosition = 0;
 	int ip = 0;
 	int usageCompletion = 0;
+	
+	Use uses[4];
 
 
 	while (true) {
@@ -1508,33 +1886,74 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		// Apply replaces
 		while (replace < finalReplace && replace->instruction == ip) {
-			varInfos[replace->variable].store = -replace->destRegister;
+			uint variable = replace->variable;
+			
+			// Move victim
 			int victim = replace->victim;
+			printf("victim %d for %d\n", victim, variable);
 			if (victim >= 0) {
-				fprintf(output, "\tmov ");
 				int psize = Trace_packSize(varInfos[victim].size);
-				int victimStackId = replace->victimStackId;
-
+				int victimStore = replace->victimStore;
+				printf("dest %d > %d\n", replace->destination, victimStore);
+				
+				fprintf(output, "\tmov ");
 				Trace_printUsage(
 					trace, output, psize,
-					victimStackId
+					(Use){victimStore, 0}
 				);
 				fprintf(output, ", ");
 				Trace_printUsage(
 					trace, output, psize,
-					varInfos[victim].store
+					(Use){varInfos[victim].store, 0}
 				);
-				fprintf(output, "; replacement\n");
+				fprintf(output, "; throw %d\n", victim);
 
-				varInfos[victim].store = victimStackId;
+				varInfos[victim].store = victimStore;
+			
+			} else if (victim != -TRACE_REG_NONE) {
+				victim = -victim;
+				
+				regs[victim].variable = TRACE_VARIABLE_NONE;
+				regs[victim].nextUse = -1;
 			}
 
-			int source = replace->source;
-			
-			/// TODO: free source region ?
+			// Free stack area
+			int destination = replace->destination;
+			if (varInfos[variable].store >= 0){
+				int psize = Trace_packSize(varInfos[variable].size);
+
+				fprintf(output, "\tmov ");
+				Trace_printUsage(
+					trace, output, psize,
+					(Use){destination, 0}
+				);
+				fprintf(output, ", ");
+				Trace_printUsage(
+					trace, output, psize,
+					(Use){varInfos[variable].store, 0}
+				);
+				fprintf(output, "; take %d\n", variable);
+
+
+				// Free taken value
+				TraceStackHandler_remove(
+					&trace->stackHandler,
+					varInfos[variable].store,
+					varInfos[variable].size
+				);
+			}
+
+			// Update store
+			varInfos[variable].store = destination;
+			if (destination < 0) {
+				destination = -destination;
+				regs[destination].nextUse = varInfos[variable].nextUse;
+				regs[destination].variable = variable;
+			}
 
 			replace++;
 		}
+
 
 		ip++;
 
@@ -1544,18 +1963,44 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
 			trline_t varIdx = line >> 10;
 			int store = varInfos[varIdx].store;
-			if (store >= 0 && code == 0) {
-				printf("rem %d\n" , store);
-				store = TraceStackHandler_remove(
-					&trace->stackHandler,
-					store,
-					varInfos[varIdx].size
-				);
+			printf("read %d => %d\n", varIdx, store);
+			if (varInfos[varIdx].registrable) {
+				if (store >= 0 && code == 0) {
+					store = TraceStackHandler_remove(
+						&trace->stackHandler,
+						store,
+						varInfos[varIdx].size
+					);
+				}
+				
+				uses[usageCompletion].store = store;
+				uses[usageCompletion].offset = 0;
+				usageCompletion++;
+			} else {
+				line = *linePtr;
+				linePtr++;
+				ip++;
+
+				uses[usageCompletion].store = store;
+				uses[usageCompletion].offset = line;
+				usageCompletion++;
 			}
-			uses[usageCompletion] = store;
-			usageCompletion++;
+
+			if (store != -TRACE_REG_NONE && store <= -TRACE_REG_RBX) {
+				int r = -store;
+				int flag = 1 << r;
+				if ((slowRegisters & flag) == 0) {
+					printf("ID %d\n", r);
+					fprintf(output, "\tpush %s\n", REGISTER_NAMES[3][r]);
+					slowRegisters |= flag;
+				}
+			}
+			
+			
 			continue;
 		}
+
+
 
 		usageCompletion = 0;
 
@@ -1590,9 +2035,35 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_CREATE:
 		{
-			varInfos[(line >> 16) & 0xFFF].size = (*linePtr) >> 16;
+			int variable = (line >> 16) & 0xfff;
+			int size = (*linePtr) >> 16;
+			char registrable = (line >> 28) & 1;
+			char argument = (line >> 11) & 1;
+
+			line = *linePtr;
 			linePtr++;
 			ip++;
+
+			trline_t next = line & 0x3FF;
+			int nextUse = next == 0 ? -1 : next;
+
+			printf("create %d\n", variable);
+			varInfos[variable].size = size;
+			varInfos[variable].nextUse = nextUse;
+			if (argument) {
+				if (registrable) {
+					int reg = ARGUMENT_REGISTERS[argumentPosition];
+					varInfos[variable].store = -reg;
+					regs[reg].nextUse = nextUse;
+					regs[reg].variable = variable;
+					argumentPosition++;
+				} else {
+					raiseError("[TODO] handle args on stack");
+				}
+			} else {
+				varInfos[variable].store = -TRACE_REG_NONE;
+				varInfos[variable].registrable = registrable;
+			}
 			break;	
 		};
 
@@ -1650,11 +2121,12 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				// edit register
 				int psize = (line >> 10) & 0x3;
 				int reg = line >> 16;
+
 				fprintf(output, "\tmov ");
-				Trace_printUsage(trace, output, psize, -reg);
+				Trace_printUsage(trace, output, psize, (Use){-reg, 0});
 				fprintf(output, ", ");
 				Trace_printUsage(trace, output, psize, uses[0]);
-				fprintf(output, "\n");
+				fprintf(output, "; place \n");
 			}
 			break;
 		}
@@ -1763,6 +2235,95 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_LOGIC:
 		{
+			int operation = (line >> 10) & 0x15;
+			int psize = (line >> 14) & 0x3;
+
+			switch (operation) {
+			case TRACEOP_BITWISE_AND:
+			case TRACEOP_BITWISE_OR:
+			case TRACEOP_BITWISE_XOR:
+			{
+				fprintf(output, "\tmov ");
+				Trace_printUsage(trace, output, psize, uses[2]);
+				fprintf(output, ", ");
+				Trace_printUsage(trace, output, psize, uses[0]);
+				fprintf(output, "; prepare logic operation\n");
+
+				// Perform real operation
+				fprintf(output, "\t%s ", LOGIC_NAMES[operation]);
+				Trace_printUsage(trace, output, psize, uses[2]);
+				fprintf(output, ", ");
+				Trace_printUsage(trace, output, psize, uses[1]);
+				fprintf(output, "\n");
+				break;
+			}
+
+			case TRACEOP_LEFT_SHIFT:
+			{
+				raiseError("[TODO] shl");
+				break;
+			}
+			
+			case TRACEOP_RIGHT_SHIFT:
+			{
+				raiseError("[TODO] shr");
+				break;
+			}
+
+
+			case TRACEOP_LOGICAL_AND:
+			{
+				raiseError("[TODO] logical and");
+				break;
+			}
+			
+			case TRACEOP_LOGICAL_OR:
+			{
+				
+				raiseError("[TODO] logical or");
+				break;
+			}
+
+
+			case TRACEOP_EQUAL:
+			{
+				raiseError("[TODO] logical operation");
+				break;
+			}
+			
+			case TRACEOP_NOT_EQUAL:
+			{
+				raiseError("[TODO] logical operation");
+				break;
+			}
+
+			case TRACEOP_LESS:
+			{
+				raiseError("[TODO] logical operation");
+				break;
+			}
+
+			case TRACEOP_LESS_EQUAL:
+			{
+				raiseError("[TODO] logical operation");
+				break;
+			}
+
+			case TRACEOP_GREATER:
+			{
+				raiseError("[TODO] logical operation");
+				break;
+			}
+
+			case TRACEOP_GREATER_EQUAL:
+			{
+				raiseError("[TODO] logical operation");
+				;
+				break;
+			}
+
+
+			}
 			break;	
 		};
 
@@ -1776,21 +2337,150 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_FNCALL:
 		{
+			int newSlowRegisters = slowRegisters;
+			// Collect slow registers to add
+			for (int i = 0; i < TRACE_REG_R11 - TRACE_REG_RAX + 1; i++) {
+				int p = (*placement)[i];
+				if (p < 0 && p != TRACE_REG_NONE) {
+					newSlowRegisters |= 1<<(-p);
+				}
+			}
+
+			// Add slow registers
+			newSlowRegisters ^= slowRegisters;
+			for (int i = TRACE_REG_RBX; i <= TRACE_REG_R15; i++) {
+				if (newSlowRegisters & (1<<i)) {
+					fprintf(output, "\tpush %s\n", REGISTER_NAMES[3][i]);
+				}
+			}
+
+
+			// Save data
+			uint variables[TRACE_REG_R11 - TRACE_REG_RAX + 1];
+
+			for (int i = 0; i < TRACE_REG_R11 - TRACE_REG_RAX + 1; i++) {
+				int p = (*placement)[i];
+				int j = i + TRACE_REG_RAX;
+
+				printf("v %u %d\n", regs[j].variable, j);
+				
+				if (p >= 0) {
+					uint variable = regs[j].variable;
+					variables[i] = variable;
+
+					int psize = Trace_packSize(varInfos[variable].size);
+					regs[j].variable = TRACE_VARIABLE_NONE;
+					regs[j].nextUse = -1;
+
+					varInfos[variable].store = p;
+
+					fprintf(output, "\tmov ");
+					Trace_printUsage(trace, output, psize, (Use){p, 0});
+					fprintf(output, ", %s ; for fncall \n", REGISTER_NAMES[psize][j]);
+				
+				} else if (p != -TRACE_REG_NONE) {
+
+					// Move to rbx
+					uint variable = regs[j].variable;
+					variables[i] = variable;
+					printf("sis %d\n", i);
+					int psize = Trace_packSize(varInfos[variable].size);
+					
+					varInfos[variable].store = p;
+
+					p = -p;
+					slowRegisters |= 1 << p;
+					regs[p].variable = variable;
+					regs[p].nextUse = regs[j].nextUse;
+
+
+					regs[j].variable = TRACE_VARIABLE_NONE;
+					regs[j].nextUse = -1;
+
+					fprintf(
+						output,
+						"\tmov %s, %s; for fncall\n",
+						REGISTER_NAMES[psize][p],
+						REGISTER_NAMES[psize][j]
+					);
+
+				}
+
+			}
+
+			
+
+			
+			// Call function
+			Function* fn = Trace_getFunction(trace, line>>10);
+			fprintf(output, "\tcall fn_%p\n", fn);
+			
+			// Restore data in stack
+			for (int i = TRACE_REG_R11 - TRACE_REG_RAX; i >= 0; i--) {
+				int p = (*placement)[i];
+
+				if (p >= 0) {
+					int j = i + TRACE_REG_RAX;
+					uint variable = variables[i];
+					int size = varInfos[variable].size;
+					int psize = Trace_packSize(size);
+
+					regs[j].variable = variable;
+					regs[j].nextUse = varInfos[variable].nextUse;
+
+					varInfos[variable].store = -(i+TRACE_REG_RAX);
+
+					fprintf(output, "\tmov %s, ", REGISTER_NAMES[psize][j]);
+					Trace_printUsage(trace, output, psize, (Use){p, 0});
+					fprintf(output, "; from fncall \n");
+
+					TraceStackHandler_remove(&trace->stackHandler, p, size);
+
+				} else if (p != -TRACE_REG_NONE) {
+					int j = i + TRACE_REG_RAX;
+					uint variable = variables[i];
+					printf("vis %d %d\n", i, variable);
+					int size = varInfos[variable].size;
+					int psize = Trace_packSize(size);
+					
+					varInfos[variable].store = -j;
+
+					regs[j].variable = variable;
+					regs[j].nextUse = varInfos[variable].nextUse;
+
+					p = -p;
+					regs[p].variable = TRACE_VARIABLE_NONE;
+					regs[p].nextUse = -1;
+
+					fprintf(
+						output,
+						"\tmov %s, %s; from fncall\n",
+						REGISTER_NAMES[psize][j],
+						REGISTER_NAMES[psize][p]
+					);
+				}
+			}
+			
+			placement++;
 			break;
 		}
 
 		case TRACECODE_IF:
 		{
+
+			printf("[TODO] asm IF\n");
 			break;
 		}
-
+		
 		case TRACECODE_JMP:
 		{
+			printf("[TODO] asm JMP\n");
 			break;
 		}
-
+		
 		case TRACECODE_CAST:
 		{
+			printf("[TODO] asm CAST\n");
 			break;
 		}
 		}
@@ -1798,9 +2488,18 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	}
 
 	finishWhile:
+	if (placementsObj)
+		free(placementsObj);
+
 	TraceStackHandler_free(&trace->stackHandler);
 
-	fprintf(output, "\tret\n");
+	for (int i = TRACE_REG_R15; i >= TRACE_REG_RBX; i--) {
+		printf("k-%d\n", i);
+		if (slowRegisters & (1<<i))
+			fprintf(output, "\tpop %s\n", REGISTER_NAMES[3][i]);
+	}
+
+	fprintf(output, "\tret\n\n");
 }
 
 

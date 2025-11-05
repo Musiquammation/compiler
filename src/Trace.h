@@ -43,6 +43,10 @@ enum {
 	TRACE_USAGE_LAST = 0,
 	/// TODO: edit 32
 	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 32,
+
+	TRACE_OFFSET_NONE = -1,
+	TRACE_CALLESAVED_LIMIT = 128,
+	TRACE_VARIABLE_NONE = 0xffffffff,
 };
 
 
@@ -70,17 +74,24 @@ typedef struct {
 } TraceFunctionMap;
 
 typedef struct {
+	int instruction;
+	uint variable;
+	int victim;
+	int destination;
+	int victimStore; // for the victim
+} TraceReplace;
+
+typedef struct {
 	uint variable;
 	int nextUse;
 } TraceRegister;
-
 
 typedef struct {
 	int size;
 	int nextUse;
 	int store; // positive => stackId, negative => register
+	char registrable;
 } VarInfoTrace;
-
 
 struct Trace {
 	int instruction;
@@ -95,6 +106,7 @@ struct Trace {
 		};
 		
 		struct {
+			Array fncallPlacements; // type: fnplacement_t
 			Array replaces; // type: Replace
 			VarInfoTrace* varInfos; // type: VarInfo
 			TraceRegister* regs;
@@ -104,6 +116,7 @@ struct Trace {
 	};
 
 	TraceFunctionMap calledFunctions;
+
 
 	int tempRegisters[TRACE_TEMP_REGISTERS];
 	int keptRegisters[TRACE_KEPT_REGISTERS];
@@ -117,26 +130,26 @@ void Trace_delete(Trace* trace);
 uint Trace_pushVariable(Trace* trace);
 void Trace_removeVariable(Trace* trace, uint index);
 int Trace_reachFunction(Trace* trace, Function* fn);
-
+Function* Trace_getFunction(Trace* trace, int index);
+void Trace_pushArgs(Trace* trace, Variable** args, int arglen);
 
 int Trace_packSize(int size);
 int Trace_unpackSize(int psize);
 int Trace_packExprTypeToSize(int type);
-void Trace_set(Trace* trace, Expression* expr, uint destVar, int signedSize, int exprType);
+void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int signedSize, int exprType);
 
 trline_t* Trace_push(Trace* trace, int num);
 
 void TracePack_print(const TracePack* pack, int position);
 
-void Trace_addUsage(Trace* trace, uint variable, bool readMode);
+void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode);
 
-uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags);
-void Trace_ins_def(Trace* trace, int variable, int signedSize, castable_t value);
-void Trace_ins_move(Trace* trace, int destVar, int srcVar, int size);
+uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, bool registrable);
+void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value);
+void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size);
 trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
-void Trace_ins_place(Trace* trace, int variable, int reg, int packedSize, int setVariable);
-
+void Trace_ins_place(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize, int setVariable);
 void Trace_placeRegisters(Trace* trace);
 
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
@@ -192,13 +205,14 @@ enum {
 	TRACE_REG_R11,
 
 	TRACE_REG_RBX,
-	TRACE_REG_R12,
-	TRACE_REG_R13,
-	TRACE_REG_R14,
+	// TRACE_REG_R12,
+	// TRACE_REG_R13,
+	// TRACE_REG_R14,
 	TRACE_REG_R15,
 
     TRACE_REG_NONE,
 };
+
 
 
 
@@ -212,6 +226,7 @@ enum {
 	 * ACTION=0: end
 	 * ACTION=1: quick skip
 	 * ACTION=2: return
+	 * ACTION=3: forbid moves
 	 */
 	TRACECODE_STAR = TRACE_USAGE_OUT_OF_BOUNDS+1,
 
@@ -219,14 +234,16 @@ enum {
 	 * +00: CODE
 	 * +10: FLAGS (6 bits)
 	 * +16: VARIABLE
-	 * +28: [blank]
+	 * +28: REGISTRABLE
+	 * +29
 	 * 
 	 * +00: SIZE
-	 * +16: [blank]
+	 * +17: [blank]
 	 * +22: NEXT
 	 * 
 	 * FLAGS are:
 	 * +0: CASTABLE
+	 * +1: ARGUMENT
 	 */
 	TRACECODE_CREATE,
 
