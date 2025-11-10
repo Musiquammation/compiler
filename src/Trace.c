@@ -287,7 +287,7 @@ void TracePack_print(const TracePack* pack, int position) {
 		if (next > TRACE_USAGE_OUT_OF_BOUNDS) {
 			switch (next) {
 				case TRACECODE_STAR:
-					printf("[%04d] STAR action=%d\n", i+position, (n>>10)&0x3);
+					printf("[%04d] STAR action=%d\n", i+position, (n>>10)&0xf);
 					if ((n>>10) == 0)
 						goto finish;
 					break;
@@ -569,6 +569,10 @@ void TracePack_print(const TracePack* pack, int position) {
 
 
 void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr) {
+	if (variable == TRACE_VARIABLE_NONE) {
+		return;
+	}
+
 	VariableTrace* vt = Array_get(VariableTrace, trace->variables, variable);
 	int traceInstruction = trace->instruction;
 	if (readMode) {
@@ -728,8 +732,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		for (int i = 0; i < fncall.argsLength; i++) {
 			/// TODO: check sizes
-			printf("%d\n", i);
-			printf("args_are %p for %s\n", arguments, fncall.fn->name);
+			printf("args_are(%d) %p for %s\n", i, arguments, fncall.fn->name);
 			char isRegistrable = arguments[i]->proto.cl->isRegistrable;
 			int size = Prototype_getSize(&arguments[i]->proto);
 			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
@@ -747,13 +750,12 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			variables[i] = finalVar;
 			
 			if (i < ARGUMENT_REGISTERS_LENGTH) {
-				Trace_ins_place(
+				Trace_ins_placeReg(
 					trace,
 					bufferVar,
 					finalVar,
 					ARGUMENT_REGISTERS[i],
-					Trace_packSize(size),
-					0
+					Trace_packSize(size)
 				);
 			} else {
 				raiseError("[TODO] handle a lot of arguements");
@@ -763,9 +765,12 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			Trace_removeVariable(trace, bufferVar);
 		}
 
-			
 
-		/// TODO: use rax for output
+		// Mark rax will be used
+		if (destVar != TRACE_VARIABLE_NONE) {
+			*Trace_push(trace, 1) = TRACECODE_STAR | (4 << 10);
+		}
+
 		int fnIndex = Trace_reachFunction(trace, fncall.fn);
 
 		// Add usages
@@ -789,7 +794,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		if (destVar != TRACE_VARIABLE_NONE) {
 			int signedOutputSize = Prototype_getSignedSize(&fncall.fn->returnType);
 			if (signedOutputSize == signedSize) {
-				Trace_ins_place(trace, TRACE_VARIABLE_NONE, destVar, TRACE_REG_RAX, Trace_packSize(size), 1);				
+				Trace_ins_placeVar(trace, destVar, TRACE_REG_RAX, Trace_packSize(size));
 	
 			} else {
 				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
@@ -800,7 +805,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	
 				// Put output in temp variable
 				/// TODO: check TRACE_VARIABLE_NONE
-				Trace_ins_place(trace, TRACE_VARIABLE_NONE, temp, TRACE_REG_RAX, Trace_packSize(size), 1);
+				Trace_ins_placeVar(trace, temp, TRACE_REG_RAX, Trace_packSize(size));
 	
 				Trace_addUsage(trace, temp, TRACE_OFFSET_NONE, true);
 				Trace_addUsage(trace, destVar, destOffset, true);
@@ -1234,7 +1239,7 @@ void Trace_ins_jmp(Trace* trace, uint instruction) {
 	*Trace_push(trace, 1) = TRACECODE_JMP | (instruction << 10);
 }
 
-void Trace_ins_place(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize, int setVariable) {
+void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize) {
 	*Trace_push(trace, 1) = TRACECODE_STAR | (3<<10); // forbid read
 
 	/// TODO: check if variable is registrable
@@ -1243,7 +1248,19 @@ void Trace_ins_place(Trace* trace, int srcVariable, int dstVariable, int reg, in
 	
 	*Trace_push(trace, 1) = TRACECODE_PLACE |
 		(packedSize << 10) |
-		(setVariable << 12) |
+		(0 << 12) |
+		(reg << 16);
+}
+
+void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize) {
+	*Trace_push(trace, 1) = TRACECODE_STAR | (3<<10); // forbid read
+
+	/// TODO: check if variable is registrable
+	Trace_addUsage(trace, dstVariable, TRACE_OFFSET_NONE, false);
+	
+	*Trace_push(trace, 1) = TRACECODE_PLACE |
+		(packedSize << 10) |
+		(1 << 12) |
 		(reg << 16);
 }
 
@@ -1544,7 +1561,7 @@ void Trace_placeRegisters(Trace* trace) {
 		switch (code) {
 		case TRACECODE_STAR:
 		{
-			int action = (line >> 10) & 0x3;
+			int action = (line >> 10) & 0xf;
 			switch (action) {
 				case 0:
 				// change pack
@@ -1563,6 +1580,12 @@ void Trace_placeRegisters(Trace* trace) {
 
 			case 3: // forbid moves
 				movesAllowed = false;
+				break;
+
+			case 4: // protect RAX for fncall
+				break;
+
+			case 5: // protect RAX and RDX for fncall
 				break;
 
 			}
@@ -1622,7 +1645,6 @@ void Trace_placeRegisters(Trace* trace) {
 
 		case TRACECODE_MOVE:
 		{
-			
 			break;
 		}
 
@@ -1630,7 +1652,14 @@ void Trace_placeRegisters(Trace* trace) {
 		{
 			if (line & (1<<12)) {
 				// Edit variable
-				raiseError("[TODO]: PLACE > edit variable");
+				uint destVar = usageBuffer[0] >> 10;
+				int nextUse = usageBuffer[0] & 0x3ff;
+				nextUse = (nextUse == TRACE_USAGE_OUT_OF_BOUNDS ?
+					0x7ffffffe : ip + nextUse - 1);
+
+				int reg = line >> 16;
+				varInfos[destVar].nextUse = nextUse;
+				
 			} else {
 				int reg = line >> 16;
 				uint srcVar = usageBuffer[0] >> 10;
@@ -1641,7 +1670,8 @@ void Trace_placeRegisters(Trace* trace) {
 				varInfos[srcVar].store = -TRACE_REG_NONE;
 
 				if (source >= 0) {
-					/// TODO: free stack
+					raiseError("[TODO]: free stack");
+
 				} else if (source != -TRACE_REG_NONE) {
 					regs[-source].nextUse = -1;
 					regs[-source].variable = TRACE_VARIABLE_NONE;
@@ -1850,7 +1880,59 @@ void Trace_printUsage(Trace* trace, FILE* output, int psize, Use use) {
 		int s = -use.store;
 		fprintf(output, "%s", REGISTER_NAMES[psize][s]);
 	}	
-} 
+}
+
+
+
+
+void restoreAfterFnCall(
+	int p, int i,
+	uint variable,
+	VarInfoTrace varInfos[],
+	TraceRegister regs[],
+	FILE* output,
+	Trace* trace
+) {
+	if (p >= 0) {
+		int j = i + TRACE_REG_RAX;
+		int size = varInfos[variable].size;
+		int psize = Trace_packSize(size);
+
+		regs[j].variable = variable;
+		regs[j].nextUse = varInfos[variable].nextUse;
+
+		varInfos[variable].store = -(i+TRACE_REG_RAX);
+
+		fprintf(output, "\tmov %s, ", REGISTER_NAMES[psize][j]);
+		Trace_printUsage(trace, output, psize, (Use){p, 0});
+		fprintf(output, "; from fncall \n");
+
+		TraceStackHandler_remove(&trace->stackHandler, p, size);
+
+	} else if (p != -TRACE_REG_NONE) {
+		int j = i + TRACE_REG_RAX;
+		printf("vis %d %d\n", i, variable);
+		int size = varInfos[variable].size;
+		int psize = Trace_packSize(size);
+		
+		varInfos[variable].store = -j;
+
+		regs[j].variable = variable;
+		regs[j].nextUse = varInfos[variable].nextUse;
+
+		p = -p;
+		regs[p].variable = TRACE_VARIABLE_NONE;
+		regs[p].nextUse = -1;
+
+		fprintf(
+			output,
+			"\tmov %s, %s; from fncall\n",
+			REGISTER_NAMES[psize][j],
+			REGISTER_NAMES[psize][p]
+		);
+	}
+}
+
 
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	FILE* output = fnAsm->output;
@@ -1875,12 +1957,30 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	int argumentPosition = 0;
 	int ip = 0;
 	int usageCompletion = 0;
+	trline_t line = 0;
+	trline_t previousLine;
+	char protectMode = 0;
+
+	enum {
+		WAITING_ENABLED = (int)-0x80000000,
+		WAITING_DISABLED = 0,
+	};
+	typedef struct {
+		int store;
+		int size;
+		uint variable;
+	} WaitingRegister;
+
+
+	WaitingRegister waitRax = {-TRACE_REG_NONE, WAITING_DISABLED};
+	WaitingRegister waitRdx = {-TRACE_REG_NONE, WAITING_DISABLED};
 	
 	Use uses[4];
 
-
 	while (true) {
-		trline_t line = *linePtr;
+		printf("> to %d\n", ip);
+		previousLine = line;
+		line = *linePtr;
 		linePtr++;
 		trline_t code = line & 0x3ff;
 
@@ -1890,7 +1990,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			
 			// Move victim
 			int victim = replace->victim;
-			printf("victim %d for %d\n", victim, variable);
+			printf("victim %d for v%d\n", victim, variable);
 			if (victim >= 0) {
 				int psize = Trace_packSize(varInfos[victim].size);
 				int victimStore = replace->victimStore;
@@ -2010,7 +2110,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		switch (code) {
 		case TRACECODE_STAR:
 		{
-			int action = line >> 10;
+			int action = (line >> 10) & 0xf;
 			switch (action) {
 			case 0:
 				// change pack
@@ -2026,6 +2126,21 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			case 2: // return
 				fprintf(output, "\tret\n");
+				break;
+
+			case 3: // forbid moves
+				break;
+			
+			case 4: // protect RAX for fncall
+				waitRax.store = -TRACE_REG_NONE;
+				waitRax.size = WAITING_ENABLED;
+				break;
+
+			case 5: // protect RAX and RDX for fncall
+				waitRax.store = -TRACE_REG_NONE;
+				waitRax.size = WAITING_ENABLED;
+				waitRdx.store = -TRACE_REG_NONE;
+				waitRdx.size = WAITING_ENABLED;
 				break;
 
 			}
@@ -2116,7 +2231,38 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		case TRACECODE_PLACE:
 		{
 			if (line & (1<<12)) {
-				raiseError("[TODO] edit variable in place (so with a register)");
+				// edit variable
+				uint destVar = previousLine >> 10;
+				int nextUse = previousLine & 0x3ff;
+				int psize = (line >> 10) & 0x3;
+
+				nextUse = (nextUse == TRACE_USAGE_OUT_OF_BOUNDS ?
+					0x7ffffffe : ip + nextUse - 1);
+
+				int reg = line >> 16;
+				varInfos[destVar].nextUse = nextUse;
+				
+				fprintf(output, "\tmov ");
+				Trace_printUsage(trace, output, psize, uses[0]);
+				fprintf(output, ", ");
+				Trace_printUsage(trace, output, psize, (Use){-reg, 0});
+				fprintf(output, "; place(var)\n");
+
+				// Finally perform "from fncall operation"
+				if (reg == TRACE_REG_RAX && waitRax.store != -TRACE_REG_NONE) {
+					/// TODO: complete here
+					restoreAfterFnCall(waitRax.store, 0, waitRax.variable, varInfos, regs, output, trace);
+					waitRax.store = -TRACE_REG_NONE;
+					waitRax.size = WAITING_DISABLED;
+				}
+				
+				if (reg == TRACE_REG_RDX && waitRdx.store != -TRACE_REG_NONE) {
+					raiseError("[TODO] enable restoreAfterFnCall");
+					// restoreAfterFnCall(waitRax.store, 0, waitRax.variable, varInfos, regs, output, trace);
+					waitRdx.store = -TRACE_REG_NONE;
+					waitRax.size = WAITING_DISABLED;
+				}
+
 			} else {
 				// edit register
 				int psize = (line >> 10) & 0x3;
@@ -2126,8 +2272,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				Trace_printUsage(trace, output, psize, (Use){-reg, 0});
 				fprintf(output, ", ");
 				Trace_printUsage(trace, output, psize, uses[0]);
-				fprintf(output, "; place \n");
+				fprintf(output, "; place(reg)\n");
 			}
+
 			break;
 		}
 
@@ -2362,8 +2509,6 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				int p = (*placement)[i];
 				int j = i + TRACE_REG_RAX;
 
-				printf("v %u %d\n", regs[j].variable, j);
-				
 				if (p >= 0) {
 					uint variable = regs[j].variable;
 					variables[i] = variable;
@@ -2415,50 +2560,32 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			Function* fn = Trace_getFunction(trace, line>>10);
 			fprintf(output, "\tcall fn_%p\n", fn);
 			
-			// Restore data in stack
+			// Restore data
 			for (int i = TRACE_REG_R11 - TRACE_REG_RAX; i >= 0; i--) {
 				int p = (*placement)[i];
 
-				if (p >= 0) {
-					int j = i + TRACE_REG_RAX;
-					uint variable = variables[i];
-					int size = varInfos[variable].size;
-					int psize = Trace_packSize(size);
-
-					regs[j].variable = variable;
-					regs[j].nextUse = varInfos[variable].nextUse;
-
-					varInfos[variable].store = -(i+TRACE_REG_RAX);
-
-					fprintf(output, "\tmov %s, ", REGISTER_NAMES[psize][j]);
-					Trace_printUsage(trace, output, psize, (Use){p, 0});
-					fprintf(output, "; from fncall \n");
-
-					TraceStackHandler_remove(&trace->stackHandler, p, size);
-
-				} else if (p != -TRACE_REG_NONE) {
-					int j = i + TRACE_REG_RAX;
-					uint variable = variables[i];
-					printf("vis %d %d\n", i, variable);
-					int size = varInfos[variable].size;
-					int psize = Trace_packSize(size);
-					
-					varInfos[variable].store = -j;
-
-					regs[j].variable = variable;
-					regs[j].nextUse = varInfos[variable].nextUse;
-
-					p = -p;
-					regs[p].variable = TRACE_VARIABLE_NONE;
-					regs[p].nextUse = -1;
-
-					fprintf(
-						output,
-						"\tmov %s, %s; from fncall\n",
-						REGISTER_NAMES[psize][j],
-						REGISTER_NAMES[psize][p]
-					);
+				if (i == TRACE_REG_RAX-1 && waitRax.size == WAITING_ENABLED) {
+					if (p != -TRACE_REG_NONE) {
+						uint v = variables[i];
+						waitRax.store = p;
+						waitRax.size = varInfos[v].size;
+						waitRax.variable = v;
+					}
+					continue;
 				}
+
+				if (i == TRACE_REG_RDX-1 && waitRdx.size == WAITING_ENABLED) {
+					if (p != -TRACE_REG_NONE) {
+						uint v = variables[i];
+						waitRdx.store = p;
+						waitRdx.size = varInfos[v].size;
+						waitRdx.variable = v;
+					}
+					continue;
+				}
+
+
+				restoreAfterFnCall(p, i, variables[i], varInfos, regs, output, trace);
 			}
 			
 			placement++;
@@ -2480,9 +2607,35 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		
 		case TRACECODE_CAST:
 		{
-			printf("[TODO] asm CAST\n");
+			trline_t srcSigned = line & (1<<10);
+			trline_t srcFloat = line & (1<<11);
+			trline_t destSigned = line & (1<<12);
+			trline_t destFloat = line & (1<<13);
+
+			if (srcFloat || destFloat) {
+				raiseError("[TODO] handle float casts");
+				return;
+			}
+
+			
+			trline_t srcPSize = (line >> 16) & 0x3;
+			trline_t dstPSize = (line >> 18) & 0x3;
+			if (dstPSize >= srcPSize) {
+				fprintf(output, "\tmov%s ", destSigned ? "sx" : "zx");
+				Trace_printUsage(trace, output, dstPSize, uses[1]);
+				fprintf(output, ", ");
+				Trace_printUsage(trace, output, srcPSize, uses[0]);
+				fprintf(output, "\n");
+			} else {
+				
+			}
+			
+
 			break;
 		}
+
+
+
 		}
 
 	}

@@ -42,7 +42,7 @@ enum {
 
 	TRACE_USAGE_LAST = 0,
 	/// TODO: edit 32
-	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 32,
+	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 17,
 
 	TRACE_OFFSET_NONE = -1,
 	TRACE_CALLESAVED_LIMIT = 128,
@@ -149,7 +149,8 @@ void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, casta
 void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size);
 trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
-void Trace_ins_place(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize, int setVariable);
+void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize);
+void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize);
 void Trace_placeRegisters(Trace* trace);
 
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
@@ -214,19 +215,27 @@ enum {
 };
 
 
+/// TODO: remove this line
+enum {
+	TRACE_REG_RDX = 420
+};
+
+
 
 
 enum {
 	/**
 	 * +00: CODE
 	 * +10: ACTION
-	 * +12: [blank]
+	 * +14: [blank]
 	 * +16: DATA
 	 * 
 	 * ACTION=0: end
 	 * ACTION=1: quick skip
 	 * ACTION=2: return
 	 * ACTION=3: forbid moves
+	 * ACTION=4: protect RAX for fncall
+	 * ACTION=5: protect RAX and RDX for fncall
 	 */
 	TRACECODE_STAR = TRACE_USAGE_OUT_OF_BOUNDS+1,
 
@@ -295,7 +304,7 @@ enum {
 	 * +13: [blank]
 	 * +16: register id
 	 * +24: [blank]
-	 */
+	 	 */
 	TRACECODE_PLACE,
 
 	/**

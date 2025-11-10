@@ -1,8 +1,5 @@
-function twoArg(a: int, b: int): int {
-	let result: int;
-	result = a & b;
-	return result;
-	
+function twoArgs(a: int, b: int): int {
+	return (a+42) + b;
 }
 
 function main {
@@ -11,7 +8,8 @@ function main {
 	v0 = 78;
 	v1 = 38;
 
-	twoArg(50, v1+2);
+	v1 = twoArgs(50, v1+23);
+
 
 	return v0+v1;
 	

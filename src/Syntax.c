@@ -2090,7 +2090,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			
 			// Place value in rax
 			uint regVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
-			Trace_ins_place(trace, variable, regVar, TRACE_REG_RAX, Trace_packSize(size), 0);
+			Trace_ins_placeReg(trace, variable, regVar, TRACE_REG_RAX, Trace_packSize(size));
 			Trace_removeVariable(trace, variable);
 			
 			*Trace_push(trace, 1) = TRACECODE_STAR | (2<<10);
