@@ -1912,7 +1912,159 @@ void Syntax_functionScope_freeLabel(
 
 
 
+
+static void Syntax_functionScope_if(
+	Parser* parser,
+	ScopeFunction* scope,
+	Trace* trace
+) {
+	Trace_ins_savePlacement(trace);
+
+	// Require left parethesis
+	Token token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
+		return;
+
+	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
+	// Require right parenthesis
+	token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
+		return;
+
+	// Require left brace
+	token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+		return;
+
+	/// TODO: follow each pair
+
+	ScopeFunction subScope = {
+		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
+		.fn = scope->fn
+	};
+	ScopeFunction_create(&subScope);
+
+
+	int exprType = expr->type;
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
+	
+	/// TODO: handle size
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
+
+	Expression_free(exprType, expr);
+	free(expr);
+
+	
+	trline_t* ifLine = Trace_ins_if(trace, dest);
+	Trace_removeVariable(trace, dest);
+
+	Syntax_functionScope(&subScope, trace, parser);
+	ScopeFunction_delete(&subScope);
+	
+	Trace_ins_openPlacement(trace);
+
+	/// TODO: compare new TypeNode with the else case => track similarities
+
+
+	
+	// No else
+	token = Parser_read(parser, &_labelPool);
+	if (token.type != TOKEN_TYPE_LABEL|| token.label != _commonLabels._else) {
+		// Mark position
+		*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
+		Parser_saveToken(parser, &token);
+		*ifLine |= (trace->instruction << 10);
+		return;
+	}
+
+	/// Here, else 
+	raiseError("[TODO] else");
+
+	// Require left brace
+	token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+		return;
+
+	ScopeFunction_create(&subScope);
+	Syntax_functionScope(&subScope, trace, parser);
+	ScopeFunction_delete(&subScope);
+
+
+	*ifLine |= (trace->instruction << 10);
+}
+
+
+static void Syntax_functionScope_while(
+	Parser* parser,
+	ScopeFunction* scope,
+	Trace* trace
+) {
+	Trace_ins_savePlacement(trace);
+
+	// Mark start position
+	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
+
+	// Require left parethesis
+	Token token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
+		return;
+
+	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
+	// Require right parenthesis
+	token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
+		return;
+
+	// Require left brace
+	token = Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+		return;
+
+	/// TODO: follow each pair
+
+	ScopeFunction subScope = {
+		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
+		.fn = scope->fn,
+		.thisvar = scope->thisvar
+	};
+	ScopeFunction_create(&subScope);
+
+	
+	
+	int startInstruction = trace->instruction;
+
+	/// TODO: handle size
+	int exprType = expr->type;
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
+
+	Expression_free(exprType, expr);
+	free(expr);
+
+	
+	trline_t* ifLine = Trace_ins_if(trace, dest);
+	Trace_removeVariable(trace, dest);
+
+	Syntax_functionScope(&subScope, trace, parser);
+	Trace_ins_openPlacement(trace);
+	
+	ScopeFunction_delete(&subScope);
+
+
+	Trace_ins_jmp(trace, startInstruction);
+
+	// Mark end position
+	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
+
+	*ifLine |= (trace->instruction << 10);
+
+}
+
 void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
+	trace->deep++;
+	int scopeId = trace->scopeId;
+	trace->scopeId = trace->nextScopeId;
+	trace->nextScopeId++;
 	/// TODO: create trace (icounter)
 
 	while (true) {
@@ -1937,69 +2089,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// if
 		case 2:
 		{
-			// Require left parethesis
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
-				return;
-
-			Expression* expr = Syntax_expression(parser, &scope->scope, 1);
-			// Require right parenthesis
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
-				return;
-
-			// Require left brace
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
-				return;
-
-			/// TODO: follow each pair
-
-			ScopeFunction subScope = {
-				.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
-				.fn = scope->fn
-			};
-			ScopeFunction_create(&subScope);
-
-
-			int exprType = expr->type;
-			uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
-			
-			/// TODO: handle size
-			Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
-
-			Expression_free(exprType, expr);
-			free(expr);
-
-			
-			trline_t* ifLine = Trace_ins_if(trace, dest);
-			Trace_removeVariable(trace, dest);
-
-			Syntax_functionScope(&subScope, trace, parser);
-
-			ScopeFunction_delete(&subScope);
-
-			/// TODO: compare new TypeNode with the else case => track similarities
-
-			
-			// Check else
-			token = Parser_read(parser, &_labelPool);
-			if (token.type != TOKEN_TYPE_LABEL|| token.label != _commonLabels._else) {
-				Parser_saveToken(parser, &token);
-				*ifLine |= (trace->instruction << 10);
-				break;
-			}
-
-			// Require left brace
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
-				return;
-
-			ScopeFunction_create(&subScope);
-			Syntax_functionScope(&subScope, trace, parser);
-			ScopeFunction_delete(&subScope);
-
-			*ifLine |= (trace->instruction << 10);
+			Syntax_functionScope_if(parser, scope, trace);
 			break;
 		}
 
@@ -2013,55 +2103,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// while
 		case 4:
 		{
-			// Require left parethesis
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
-				return;
-
-			Expression* expr = Syntax_expression(parser, &scope->scope, 1);
-			// Require right parenthesis
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
-				return;
-
-			// Require left brace
-			token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
-				return;
-
-			/// TODO: follow each pair
-
-			ScopeFunction subScope = {
-				.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
-				.fn = scope->fn,
-				.thisvar = scope->thisvar
-			};
-			ScopeFunction_create(&subScope);
-
-			
-			int startInstruction = trace->instruction;
-
-			/// TODO: handle size
-			int exprType = expr->type;
-			uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
-			Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
-
-			Expression_free(exprType, expr);
-			free(expr);
-
-			
-			trline_t* ifLine = Trace_ins_if(trace, dest);
-			Trace_removeVariable(trace, dest);
-
-			Syntax_functionScope(&subScope, trace, parser);
-
-
-			Trace_ins_jmp(trace, startInstruction);
-			
-			*ifLine |= (trace->instruction << 10);
-
-			ScopeFunction_delete(&subScope);
-
+			Syntax_functionScope_while(parser, scope, trace);
 			break;
 		}
 
@@ -2133,6 +2175,8 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		Trace_removeVariable(trace, td->variable->id);
 	}
 
+	trace->deep--;
+	trace->scopeId = scopeId;
 	return;
 }
 

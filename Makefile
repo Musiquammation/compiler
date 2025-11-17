@@ -46,7 +46,7 @@ ARGS ?= programm out
 
 run: all
 	clear
-	./$(TARGET) $(ARGS) | tee draft/output.txt
+	./$(TARGET) $(ARGS) 2>&1 | tee draft/output.txt
 
 print: all
 	clear

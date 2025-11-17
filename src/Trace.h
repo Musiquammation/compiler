@@ -28,7 +28,7 @@ structdef(TraceLine);
  */
 
 enum {
-	TRACE_LINE_POW = 8,
+	TRACE_LINE_POW = 10,
 	TRACE_LINE_LEN = (1 << TRACE_LINE_POW),
 	TRACE_LINE_MASK = TRACE_LINE_LEN - 1,
 
@@ -42,11 +42,12 @@ enum {
 
 	TRACE_USAGE_LAST = 0,
 	/// TODO: edit 32
-	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 17,
+	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 18,
 
 	TRACE_OFFSET_NONE = -1,
 	TRACE_CALLESAVED_LIMIT = 128,
 	TRACE_VARIABLE_NONE = 0xffffffff,
+	TRACE_VARIABLE_KILL_FINAL = 0xffffffff,
 };
 
 
@@ -67,7 +68,7 @@ typedef struct TraceFunctionMapEntry {
 } TraceFunctionMapEntry;
 
 
-enum {TRACE_FUNCTIONMAP_LENGTH = 31};
+enum {TRACE_FUNCTIONMAP_LENGTH = 15};
 typedef struct {
     TraceFunctionMapEntry buckets[TRACE_FUNCTIONMAP_LENGTH];
 	int position;
@@ -103,6 +104,9 @@ struct Trace {
 		struct {
 			Array variables; // type: VariableTrace
 			Stack varPlacements; // type: uint
+			int deep;
+			int scopeId;
+			int nextScopeId;
 		};
 		
 		struct {
@@ -111,6 +115,7 @@ struct Trace {
 			VarInfoTrace* varInfos; // type: VarInfo
 			TraceRegister* regs;
 			int stackId;
+			int varlength;
 			TraceStackHandler stackHandler;
 		};
 	};
@@ -144,6 +149,7 @@ void TracePack_print(const TracePack* pack, int position);
 
 void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode);
 
+
 uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, bool registrable);
 void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value);
 void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size);
@@ -151,8 +157,10 @@ trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
 void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize);
 void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize);
-void Trace_placeRegisters(Trace* trace);
+void Trace_ins_savePlacement(Trace* trace);
+void Trace_ins_openPlacement(Trace* trace);
 
+void Trace_placeRegisters(Trace* trace);
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
 
 
@@ -236,6 +244,10 @@ enum {
 	 * ACTION=3: forbid moves
 	 * ACTION=4: protect RAX for fncall
 	 * ACTION=5: protect RAX and RDX for fncall
+	 * ACTION=6: mark label
+	 * ACTION=7: save placements
+	 * ACTION=8: open placements (take in stack)
+	 * ACTION=9: open placements (seek in stack)
 	 */
 	TRACECODE_STAR = TRACE_USAGE_OUT_OF_BOUNDS+1,
 
@@ -253,6 +265,7 @@ enum {
 	 * FLAGS are:
 	 * +0: CASTABLE
 	 * +1: ARGUMENT
+	 * 
 	 */
 	TRACECODE_CREATE,
 
@@ -395,7 +408,7 @@ enum {
 	 * +18: dest size (packed)
 	 * +20
 	 */
-	TRACECODE_CAST
+	TRACECODE_CAST,
 };
 
 

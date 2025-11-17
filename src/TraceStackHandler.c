@@ -13,12 +13,13 @@ const int TRACE_STACK_HANDLER_SIZE = sizeof(TraceStackHandler);
 void TraceStackHandler_create(TraceStackHandler* handler, int labelLength) {
 	handler->totalSize = 0;
 	handler->holes = NULL;
-	int* labels = malloc(labelLength * sizeof(int));
+	TraceStackHandlerPosition* positions =	
+		malloc(labelLength * sizeof(TraceStackHandlerPosition));
 
 	for (int i = 0; i < labelLength; i++)
-		labels[i] = -1;
+		positions[i].position = -1;
 
-	handler->labels = labels;
+	handler->positions = positions;
 }
 
 void TraceStackHandler_free(TraceStackHandler* handler) {
@@ -28,7 +29,7 @@ void TraceStackHandler_free(TraceStackHandler* handler) {
 		free(current);
 		current = next;
 	}
-	free(handler->labels);
+	free(handler->positions);
 
 }
 
@@ -75,10 +76,15 @@ static void insertHole(TraceStackHandler* handler, int position, int size) {
 }
 
 int TraceStackHandler_add(TraceStackHandler* handler, int size, int anchor, int label) {
-	if (anchor <= 0) anchor = 1;
+	if (anchor <= 0) {
+		anchor = 1;
+	}
+	
+	// Init freeze
+	handler->positions[label].freeze = 0;
+
 	
 	TraceStackHandlerHole** bestHolePtr = findBestHole(handler, size, anchor);
-	
 	if (bestHolePtr) {
 		// Utiliser un trou existant
 		TraceStackHandlerHole* hole = *bestHolePtr;
@@ -101,7 +107,7 @@ int TraceStackHandler_add(TraceStackHandler* handler, int size, int anchor, int 
 		*bestHolePtr = hole->next;
 		free(hole);
 		
-		handler->labels[label] = alignedPos;
+		handler->positions[label].position = alignedPos;
 		return alignedPos;
 
 	} else {
@@ -115,31 +121,39 @@ int TraceStackHandler_add(TraceStackHandler* handler, int size, int anchor, int 
 		}
 		
 		handler->totalSize = alignedPos + size;
-		handler->labels[label] = alignedPos;
+		handler->positions[label].position = alignedPos;
 		return alignedPos;
 	}
 }
 
 
 int TraceStackHandler_reach(TraceStackHandler* handler, int label) {
-	return handler->labels[label];
+	return handler->positions[label].position;
 }
 
 int TraceStackHandler_guarantee(TraceStackHandler* handler, int size, int anchor, int label) {
-	if (handler->labels[label] >= 0) {
-		return handler->labels[label];
+	if (handler->positions[label].position >= 0) {
+		return handler->positions[label].position;
 	}
 
 	return TraceStackHandler_add(handler, size, anchor, label);
 }
 
 
-int TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
-	int address = handler->labels[label];
-	handler->labels[label] = -1; // remove
+
+
+void TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
+	int address = handler->positions[label].position;
+	handler->positions[label].position = -1; // remove
 	if (address < 0) {
 		raiseError("[Intern] Stack tried to remove a variable absent from the stack");
 	}
+
+	// Resist
+	if (handler->positions[label].freeze > 0) {
+		return;
+	}
+
 
 	// Trouver la position d'insertion et fusionner avec trous adjacents
 	TraceStackHandlerHole** current = &handler->holes;
@@ -189,7 +203,14 @@ int TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
 	
 	// Insérer le nouveau trou fusionné
 	insertHole(handler, newPos, newSize);
-	
-	return label;
+}
+
+
+void TraceStackHandler_freeze(TraceStackHandler* handler, int label) {
+	handler->positions[label].freeze++;
+}
+
+void TraceStackHandler_unfreeze(TraceStackHandler* handler, int label) {
+	handler->positions[label].freeze--;
 }
 

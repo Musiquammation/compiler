@@ -3,13 +3,11 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-void Stack_create(Stack* stack, size_t size) {
+void Stack_createfn(Stack* stack, size_t size) {
 	stack->data = malloc(16 * size);
 	stack->top = -1;
 	stack->capacity = 16;
 }
-
-
 
 void* Stack_pushfn(Stack *s, size_t size) {
 	s->top++;
@@ -25,6 +23,9 @@ void* Stack_popfn(Stack *s, size_t size) {
     void *ptr = &s->data[s->top * size];
     s->top--;
     return ptr;
-	
+}
+
+void* Stack_seekfn(Stack* s, size_t size) {
+	return &s->data[s->top * size];
 }
 
