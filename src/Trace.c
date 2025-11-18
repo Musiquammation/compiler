@@ -158,6 +158,8 @@ enum {
 typedef struct {
 	trline_t* ptr;
 	int lui;
+	int scopeId;
+	int firstRead;
 } Write;
 
 typedef struct {
@@ -168,6 +170,7 @@ typedef struct {
 
 	int lastUseInstruction;
 	int scopeId;
+	int firstRead;
 	int usageCapacity;
 } VariableTrace;
 
@@ -230,13 +233,15 @@ uint Trace_pushVariable(Trace* trace) {
 	if (Stack_isEmpty(trace->varPlacements)) {
 		pos = trace->variables.length;
 		vt = Array_push(VariableTrace, &trace->variables);
-		vt->lastUseInstruction = LUI_FINAL;
-		vt->usageCapacity = 0;
-		return pos;
+	} else {
+		pos = *Stack_pop(uint, &trace->varPlacements);
+		vt = Array_get(VariableTrace, trace->variables, pos);
+
 	}
 	
-	pos = *Stack_pop(uint, &trace->varPlacements);
-	vt = Array_get(VariableTrace, trace->variables, pos);
+	vt->lastUseInstruction = LUI_FINAL;
+	vt->usageCapacity = 0;
+	vt->firstRead = FIRSTUSE_WAITING;
 	
 	return pos;
 }
@@ -573,11 +578,12 @@ void TracePack_print(const TracePack* pack, int position) {
 
 		} else {
 			// Usage mode
-			int variable = n >> 10;
+			int read = n & (1<<10);
+			int variable = n >> 11;
 			if (next == TRACE_USAGE_LAST) {
-				printf("[%04d] !f v%d", i+position, variable);
+				printf("[%04d] !f v%d %s", i+position, variable, read ? "" : "edit");
 			} else {
-				printf("[%04d] !u v%d next=+%d", i+position, variable, next);
+				printf("[%04d] !u v%d %snext=+%d", i+position, variable, read ? "" : "edit ", next);
 			}
 
 			if (registrables[variable]) {
@@ -598,32 +604,52 @@ void TracePack_print(const TracePack* pack, int position) {
 
 
 static Write* reachWrite(int idx, int usageCapacity, VariableTrace* vt) {
-	if (idx >= usageCapacity) {
-		int nextCapacity = idx*2 + 1;
-		Write* nextWrites = malloc(nextCapacity * sizeof(Write));
-		if (usageCapacity > 0) {
-			Write* oldWrites = vt->writes;
-			memcpy(nextWrites, oldWrites, usageCapacity * sizeof(Write));
-			free(oldWrites);
-		}
+	int emptyIndex = -1;
+	Write* writes = vt->writes;
+	for (int i = 0; i < usageCapacity; i++) {
+		int si = writes[i].scopeId;
+		if (si == idx)
+			return &writes[i];
 
-		for (int i = usageCapacity; i < nextCapacity; i++) {
-			printf("nui%d\n", i);
-			nextWrites[i].lui = LUI_FINAL;
+		if (si == -1) {
+			emptyIndex = i;
 		}
-
-		if (usageCapacity == 0) {
-			nextWrites[0].ptr = vt->lastUsePtr;
-			nextWrites[0].lui = vt->lastUseInstruction;
-		}
-
-		vt->usageCapacity = nextCapacity;
-		vt->writes = nextWrites;
-		return &nextWrites[idx];
-	
-	} else {
-		return &vt->writes[idx];
 	}
+
+	// Object absent from the list
+	if (emptyIndex >= 0) {
+		writes[emptyIndex].scopeId = idx;
+		return &writes[emptyIndex];
+	}
+
+
+	int nextCapacity = usageCapacity*2 + 4;
+	Write* nextWrites = malloc(nextCapacity * sizeof(Write));
+	if (usageCapacity > 0) {
+		Write* oldWrites = vt->writes;
+		memcpy(nextWrites, oldWrites, usageCapacity * sizeof(Write));
+		free(oldWrites);
+	}
+
+	for (int i = usageCapacity+1; i < nextCapacity; i++) {
+		printf("nui%d\n", i);
+		nextWrites[i].lui = LUI_FINAL;
+		nextWrites[i].scopeId = -1;
+	}
+
+	if (usageCapacity == 0) {
+		nextWrites[0].ptr = vt->lastUsePtr;
+		nextWrites[0].lui = vt->lastUseInstruction;
+		nextWrites[0].firstRead = vt->firstRead;
+	} else {
+		nextWrites[usageCapacity].lui = LUI_FINAL;
+	}
+	
+	nextWrites[usageCapacity].scopeId = idx;
+
+	vt->usageCapacity = nextCapacity;
+	vt->writes = nextWrites;
+	return &nextWrites[idx];
 }
 
 void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr) {
@@ -649,6 +675,10 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 				*vt->lastUsePtr |= diff;
 			}
 	
+			if (vt->firstRead == FIRSTUSE_WAITING) {
+				vt->firstRead = traceInstruction;
+			}
+
 			vt->lastUseInstruction = traceInstruction;
 			vt->lastUsePtr = ptr;
 			goto finish;
@@ -658,9 +688,17 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 		Write* const writes = vt->writes;
 		
 		// Mark usages
-		int idx = trace->scopeId - vt->scopeId;
+		int tScopeId = trace->scopeId;
+		int vScopeId = vt->scopeId;
 		for (int i = 0; i < usageCapacity; i++) {
-			int lui = writes[i].lui;
+			Write* write = &writes[i];
+
+			if (write->scopeId <= tScopeId && write->firstRead == FIRSTUSE_WAITING) {
+				write->firstRead = traceInstruction;
+			}
+
+
+			int lui = write->lui;
 			if (lui == LUI_FINAL)
 				continue;
 
@@ -670,14 +708,15 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 			}
 
 			printf("lui%d %d diff=%d\n", i, lui, diff);
-			*(writes[i].ptr) |= diff;
+			*(write->ptr) |= diff;
 
-			writes[i].lui = LUI_FINAL;
+			write->lui = LUI_FINAL;
 		}
 
 		// Add our usage
-		writes[idx].lui = traceInstruction;
-		writes[idx].ptr = ptr;
+		Write* write = reachWrite(tScopeId, usageCapacity, vt);
+		write->lui = traceInstruction;
+		write->ptr = ptr;
 
 
 		goto finish;
@@ -688,34 +727,54 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 	// Write mode
 	int tScopeId = trace->scopeId;
 	int vScopeId = vt->scopeId;
-	int idx = tScopeId - vScopeId;
+	// Simple
 	if (usageCapacity == 0) {
-		if (idx > 0) {
+		if (tScopeId > vScopeId) {
 			// switch to multiusage
 			goto writeMulti;
 		}
 
-		// Simple
 		vt->lastUseInstruction = traceInstruction;
 		vt->lastUsePtr = ptr;
+
+		if (vt->firstRead == FIRSTUSE_WAITING) {
+			vt->firstRead = FIRSTUSE_ELIMINATED;
+		}
 
 	} else {
 		// Handle multiusages
 		writeMulti:
-		Write* write = reachWrite(idx, usageCapacity, vt);
+		Write* write = reachWrite(tScopeId, usageCapacity, vt);
+		usageCapacity = vt->usageCapacity;
 
+		printf("set %d\n", traceInstruction);
 		write->lui = traceInstruction;
 		write->ptr = ptr;
 
-		for (int i = idx+1; i < usageCapacity; i++) {
-			vt->writes[i].lui = LUI_FINAL;
+		if (write->firstRead == FIRSTUSE_WAITING) {
+			write->firstRead = FIRSTUSE_ELIMINATED;
 		}
-		// write->firstRead = FIRSTUSE_ELIMINATED;
+
+		
+		/// TODO: check for whiles
+		// Mark final usage in upper scopes
+		Write* writes = vt->writes;
+		for (int i = 0; i < usageCapacity; i++) {
+			write = &writes[i];
+			if (write->scopeId <= tScopeId)
+				continue;
+
+			if (write->firstRead == FIRSTUSE_WAITING) {
+				write->firstRead = FIRSTUSE_ELIMINATED;
+			}
+
+			write->lui = LUI_FINAL;
+		}
 	}
 
 
 	finish:
-	*ptr = TRACE_USAGE_LAST | (variable << 10);
+	*ptr = TRACE_USAGE_LAST | (variable << 11) | (readMode ? (1<<10) : 0);
 }
 
 void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode) {
@@ -1493,7 +1552,16 @@ static int Trace_reg_chooseFast(const TraceRegister regs[], int biggerNextUse) {
 
 
 
-int Trace_reg_place(Trace* trace, TraceRegister regs[], int ip, uint variable, int source, int nextUse, int reg) {
+int Trace_reg_place(
+	Trace* trace,
+	TraceRegister regs[],
+	int ip,
+	uint variable,
+	int source,
+	int nextUse,
+	int reg,
+	char reading
+) {
 	if (trace->varInfos[variable].store == -reg)
 		return reg;
 		
@@ -1547,8 +1615,8 @@ int Trace_reg_place(Trace* trace, TraceRegister regs[], int ip, uint variable, i
 		
 	} else {
 		printf("replace(%d) v%d in %d\n", reg, variable, trace->varInfos[variable].store);
+		
 		// No victim
-
 		replace = Array_push(TraceReplace, &trace->replaces);
 		replace->victim = -TRACE_REG_NONE;
 		reg = -reg;
@@ -1559,6 +1627,7 @@ int Trace_reg_place(Trace* trace, TraceRegister regs[], int ip, uint variable, i
 	replace->instruction = ip;
 	replace->variable = variable;
 	replace->destination = -reg;
+	replace->reading = reading;
 	// replace->source = source;
 	
 	trace->varInfos[variable].nextUse = nextUse;
@@ -1785,7 +1854,8 @@ void Trace_placeRegisters(Trace* trace) {
 			usageBuffer[usageBufferLine] = line;
 			usageBufferLine++;
 
-			trline_t varIdx = line >> 10;
+			trline_t readmode = line & (1<<10);
+			trline_t varIdx = line >> 11;
 			VarInfoTrace* vi = &varInfos[varIdx];
 			int store = vi->store;
 
@@ -1821,7 +1891,7 @@ void Trace_placeRegisters(Trace* trace) {
 				if (store >= 0 || store == -TRACE_REG_NONE) {
 					printf("placedRegisters %d\n", placedRegisters);
 					int reg = Trace_reg_chooseFast(regs, -1);
-					vi->store = -Trace_reg_place(trace, regs, ip, varIdx, store, nextUse, reg);
+					vi->store = -Trace_reg_place(trace, regs, ip, varIdx, store, nextUse, reg, readmode);
 				} else {
 					regs[-store].nextUse = nextUse;
 				}
@@ -1947,7 +2017,7 @@ void Trace_placeRegisters(Trace* trace) {
 		{
 			if (line & (1<<12)) {
 				// Edit variable
-				uint destVar = usageBuffer[0] >> 10;
+				uint destVar = usageBuffer[0] >> 11;
 				int nextUse = usageBuffer[0] & 0x3ff;
 				nextUse = (nextUse == TRACE_USAGE_OUT_OF_BOUNDS ?
 					0x7ffffffe : ip + nextUse - 1);
@@ -1957,8 +2027,8 @@ void Trace_placeRegisters(Trace* trace) {
 				
 			} else {
 				int reg = line >> 16;
-				uint srcVar = usageBuffer[0] >> 10;
-				uint destVar = usageBuffer[1] >> 10;
+				uint srcVar = usageBuffer[0] >> 11;
+				uint destVar = usageBuffer[1] >> 11;
 				int source = varInfos[srcVar].store;
 				printf("plce %d|%d src %d(%d) ; dst %d(%d)\n", regs[TRACE_REG_R11].variable, reg, srcVar, source, destVar, varInfos[destVar].store);
 				varInfos[srcVar].nextUse = -1;
@@ -1972,7 +2042,7 @@ void Trace_placeRegisters(Trace* trace) {
 					regs[-source].variable = TRACE_VARIABLE_NONE;
 				}
 
-				Trace_reg_place(trace, regs, ip, destVar, source, -2, reg);
+				Trace_reg_place(trace, regs, ip, destVar, source, -2, reg, 1);
 				placedRegisters |= 1<<reg;
 			}
 
@@ -2344,7 +2414,7 @@ void generateAssembly_openPlacements(
 
 	for (uint v = 0; v < length; v++) {
 		int dest = stores[v];
-		printf("destof(v%d): %d\n", v, dest);
+		printf("destof(v%d): %2d from %2d\n", v, dest, varInfos[v].store);
 		if (dest == -TRACE_REG_NONE)
 			continue;
 
@@ -2702,7 +2772,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 					trace, output, psize,
 					(Use){varInfos[victim].store, 0}
 				);
-				fprintf(output, "; throw %d\n", victim);
+				fprintf(output, "; throw v%d\n", victim);
 
 				varInfos[victim].store = victimStore;
 			
@@ -2715,9 +2785,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			// Free stack area
 			int destination = replace->destination;
-			if (varInfos[variable].store >= 0){
+			if (varInfos[variable].store >= 0 && replace->reading){
 				int psize = Trace_packSize(varInfos[variable].size);
-
 				fprintf(output, "\tmov ");
 				Trace_printFastUsage(
 					trace, output, psize,
@@ -2728,7 +2797,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 					trace, output, psize,
 					(Use){varInfos[variable].store, 0}
 				);
-				fprintf(output, "; take %d\n", variable);
+				fprintf(output, "; take v%d\n", variable);
 
 
 				printf("store %d %d\n", variable, varInfos[variable].store);
@@ -2758,7 +2827,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		// Usage
 		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
-			trline_t varIdx = line >> 10;
+			trline_t readmode = line & (1<<10);
+			trline_t varIdx = line >> 11;
 			int store = varInfos[varIdx].store;
 			printf("read %d => %d\n", varIdx, store);
 			if (varInfos[varIdx].registrable) {

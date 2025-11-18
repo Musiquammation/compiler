@@ -1,35 +1,25 @@
-function {
-	let a: int;
-	let b: int;
-	let c: int;
-	let d: int;
-	let result: int;
+function main {
+	let v0: int;
+	let v1: int;
+	let v2: int;
+	let v3: int;
 	
+	v0 = 10;
+	v1 = 20;
+	v2 = 30;
+	v3 = 40;
 
-	a = 0;
-	b = 0;
-	c = 0;
-	d = 0;
+	if (118) {
+		v1 = v0;
+		
+		if (218) {
+			v1 = v0;
+			v2 = v0;
+		}
 
-
-	if (0) {
-		let t1: int;
-		let t2: int;
-		let t3: int;
-		t1 = 10;
-		t2 = 20;
-		t3 = 30;
-		a = t1+t2 +t3;
-		b = t1-t2 +t3;
+		v3 = v2;
 	}
 
 
-	a = a+1;
-	b = b+1;
-	c = c+1;
-	d = d+1;
-
-	result = a+b+c+d;
-	return result;
+	return v0+v1+v2+v3;
 }
-

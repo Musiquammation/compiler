@@ -21,7 +21,7 @@ structdef(TraceLine);
  * then we read an instruction (usage mode diseabled).
  * 
  * If we are in usage mode, the format is
- * usage: variable(22), next(10)
+ * usage: variable(21), read, next(10)
  * 
  * If next equals TRACE_USAGE_LAST, the next variable
  * will be used a write
@@ -41,8 +41,8 @@ enum {
 	TRACE_USAGE_MASK = 0x3ff,
 
 	TRACE_USAGE_LAST = 0,
-	/// TODO: edit 32
-	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 18,
+	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 15,
+
 
 	TRACE_OFFSET_NONE = -1,
 	TRACE_CALLESAVED_LIMIT = 128,
@@ -80,6 +80,7 @@ typedef struct {
 	int victim;
 	int destination;
 	int victimStore; // for the victim
+	char reading;
 } TraceReplace;
 
 typedef struct {

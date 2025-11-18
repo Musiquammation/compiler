@@ -1918,8 +1918,6 @@ static void Syntax_functionScope_if(
 	ScopeFunction* scope,
 	Trace* trace
 ) {
-	Trace_ins_savePlacement(trace);
-
 	// Require left parethesis
 	Token token = Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
@@ -1957,6 +1955,8 @@ static void Syntax_functionScope_if(
 	
 	trline_t* ifLine = Trace_ins_if(trace, dest);
 	Trace_removeVariable(trace, dest);
+
+	Trace_ins_savePlacement(trace);
 
 	Syntax_functionScope(&subScope, trace, parser);
 	ScopeFunction_delete(&subScope);
