@@ -140,19 +140,20 @@ int TraceStackHandler_guarantee(TraceStackHandler* handler, int size, int anchor
 }
 
 
-
+	
 
 void TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
+	// Resist
+	if (handler->positions[label].freeze > 0) {
+		return;
+	}
+
 	int address = handler->positions[label].position;
 	handler->positions[label].position = -1; // remove
 	if (address < 0) {
 		raiseError("[Intern] Stack tried to remove a variable absent from the stack");
 	}
 
-	// Resist
-	if (handler->positions[label].freeze > 0) {
-		return;
-	}
 
 
 	// Trouver la position d'insertion et fusionner avec trous adjacents

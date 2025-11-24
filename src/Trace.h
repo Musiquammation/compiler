@@ -17,14 +17,20 @@ structdef(TraceLine);
 
 /**
  * By default, each line is a usage line.
- * If next > TRACE_USAGE_OUT_OF_BOUNDS,
+ * If next > TRACE_USAGE_LIMIT,
  * then we read an instruction (usage mode diseabled).
  * 
  * If we are in usage mode, the format is
- * usage: variable(21), read, next(10)
+ * usage: variable(21), read(1), next(10)
  * 
  * If next equals TRACE_USAGE_LAST, the next variable
  * will be used a write
+ * 
+ * 
+ * The convention for usage order is the following:
+ * - first input (if !f lets the store be replaced)
+ * - output
+ * - next inputs
  */
 
 enum {
@@ -41,7 +47,8 @@ enum {
 	TRACE_USAGE_MASK = 0x3ff,
 
 	TRACE_USAGE_LAST = 0,
-	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 15,
+	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 16,
+	TRACE_USAGE_LIMIT,
 
 
 	TRACE_OFFSET_NONE = -1,
@@ -108,6 +115,7 @@ struct Trace {
 			int deep;
 			int scopeId;
 			int nextScopeId;
+			Stack scopeIdStack; // type: int
 		};
 		
 		struct {
@@ -160,6 +168,11 @@ void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg,
 void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize);
 void Trace_ins_savePlacement(Trace* trace);
 void Trace_ins_openPlacement(Trace* trace);
+void Trace_ins_saveShadowPlacement(Trace* trace);
+void Trace_ins_openShadowPlacement(Trace* trace);
+
+int* Trace_prepareWhileUsages(Trace* trace);
+void Trace_addWhileUsages(Trace* trace, int scopeId, int startIns, int endIns, int* backup);
 
 void Trace_placeRegisters(Trace* trace);
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
@@ -239,18 +252,20 @@ enum {
 	 * +14: [blank]
 	 * +16: DATA
 	 * 
-	 * ACTION=0: end
-	 * ACTION=1: quick skip
-	 * ACTION=2: return
-	 * ACTION=3: forbid moves
-	 * ACTION=4: protect RAX for fncall
-	 * ACTION=5: protect RAX and RDX for fncall
-	 * ACTION=6: mark label
-	 * ACTION=7: save placements
-	 * ACTION=8: open placements (take in stack)
-	 * ACTION=9: open placements (seek in stack)
+	 * ACTION=00: end
+	 * ACTION=01: quick skip
+	 * ACTION=02: return
+	 * ACTION=03: forbid moves
+	 * ACTION=04: protect RAX for fncall
+	 * ACTION=05: protect RAX and RDX for fncall
+	 * ACTION=06: mark label
+	 * ACTION=07: save placements
+	 * ACTION=08: open placements
+	 * ACTION=09: save shadow placements
+	 * ACTION=10: open shadow placements
+	 * ACTION=11: trival usages
 	 */
-	TRACECODE_STAR = TRACE_USAGE_OUT_OF_BOUNDS+1,
+	TRACECODE_STAR = TRACE_USAGE_LIMIT+1,
 
 	/**
 	 * +00: CODE

@@ -1549,7 +1549,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			continue;
 		}
 
-		if (searchArg.resultType = SCOPESEARCH_FUNCTION) {
+		if (searchArg.resultType == SCOPESEARCH_FUNCTION) {
 			token = Parser_read(parser, &_labelPool);
 
 			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND) != 0) {
@@ -1999,6 +1999,7 @@ static void Syntax_functionScope_while(
 	ScopeFunction* scope,
 	Trace* trace
 ) {
+	int* usageBackup = Trace_prepareWhileUsages(trace);
 	Trace_ins_savePlacement(trace);
 
 	// Mark start position
@@ -2034,38 +2035,45 @@ static void Syntax_functionScope_while(
 	int startInstruction = trace->instruction;
 
 	/// TODO: handle size
+	// Collect test value
 	int exprType = expr->type;
 	uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
-
 	Expression_free(exprType, expr);
 	free(expr);
 
-	
+	// Add ifline
 	trline_t* ifLine = Trace_ins_if(trace, dest);
 	Trace_removeVariable(trace, dest);
 
-	Syntax_functionScope(&subScope, trace, parser);
-	Trace_ins_openPlacement(trace);
+	Trace_ins_saveShadowPlacement(trace);
+
+	// While content
+	int scopeId = Syntax_functionScope(&subScope, trace, parser);
 	
 	ScopeFunction_delete(&subScope);
 
-
+	// Jump
+	Trace_ins_openPlacement(trace);	
 	Trace_ins_jmp(trace, startInstruction);
-
+	
+	
+	Trace_ins_openShadowPlacement(trace);
+	
 	// Mark end position
 	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
-
-	*ifLine |= (trace->instruction << 10);
-
+	int endInstruction = trace->instruction;
+	*ifLine |= (endInstruction << 10);
+	Trace_addWhileUsages(trace, scopeId, startInstruction, endInstruction, usageBackup);
 }
 
-void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
+int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	trace->deep++;
-	int scopeId = trace->scopeId;
-	trace->scopeId = trace->nextScopeId;
-	trace->nextScopeId++;
-	/// TODO: create trace (icounter)
+	int previousScopeId = trace->scopeId;
+	int currentScopeId = trace->nextScopeId;
+	trace->scopeId = currentScopeId;
+	trace->nextScopeId = currentScopeId + 1;
+	*Stack_push(int, &trace->scopeIdStack) = currentScopeId;
 
 	while (true) {
 		Token token = Parser_read(parser, &_labelPool);
@@ -2118,7 +2126,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			Class* returnClass = scope->fn->returnType.cl;
 			if (returnClass == NULL) {
 				raiseError("[Architecture] Tried to return void");
-				return;
+				return -1;
 			}
 			char isRegistrable = returnClass->isRegistrable;
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
@@ -2141,7 +2149,7 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 			token = Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-				return;
+				return -1;
 
 			break;
 		}
@@ -2176,8 +2184,9 @@ void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	}
 
 	trace->deep--;
-	trace->scopeId = scopeId;
-	return;
+	Stack_pop(int, &trace->scopeIdStack);
+	trace->scopeId = previousScopeId;
+	return currentScopeId;
 }
 
 

@@ -1,25 +1,27 @@
 function main {
-	let v0: int;
-	let v1: int;
-	let v2: int;
-	let v3: int;
-	
-	v0 = 10;
-	v1 = 20;
-	v2 = 30;
-	v3 = 40;
+	let i: int;
+	let j: int;
+	let limit: int;
+	let test: int;
+	let anonymous: int;
 
-	if (118) {
-		v1 = v0;
-		
-		if (218) {
-			v1 = v0;
-			v2 = v0;
+	i=0;
+	j=10;
+	limit=10;
+	anonymous = 1000;
+
+	while (i - 18) {
+		test = limit - i;
+		if (test) {
+			anonymous = limit - test;
 		}
 
-		v3 = v2;
+		j = j + i;
+		i = i + 1;
 	}
 
-
-	return v0+v1+v2+v3;
+	j = j + anonymous;
+	return j;
 }
+
+

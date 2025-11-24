@@ -51,7 +51,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);
 void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* expr);
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
-void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
+int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
 
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope);
 void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool);

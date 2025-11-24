@@ -21,7 +21,7 @@ void* Stack_seekfn(Stack* s, size_t size);
 #define Stack_push(T, s) ((T*)Stack_pushfn(s, sizeof(T)))
 #define Stack_pop(T, s) ((T*)Stack_popfn(s, sizeof(T)))
 #define Stack_seek(T, s) ((T*)Stack_seekfn(s, sizeof(T)))
-
+#define Stack_reach(T, s, idx) (((T*)s->data)[idx])
 
 
 
