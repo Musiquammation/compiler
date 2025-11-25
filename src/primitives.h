@@ -7,6 +7,10 @@
 #include "Prototype.h"
 #include "Type.h"
 
+enum {
+	PRIMITIVE_NAMES_COUNT = 18
+};
+
 typedef struct {
 	Class class_i8;
 	Class class_u8;
@@ -41,9 +45,9 @@ typedef struct {
 	Type type_f32;
 	Type type_f64;
 
-	label_t sortedLabels[17];
-	Class* sortedClasses[17];
-	Type* sortedTypes[17];
+	label_t sortedLabels[PRIMITIVE_NAMES_COUNT];
+	Class* sortedClasses[PRIMITIVE_NAMES_COUNT];
+	Type* sortedTypes[PRIMITIVE_NAMES_COUNT];
 
 } PrimitiveContainer;
 

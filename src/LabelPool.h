@@ -49,6 +49,7 @@ struct CommonLabels {
 	label_t _long;
 	label_t _float;
 	label_t _double;
+	label_t _size_t;
 };
 
 

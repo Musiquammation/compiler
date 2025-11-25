@@ -1,212 +1,204 @@
-#include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-
+#include "declarations.h"
 #include "TraceStackHandler.h"
-#include "helper.h"
 
 
-
-
-const int TRACE_STACK_HANDLER_SIZE = sizeof(TraceStackHandler);
-
+// --- Initialize stack handler ---
 void TraceStackHandler_create(TraceStackHandler* handler, int labelLength) {
 	handler->totalSize = 0;
+	handler->rsp = 0;
 	handler->holes = NULL;
-	TraceStackHandlerPosition* positions =	
-		malloc(labelLength * sizeof(TraceStackHandlerPosition));
-
-	for (int i = 0; i < labelLength; i++)
-		positions[i].position = -1;
-
-	handler->positions = positions;
+	handler->positions = malloc(sizeof(TraceStackHandlerPosition) * labelLength);
+	for (int i = 0; i < labelLength; i++) {
+		handler->positions[i].position = -1;
+		handler->positions[i].freeze = 0;
+	}
 }
 
+// --- Free memory used by stack handler ---
 void TraceStackHandler_free(TraceStackHandler* handler) {
-	TraceStackHandlerHole* current = handler->holes;
-	while (current) {
-		TraceStackHandlerHole* next = current->next;
-		free(current);
-		current = next;
-	}
 	free(handler->positions);
 
-}
-
-// Trouve le plus petit trou qui peut contenir 'size' éléments
-// avec position % anchor == 0
-static TraceStackHandlerHole** findBestHole(TraceStackHandler* handler, int size, int anchor) {
-	TraceStackHandlerHole** current = &handler->holes;
-	TraceStackHandlerHole** best = NULL;
-	int bestSize = INT_MAX;
-	
-	while (*current) {
-		int pos = (*current)->position;
-		int holeSize = (*current)->size;
-		
-		// Calculer la position alignée dans ce trou
-		int offset = (anchor - (pos % anchor)) % anchor;
-		int alignedPos = pos + offset;
-		int availableSize = holeSize - offset;
-		
-		if (availableSize >= size && holeSize < bestSize) {
-			best = current;
-			bestSize = holeSize;
-		}
-		
-		current = &(*current)->next;
-	}
-	
-	return best;
-}
-
-// Ajoute un trou dans la liste triée (par position)
-static void insertHole(TraceStackHandler* handler, int position, int size) {
-	TraceStackHandlerHole** current = &handler->holes;
-	
-	while (*current && (*current)->position < position) {
-		current = &(*current)->next;
-	}
-	
-	TraceStackHandlerHole* newHole = (TraceStackHandlerHole*)malloc(sizeof(TraceStackHandlerHole));
-	newHole->position = position;
-	newHole->size = size;
-	newHole->next = *current;
-	*current = newHole;
-}
-
-int TraceStackHandler_add(TraceStackHandler* handler, int size, int anchor, int label) {
-	if (anchor <= 0) {
-		anchor = 1;
-	}
-	
-	// Init freeze
-	handler->positions[label].freeze = 0;
-
-	
-	TraceStackHandlerHole** bestHolePtr = findBestHole(handler, size, anchor);
-	if (bestHolePtr) {
-		// Utiliser un trou existant
-		TraceStackHandlerHole* hole = *bestHolePtr;
-		int pos = hole->position;
-		int offset = (anchor - (pos % anchor)) % anchor;
-		int alignedPos = pos + offset;
-		
-		// Créer un trou avant si nécessaire
-		if (offset > 0) {
-			insertHole(handler, pos, offset);
-		}
-		
-		// Créer un trou après si nécessaire
-		int remaining = hole->size - offset - size;
-		if (remaining > 0) {
-			insertHole(handler, alignedPos + size, remaining);
-		}
-		
-		// Supprimer le trou utilisé
-		*bestHolePtr = hole->next;
+	TraceStackHandlerHole* hole = handler->holes;
+	while (hole) {
+		TraceStackHandlerHole* next = hole->next;
 		free(hole);
-		
-		handler->positions[label].position = alignedPos;
-		return alignedPos;
-
-	} else {
-		// Allouer à la fin
-		int pos = handler->totalSize;
-		int offset = (anchor - (pos % anchor)) % anchor;
-		int alignedPos = pos + offset;
-		
-		if (offset > 0) {
-			insertHole(handler, pos, offset);
-		}
-		
-		handler->totalSize = alignedPos + size;
-		handler->positions[label].position = alignedPos;
-		return alignedPos;
+		hole = next;
 	}
 }
 
+// --- Internal helper: find aligned position ---
+static int alignPosition(int pos, int anchor) {
+	if (pos % anchor == 0) return pos;
+	return pos + (anchor - (pos % anchor));
+}
+
+// --- Add a new variable in the stack ---
+TraceStackHandlerRspAdapter TraceStackHandler_add(TraceStackHandler* handler, int size, int anchor, int label) {
+	TraceStackHandlerHole** prev = &handler->holes;
+	TraceStackHandlerHole* hole = handler->holes;
+
+	// Search for a hole that fits
+	while (hole) {
+		if (hole->size >= size) {
+			int addr = alignPosition(hole->position, anchor);
+			int move;
+			
+			// Update hole
+			if (hole->size == size) {
+				*prev = hole->next;
+				free(hole);
+			} else {
+				hole->position += size;
+				hole->size -= size;
+			}
+
+			if (label >= 0) {
+				handler->positions[label].position = addr;
+			}
+			handler->totalSize = (addr + size > handler->totalSize) ? addr + size : handler->totalSize;
+
+			return (TraceStackHandlerRspAdapter){addr, 0};
+		}
+		prev = &hole->next;
+		hole = hole->next;
+	}
+
+	// No suitable hole, append at the end
+	int addr = alignPosition(handler->totalSize, anchor);
+	int move = addr + size - handler->rsp;
+	if (move < 0) {move = 0;}
+
+	if (label >= 0) {
+		handler->positions[label].position = addr;
+	}
+
+	handler->totalSize = addr + size;
+
+	printf("addmove %d %d\n", label, move);
+	return (TraceStackHandlerRspAdapter){addr, -move};
+}
+
+TraceStackHandlerRspAdapter TraceStackHandler_guarantee(TraceStackHandler* handler, int size, int anchor, int label) {
+	if (handler->positions[label].position >= 0) {
+		return (TraceStackHandlerRspAdapter){handler->positions[label].position, 0};
+	}
+	
+	return TraceStackHandler_add(handler, size, anchor, label);
+}
 
 int TraceStackHandler_reach(TraceStackHandler* handler, int label) {
 	return handler->positions[label].position;
 }
 
-int TraceStackHandler_guarantee(TraceStackHandler* handler, int size, int anchor, int label) {
-	if (handler->positions[label].position >= 0) {
-		return handler->positions[label].position;
+
+// --- Remove variable from stack ---
+int TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
+	int pos;
+	if (label >= 0) {
+		// If frozen, do nothing
+		if (handler->positions[label].freeze > 0) return 0;
+		
+		pos = handler->positions[label].position;
+		if (pos < 0) return 0;	// Already removed
+	} else {
+		pos = -label;
 	}
 
-	return TraceStackHandler_add(handler, size, anchor, label);
+	int oldRsp = handler->rsp;
+	int rspAdjust = 0;
+
+	// Case 1: The block is at the top of the stack
+	if (pos + size == handler->totalSize) {
+
+		// Shrink totalSize by this block
+		handler->totalSize = pos;
+
+		// Try to collapse consecutive holes at the new top
+		TraceStackHandlerHole** prev = &handler->holes;
+		TraceStackHandlerHole* h = handler->holes;
+
+		while (h) {
+			if (h->position + h->size == handler->totalSize) {
+				// Extend the top downward
+				handler->totalSize = h->position;
+
+				// Remove this hole from the list
+				*prev = h->next;
+				free(h);
+
+				// Restart scanning (safe because list is small)
+				prev = &handler->holes;
+				h = handler->holes;
+				continue;
+			}
+			prev = &h->next;
+			h = h->next;
+		}
+
+		// After collapsing, compute how much rsp must grow
+		rspAdjust = oldRsp - handler->totalSize;
+	}
+	else {
+		// Case 2: The block is not at the top → create a hole
+		TraceStackHandlerHole* newHole = malloc(sizeof(TraceStackHandlerHole));
+
+		newHole->position = pos;
+		newHole->size = size;
+		newHole->next = handler->holes;
+		handler->holes = newHole;
+
+		// No rsp adjust here
+		rspAdjust = 0;
+	}
+
+	if (label >= 0) {
+		handler->positions[label].position = -1;
+	}
+
+	printf("adjust %d %d\n", rspAdjust, handler->rsp);
+	return rspAdjust;
 }
 
 
-	
 
-void TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
-	// Resist
-	if (handler->positions[label].freeze > 0) {
+
+static void TraceStackHandler_realAdaptAllocation(TraceStackHandler* handler, int move, FILE* output, const char* suffix) {
+	if (move == 0)
 		return;
-	}
 
-	int address = handler->positions[label].position;
-	handler->positions[label].position = -1; // remove
-	if (address < 0) {
-		raiseError("[Intern] Stack tried to remove a variable absent from the stack");
+	printf("adaptrsp %d\n", move);
+	if (move <= 0) {
+		// Allow data
+		handler->rsp -= move;
+		fprintf(output, "\tsub rsp, %d%s", -move, suffix);
+	} else {
+		// Free data
+		handler->rsp -= move;
+		fprintf(output, "\tadd rsp, %d%s", move, suffix);
 	}
-
-
-
-	// Trouver la position d'insertion et fusionner avec trous adjacents
-	TraceStackHandlerHole** current = &handler->holes;
-	TraceStackHandlerHole* prevHole = NULL;
-	TraceStackHandlerHole* nextHole = NULL;
-	
-	int newPos = address;
-	int newSize = size;
-	
-	// Chercher trou précédent et suivant
-	while (*current) {
-		if ((*current)->position + (*current)->size == address) {
-			prevHole = *current;
-		}
-		if ((*current)->position == address + size) {
-			nextHole = *current;
-			break;
-		}
-		if ((*current)->position > address) {
-			break;
-		}
-		current = &(*current)->next;
-	}
-	
-	// Fusionner avec le trou précédent
-	if (prevHole) {
-		newPos = prevHole->position;
-		newSize += prevHole->size;
-		
-		// Supprimer prevHole
-		TraceStackHandlerHole** tmp = &handler->holes;
-		while (*tmp != prevHole) tmp = &(*tmp)->next;
-		*tmp = prevHole->next;
-		free(prevHole);
-	}
-	
-	// Fusionner avec le trou suivant
-	if (nextHole) {
-		newSize += nextHole->size;
-		
-		// Supprimer nextHole
-		TraceStackHandlerHole** tmp = &handler->holes;
-		while (*tmp != nextHole) tmp = &(*tmp)->next;
-		*tmp = nextHole->next;
-		free(nextHole);
-	}
-	
-	// Insérer le nouveau trou fusionné
-	insertHole(handler, newPos, newSize);
 }
 
 
+// --- Handle push operation (simulate stack growth) ---
+int TraceStackHandler_handlePush(TraceStackHandler* handler, int size, FILE* output) {
+	TraceStackHandlerRspAdapter adp = TraceStackHandler_add(handler, size, size, -1);
+	TraceStackHandler_realAdaptAllocation(handler, adp.rspMove, output, "; for push\n");
+	return adp.address;
+}
+
+// --- Handle pop operation (simulate stack shrink) ---
+void TraceStackHandler_handlePop(TraceStackHandler* handler, int size, int data, FILE* output) {
+	int move = TraceStackHandler_remove(handler, -data, size);
+	TraceStackHandler_realAdaptAllocation(handler, move, output, "; from pop\n");
+}
+
+// --- Adapt RSP output for assembler ---
+void TraceStackHandler_adaptAllocation(TraceStackHandler* handler, int move, FILE* output) {
+	TraceStackHandler_realAdaptAllocation(handler, move, output, "\n");
+}
+
+
+// --- Freeze/unfreeze positions ---
 void TraceStackHandler_freeze(TraceStackHandler* handler, int label) {
 	handler->positions[label].freeze++;
 }
@@ -214,4 +206,3 @@ void TraceStackHandler_freeze(TraceStackHandler* handler, int label) {
 void TraceStackHandler_unfreeze(TraceStackHandler* handler, int label) {
 	handler->positions[label].freeze--;
 }
-

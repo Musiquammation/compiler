@@ -107,6 +107,7 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(long);
 	def(float);
 	def(double);
+	def(size_t);
 
 	#undef def
 }

@@ -1,19 +1,19 @@
-function main {
+function {
 	let i: int;
 	let j: int;
 	let limit: int;
 	let test: int;
 	let anonymous: int;
 
-	i=0;
+	i=1;
 	j=10;
-	limit=10;
+	limit=3;
 	anonymous = 1000;
 
-	while (i - 18) {
+	while (i - 5) {
 		test = limit - i;
 		if (test) {
-			anonymous = limit - test;
+			anonymous = limit-test;
 		}
 
 		j = j + i;
@@ -23,5 +23,3 @@ function main {
 	j = j + anonymous;
 	return j;
 }
-
-

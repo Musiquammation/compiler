@@ -1871,7 +1871,19 @@ static void saveShadowPlacements(
 	TraceStackHandler* stackHandler,
 	uint length
 ) {
-	ShadowPlacement* placements = malloc(length * sizeof(ShadowPlacement));
+	ShadowPlacement* placements;
+	void* placementsPtr;
+
+	if (stackHandler) {
+		placementsPtr = malloc(sizeof(int) + length * sizeof(ShadowPlacement));
+		placements = placementsPtr + sizeof(int);
+		*(int*)placementsPtr = stackHandler->rsp;
+	} else {
+		placementsPtr = malloc(length * sizeof(ShadowPlacement));
+		placements = placementsPtr;
+	}
+
+
 	printf("shadowsave %p\n", placements);
 
 	for (uint i = 0; i < length; i++) {
@@ -1888,7 +1900,7 @@ static void saveShadowPlacements(
 		}
 	}
 
-	*Stack_push(ShadowPlacement*, shadowPlacementSaves) = placements;
+	*Stack_push(ShadowPlacement*, shadowPlacementSaves) = placementsPtr;
 }
 
 static void openShadowPlacements(
@@ -1896,10 +1908,20 @@ static void openShadowPlacements(
 	TraceRegister regs[],
 	Stack* shadowPlacementSaves,
 	TraceStackHandler* stackHandler,
+	FILE* output,
 	uint length
 ) {
-	ShadowPlacement* placements = *Stack_pop(ShadowPlacement*, shadowPlacementSaves);
-	printf("shadowopen %p\n", placements);
+	void* placementsPtr = *Stack_pop(ShadowPlacement*, shadowPlacementSaves);
+	printf("shadowopen %p\n", placementsPtr);
+
+	ShadowPlacement* placements;
+	if (stackHandler) {
+		int nextRsp = *(int*)placementsPtr;
+		stackHandler->rsp = nextRsp;
+		placements = placementsPtr + sizeof(int);
+	} else {
+		placements = placementsPtr;
+	}
 
 
 	for (uint i = 0; i < length; i++) {
@@ -1926,7 +1948,8 @@ static void openShadowPlacements(
 		}
 	}
 
-	free(placements);
+	
+	free(placementsPtr);
 }
 
 
@@ -2110,7 +2133,7 @@ void Trace_placeRegisters(Trace* trace) {
 			usageBuffer[usageBufferLine] = line;
 			usageBufferLine++;
 
-			trline_t readmode = line & (1<<10);
+			trline_t readmode = (line>>10) & 1;
 			trline_t varIdx = line >> 11;
 			VarInfoTrace* vi = &varInfos[varIdx];
 			int store = vi->store;
@@ -2212,7 +2235,7 @@ void Trace_placeRegisters(Trace* trace) {
 
 			case 10: // open shadow placements
 				openShadowPlacements(varInfos, regs, 
-					&shadowPlacementSaves, NULL, varlength);
+					&shadowPlacementSaves, NULL, NULL, varlength);
 				break;
 
 			case 11: // trival usages
@@ -2518,7 +2541,8 @@ void Trace_printUsage(Trace* trace, FILE* output, int psize, Use use) {
 		int size = Trace_unpackSize(psize);
 		int pos = use.store;
 		pos += use.offset;
-		fprintf(output, "%s[rsp-%d]", REGISTER_SIZENAMES[psize], pos);
+		printf("rsp_to %d-%d-%d = %d\n", trace->stackHandler.rsp, pos, size, trace->stackHandler.rsp - pos - size);
+		fprintf(output, "%s[rsp+%d]", REGISTER_SIZENAMES[psize], trace->stackHandler.rsp - pos - size);
 	} else {
 		if (use.store == -TRACE_REG_NONE) {use.store = 0;}
 		int s = -use.store;
@@ -2526,18 +2550,6 @@ void Trace_printUsage(Trace* trace, FILE* output, int psize, Use use) {
 	}	
 }
 
-void Trace_printFastUsage(Trace* trace, FILE* output, int psize, Use use) {
-	if (use.store >= 0) {
-		int size = Trace_unpackSize(psize);
-		int pos = TraceStackHandler_guarantee(&trace->stackHandler, size, size, use.store);
-		pos += use.offset;
-		fprintf(output, "%s[rsp-%d]", REGISTER_SIZENAMES[psize], pos);
-	} else {
-		if (use.store == -TRACE_REG_NONE) {use.store = 0;}
-		int s = -use.store;
-		fprintf(output, "%s", REGISTER_NAMES[psize][s]);
-	}	
-}
 
 
 
@@ -2564,7 +2576,8 @@ void restoreAfterFnCall(
 		Trace_printUsage(trace, output, psize, (Use){p, 0});
 		fprintf(output, "; from fncall \n");
 
-		TraceStackHandler_remove(&trace->stackHandler, p, size);
+		int move = TraceStackHandler_remove(&trace->stackHandler, p, size);
+		TraceStackHandler_adaptAllocation(&trace->stackHandler, move, output);
 
 	} else if (p != -TRACE_REG_NONE) {
 		int j = i + TRACE_REG_RAX;
@@ -2601,7 +2614,10 @@ void generateAssembly_savePlacements(
 	TraceStackHandler* stackHandler,
 	uint length
 ) {
-	int* placements = malloc(length * sizeof(int));
+	int* placementsPtr = malloc((length+1) * sizeof(int));
+	placementsPtr[0] = stackHandler->rsp;
+	printf("saversp %d %p\n", stackHandler->rsp, placementsPtr);
+	int* placements = &placementsPtr[1];
 
 	for (uint i = 0; i < length; i++) {
 		int store = varInfos[i].store;
@@ -2611,7 +2627,7 @@ void generateAssembly_savePlacements(
 		}
 	}
 
-	*Stack_push(int*, placementSaves) = placements;
+	*Stack_push(int*, placementSaves) = placementsPtr;
 }
 
 
@@ -2619,11 +2635,22 @@ void generateAssembly_savePlacements(
 
 typedef struct {
 	int reg;
-	int packedSize;
+	int size;
 	int previousNextUse;
+	int stack;
 } TempReg;
 
-static TempReg pushTempReg(int rplceReg, TraceRegister regs[], VarInfoTrace varInfos[], FILE* output) {
+#define subToRsp(pos, size) (stackHandler->rsp - (pos) - (size))
+
+
+
+static TempReg pushTempReg(
+	int rplceReg,
+	TraceRegister regs[],
+	VarInfoTrace varInfos[],
+	TraceStackHandler* stackHandler,
+	FILE* output
+) {
 	// Get register
 	TempReg tmp;
 	tmp.reg = Trace_reg_searchEmpty(regs);
@@ -2631,37 +2658,48 @@ static TempReg pushTempReg(int rplceReg, TraceRegister regs[], VarInfoTrace varI
 		uint variable = regs[rplceReg].variable;
 		tmp.reg = rplceReg;
 		tmp.previousNextUse = -1;
-		tmp.packedSize = variable == TRACE_VARIABLE_NONE ?
-			3 : Trace_packSize(varInfos[variable].size);
-
+		tmp.size = variable == TRACE_VARIABLE_NONE ? 8 : varInfos[variable].size;
+		tmp.stack = TraceStackHandler_handlePush(stackHandler, tmp.size, output);
+		printf("handle push %d %d\n", tmp.size, tmp.stack);
+		int psize = Trace_packSize(tmp.size);
 		fprintf(
 			output,
-			"\tpush %s; restore@buffer\n",
-			REGISTER_NAMES[tmp.packedSize][rplceReg]
+			"\tmov %s[rsp+%d], %s; push\n",
+			REGISTER_SIZENAMES[psize],
+			subToRsp(tmp.stack, tmp.size),
+			REGISTER_NAMES[psize][tmp.reg]
 		);
-
+		
 	} else {
 		regs[tmp.reg].nextUse = -2;
 		tmp.previousNextUse = regs[tmp.reg].nextUse;
-		tmp.packedSize = Trace_packSize(varInfos[regs[tmp.reg].variable].size);
+		tmp.size = varInfos[regs[tmp.reg].variable].size;
 	}
 
 	return tmp;
 }
 
-static void popTempReg(TempReg* tmp, TraceRegister regs[], FILE* output) {
-	int previousNextUse = tmp->previousNextUse;
-	if (tmp->previousNextUse == -1) {
-		printf("%d\n", tmp->packedSize);
+static void popTempReg(TempReg tmp, TraceRegister regs[], TraceStackHandler* stackHandler, FILE* output) {
+	int previousNextUse = tmp.previousNextUse;
+	if (tmp.previousNextUse == -1) {
+		int psize = Trace_packSize(tmp.size);
 		fprintf(
 			output,
-			"\tpop %s; restore@buffer\n",
-			REGISTER_NAMES[tmp->packedSize][tmp->reg]
+			"\tmov %s, %s[rsp+%d]; pop\n",
+			REGISTER_NAMES[psize][tmp.reg],
+			REGISTER_SIZENAMES[psize],
+			subToRsp(tmp.stack, tmp.size)
 		);
-	} else if (tmp->reg != -TRACE_REG_NONE) {
-		regs[tmp->reg].nextUse = previousNextUse;
+
+		TraceStackHandler_handlePop(stackHandler, tmp.size, tmp.stack, output);
+
+	} else if (tmp.reg != -TRACE_REG_NONE) {
+		regs[tmp.reg].nextUse = previousNextUse;
 	}
 }
+
+#undef subToRsp
+#define toRsp(pos, size) (trace->stackHandler.rsp - (pos) - (size))
 
 
 void generateAssembly_openPlacements(
@@ -2673,7 +2711,9 @@ void generateAssembly_openPlacements(
 	FILE* output,
 	uint length
 ) {
-	int* stores = *Stack_pop(int*, placementSaves);
+	int* storesPtr = *Stack_pop(int*, placementSaves);
+
+	int* stores = &storesPtr[1];
 
 	for (uint v = 0; v < length; v++) {
 		printf("before %d %2d\n", v, varInfos[v].store);
@@ -2681,7 +2721,7 @@ void generateAssembly_openPlacements(
 
 	for (uint v = 0; v < length; v++) {
 		int dest = stores[v];
-		printf("destof(v%d): %2d from %2d\n", v, dest, varInfos[v].store);
+		printf("destof(v%d): %2d from %2d [rsp=%d]\n", v, dest, varInfos[v].store, stackHandler->rsp);
 		if (dest == -TRACE_REG_NONE)
 			continue;
 
@@ -2700,8 +2740,8 @@ void generateAssembly_openPlacements(
 
 		if (source >= 0) {
 			int sourceAddress = TraceStackHandler_reach(&trace->stackHandler, source);
+			printf("guarenteegot %d of %d\n", sourceAddress, source);
 			printf("sourceAddress %d[%d]\n", source, sourceAddress);
-			TraceStackHandler_remove(&trace->stackHandler, source, size);
 
 			if (dest >= 0) {
 				varInfos[v].store = dest;
@@ -2712,23 +2752,34 @@ void generateAssembly_openPlacements(
 				);
 
 				if (victim == TRACE_VARIABLE_NONE) {
-					TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, output);
-					int destAddress = TraceStackHandler_guarantee(&trace->stackHandler, size, size, dest);
+					TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, &trace->stackHandler, output);
+					TraceStackHandler_remove(&trace->stackHandler, source, size);
+
+					TraceStackHandlerRspAdapter adp = TraceStackHandler_guarantee(&trace->stackHandler, size, size, dest);
+					int destAddress = adp.address;
 
 					fprintf(
 						output,
-						"\tmov %s, %s[rsp-%d];restore@0\n\tmov %s[rsp-%d], %s\n",
+						"\tmov %s, %s[rsp+%d]; restore@0\n",
 						REGISTER_NAMES[psize][tmp.reg],
 						REGISTER_SIZENAMES[psize],
-						sourceAddress,
+						toRsp(sourceAddress, size)
+					);
 
+					printf("moversp %d %d %d\n", adp.rspMove, trace->stackHandler.rsp, destAddress);
+					TraceStackHandler_adaptAllocation(&trace->stackHandler, adp.rspMove, output);
+
+					fprintf(
+						output,
+						"\tmov %s[rsp+%d], %s\n",
 						REGISTER_SIZENAMES[psize],
-						destAddress,
+						toRsp(destAddress, size),
 						REGISTER_NAMES[psize][tmp.reg]
 					);
 
-					popTempReg(&tmp, regs, output);
+					popTempReg(tmp, regs, &trace->stackHandler, output);
 				} else {
+					TraceStackHandler_remove(&trace->stackHandler, source, size);
 					raiseError("[TODO] victim");
 				}
 
@@ -2739,39 +2790,53 @@ void generateAssembly_openPlacements(
 			int dt = -dest;
 			int destNextUse = regs[dt].nextUse;
 			printf("destNextUse(v%d) %d %d\n", v, destNextUse, dt);
-
-
+			
+			
 			if (destNextUse >= 0) {
 				uint victim = regs[dt].variable;
 				varInfos[victim].store = source;
-				int destAddress = TraceStackHandler_guarantee(&trace->stackHandler, size, size, source);
+				
+				TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, &trace->stackHandler, output);
+				TraceStackHandler_remove(&trace->stackHandler, source, size);
+				TraceStackHandlerRspAdapter adp = TraceStackHandler_guarantee(&trace->stackHandler, size, size, source);
+				int destAddress = adp.address;
 
-				TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, output);
 				fprintf(
 					output,
-					"\tmov %s, %s; restore@1\n\tmov %s, %s[rsp-%d]\n\tmov %s[rsp-%d], %s\n",
+					"\tmov %s, %s; restore@1\n\tmov %s, %s[rsp+%d]\n",
 
 					REGISTER_NAMES[psize][tmp.reg],
 					REGISTER_NAMES[psize][dt],
 
 					REGISTER_NAMES[psize][dt],
 					REGISTER_SIZENAMES[psize],
-					sourceAddress,
-
-					REGISTER_SIZENAMES[psize],
-					destAddress,
-					REGISTER_NAMES[psize][tmp.reg]
+					toRsp(sourceAddress, size)
 				);
 
-				popTempReg(&tmp, regs, output);
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, adp.rspMove, output);
 
-			} else {
 				fprintf(
 					output,
-					"\tmov %s, %s[rsp-%d]; restore@2\n",
+					"\tmov %s[rsp+%d], %s\n",
+					
+					REGISTER_SIZENAMES[psize],
+					toRsp(destAddress, size),
+					REGISTER_NAMES[psize][tmp.reg]
+
+				);
+
+
+				popTempReg(tmp, regs, &trace->stackHandler, output);
+
+			} else {
+				TraceStackHandler_remove(&trace->stackHandler, source, size);
+
+				fprintf(
+					output,
+					"\tmov %s, %s[rsp+%d]; restore@2\n",
 					REGISTER_NAMES[psize][dt],
 					REGISTER_SIZENAMES[psize],
-					sourceAddress
+					toRsp(sourceAddress, size)
 				);
 			}
 
@@ -2792,7 +2857,7 @@ void generateAssembly_openPlacements(
 
 			int st = -source;
 			int destAddress = TraceStackHandler_guarantee(
-				&trace->stackHandler, size, size, dest);
+				&trace->stackHandler, size, size, dest).address;
 
 			if (victim == TRACE_VARIABLE_NONE) {
 				varInfos[v].store = dest;
@@ -2802,9 +2867,9 @@ void generateAssembly_openPlacements(
 
 				fprintf(
 					output,
-					"\tmov %s[rsp-%d], %s; restore@3\n",
+					"\tmov %s[rsp+%d], %s; restore@3\n",
 					REGISTER_SIZENAMES[psize],
-					destAddress,
+					toRsp(destAddress, size),
 					REGISTER_NAMES[psize][st]
 				);
 
@@ -2814,25 +2879,25 @@ void generateAssembly_openPlacements(
 				regs[st].variable = v;
 				regs[st].nextUse = varInfos[victim].nextUse;
 
-				TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, output);
+				TempReg tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, &trace->stackHandler, output);
 
 				fprintf(
 					output,
-					"\tmov %s %s[rsp-%d]; restore@4\n\tmov %s[rsp-%d] %s\n\tmov %s %s\n",
+					"\tmov %s %s[rsp+%d]; restore@4\n\tmov %s[rsp+%d] %s\n\tmov %s %s\n",
 
 					REGISTER_NAMES[psize][tmp.reg],
 					REGISTER_SIZENAMES[psize],
-					destAddress,
+					toRsp(destAddress, size),
 
 					REGISTER_SIZENAMES[psize],
-					destAddress,
+					toRsp(destAddress, size),
 					REGISTER_NAMES[psize][st],
 
 					REGISTER_NAMES[psize][st],
 					REGISTER_NAMES[psize][tmp.reg]
 				);
 
-				popTempReg(&tmp, regs, output);
+				popTempReg(tmp, regs, &trace->stackHandler, output);
 
 			} else {
 				continue;
@@ -2902,12 +2967,45 @@ void generateAssembly_openPlacements(
 	}
 
 
-	free(stores);
+	int nextRsp = storesPtr[0];
+	printf("openrsp=%d [%p]\n", nextRsp, storesPtr);
+	printf("cameto %d\n", stackHandler->rsp);
+	fprintf(output, "\tadd rsp, %d; readapt\n", stackHandler->rsp - nextRsp);
+	stackHandler->rsp = nextRsp;
+
+
+	free(storesPtr);
 }
 
 
 
+
+
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
+	#define printNumber()\
+	switch (psize) {\
+		case 0:\
+		{fprintf(output, ", %d", (line>>16) & 0xff); break;}\
+		case 1:\
+		{fprintf(output, ", %d", line>>16);break;}\
+		case 2:\
+		{\
+			line = *linePtr; linePtr++; ip++;\
+			fprintf(output, ", %d", line);\
+			break;\
+		}\
+		case 3:\
+		{\
+			uint lo = *linePtr;\
+			linePtr++;\
+			uint hi = *linePtr;\
+			linePtr++;\
+			ip += 2;\
+			uint64_t value = (uint64_t)lo | (((uint64_t)hi) << 32);\
+			fprintf(output, ", %ld", value);\
+		}\
+	}
+
 	FILE* output = fnAsm->output;
 	int varlength = trace->varlength;
 
@@ -2966,7 +3064,15 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	WaitingRegister waitRax = {-TRACE_REG_NONE, WAITING_DISABLED};
 	WaitingRegister waitRdx = {-TRACE_REG_NONE, WAITING_DISABLED};
 	
-	Use uses[USE_LENGTH];
+	typedef struct {
+		int store;
+		int offset;
+		int rspMove;
+	} Usemv;
+
+	Usemv uses[USE_LENGTH];
+
+	#define useAt(idx) ((Use){uses[idx].store, uses[idx].offset})
 
 	while (true) {
 		// Print state
@@ -3005,7 +3111,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			printf("\n");
 		}
 
-		printf("> to %d\n", ip);
+		printf("> to %d [rsp=%d]\n", ip, trace->stackHandler.rsp);
 
 		
 
@@ -3019,24 +3125,46 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			uint variable = replace->variable;
 			
 			// Move victim
+			#define adapt(p, move, sstore) if (sstore < 0) {p = sstore; move=0;} else {\
+				TraceStackHandlerRspAdapter apt = TraceStackHandler_guarantee(\
+					&trace->stackHandler, size, size, sstore);\
+					p = apt.address;\
+					if (apt.rspMove < 0) {\
+						TraceStackHandler_adaptAllocation(&trace->stackHandler, apt.rspMove, output);\
+						move = 0;\
+					} else if (apt.rspMove > 0) {\
+						move = apt.rspMove;\
+					} else {move=0;}\
+				}
+			
+
 			int victim = replace->victim;
-			printf("victim %d for v%d\n", victim, variable);
+			printf("victim %d for v%d in %d reading=%d\n", victim, variable, varInfos[variable].store, replace->reading);
 			if (victim >= 0) {
-				int psize = Trace_packSize(varInfos[victim].size);
+				int p1, move1;
+				int p2, move2;
+				int size = varInfos[victim].size;
+				int psize = Trace_packSize(size);
 				int victimStore = replace->victimStore;
-				printf("dest %d > %d\n", replace->destination, victimStore);
 				
+				adapt(p1, move1, victimStore);
+				adapt(p2, move2, varInfos[victim].store);
+				printf("dest %d > %d => %d\n", replace->destination, victimStore, p2);
 				fprintf(output, "\tmov ");
-				Trace_printFastUsage(
+				Trace_printUsage(
 					trace, output, psize,
-					(Use){victimStore, 0}
+					(Use){p1, 0}
 				);
 				fprintf(output, ", ");
-				Trace_printFastUsage(
+
+				Trace_printUsage(
 					trace, output, psize,
-					(Use){varInfos[victim].store, 0}
+					(Use){p2, 0}
 				);
 				fprintf(output, "; throw v%d\n", victim);
+
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, move1, output);
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, move2, output);
 
 				varInfos[victim].store = victimStore;
 			
@@ -3047,30 +3175,42 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				regs[victim].nextUse = -1;
 			}
 
+
 			// Free stack area
 			int destination = replace->destination;
 			if (varInfos[variable].store >= 0 && replace->reading){
-				int psize = Trace_packSize(varInfos[variable].size);
+				int size = varInfos[variable].size;
+				int psize = Trace_packSize(size);
+				int p1, move1;
+				int p2, move2;
+
+				adapt(p1, move1, destination);
+				adapt(p2, move2, varInfos[variable].store);
 				fprintf(output, "\tmov ");
-				Trace_printFastUsage(
+				Trace_printUsage(
 					trace, output, psize,
-					(Use){destination, 0}
+					(Use){p1, 0}
 				);
 				fprintf(output, ", ");
-				Trace_printFastUsage(
+				Trace_printUsage(
 					trace, output, psize,
-					(Use){varInfos[variable].store, 0}
+					(Use){p2, 0}
 				);
 				fprintf(output, "; take v%d\n", variable);
 
 
 				printf("store %d %d\n", variable, varInfos[variable].store);
 				// Free taken value
-				TraceStackHandler_remove(
+				int move3 = TraceStackHandler_remove(
 					&trace->stackHandler,
 					varInfos[variable].store,
 					varInfos[variable].size
 				);
+				
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, move1, output);
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, move2, output);
+				TraceStackHandler_adaptAllocation(&trace->stackHandler, move3, output);
+
 			}
 
 			// Update store
@@ -3080,6 +3220,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				regs[destination].nextUse = varInfos[variable].nextUse;
 				regs[destination].variable = variable;
 			}
+
+			#undef adapt
+
 
 			replace++;
 		}
@@ -3098,32 +3241,40 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			int store = varInfos[varIdx].store;
 			printf("reada %d in %d next=%d\n", varIdx, store, getNextUse());
+			uses[usageCompletion].rspMove = 0;
 			
 			if (varInfos[varIdx].registrable) {
 				if (store >= 0) {
 					int size = varInfos[varIdx].size;
 					printf("shouldadd %d\n", varIdx);
-					int address = TraceStackHandler_guarantee(
+					TraceStackHandlerRspAdapter rspAdapter = TraceStackHandler_guarantee(
 						&trace->stackHandler,
 						size,
 						size,
 						store
 					);
+					
+					if (rspAdapter.rspMove != 0) {
+						uses[usageCompletion].rspMove = rspAdapter.rspMove;
+						printf("remove setting %d\n", rspAdapter.rspMove);
+					}
 
 					if (code == 0) {
 						// Remove variable
-						TraceStackHandler_remove(
+						int move = TraceStackHandler_remove(
 							&trace->stackHandler,
 							store,
 							varInfos[varIdx].size
 						);
+						uses[usageCompletion].rspMove = move;
+						printf("remove moving %d\n", move);
 
 						varInfos[varIdx].nextUse = -1;
 					} else {
 						varInfos[varIdx].nextUse = getNextUse();
 					}
 
-					store = address;
+					store = rspAdapter.address;
 				} else if (code == 0) {
 					regs[-store].nextUse = -1;
 					varInfos[varIdx].nextUse = -1;
@@ -3149,7 +3300,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 						size,
 						size,
 						store
-					);
+					).address;
 				}
 				varInfos[varIdx].nextUse = getNextUse();
 				uses[usageCompletion].store = store;
@@ -3174,10 +3325,14 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		}
 
 
-
+		// Reset usage completion
 		usageCompletion = 0;
 
-
+		#define allowRsp(id) {if (uses[id].rspMove < 0) {\
+			TraceStackHandler_adaptAllocation(&trace->stackHandler, uses[id].rspMove, output);}}
+		
+		#define desallowRsp(id) {if (uses[id].rspMove > 0) {\
+			TraceStackHandler_adaptAllocation(&trace->stackHandler, uses[id].rspMove, output);}}
 
 		// Instruction
 		switch (code) {
@@ -3237,7 +3392,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			case 10: // rewind placements
 				openShadowPlacements(varInfos, regs, &shadowPlacementSaves,
-					&trace->stackHandler, varlength);
+					&trace->stackHandler, output, varlength);
 				break;
 
 			case 11: // trival usages
@@ -3287,7 +3442,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		{
 			int type = (line >> 10) & 0x3;
 			fprintf(output, "\tmov ");
-			Trace_printUsage(trace, output, type, uses[0]);
+			allowRsp(0);
+
+			Trace_printUsage(trace, output, type, useAt(0));
 			fprintf(output, ", ");
 			
 			// Print value
@@ -3318,18 +3475,24 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_MOVE:
 		{
+			allowRsp(1);
+
 			int size = (line >> 16);
 			fprintf(output, "\tmov ");
-			Trace_printUsage(trace, output, Trace_packSize(size), uses[1]);
+			Trace_printUsage(trace, output, Trace_packSize(size), useAt(1));
 			fprintf(output, ", ");
-			Trace_printUsage(trace, output, Trace_packSize(size), uses[0]);
+			Trace_printUsage(trace, output, Trace_packSize(size), useAt(0));
 			fprintf(output, "\n");
+		
+			desallowRsp(0);
 
 			break;
 		}
 
 		case TRACECODE_PLACE:
-		{
+		{			
+			allowRsp(1);
+
 			if (line & (1<<12)) {
 				// edit variable
 				uint destVar = previousLine >> 10;
@@ -3343,7 +3506,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				varInfos[destVar].nextUse = nextUse;
 				
 				fprintf(output, "\tmov ");
-				Trace_printUsage(trace, output, psize, uses[0]);
+				Trace_printUsage(trace, output, psize, useAt(0));
 				fprintf(output, ", ");
 				Trace_printUsage(trace, output, psize, (Use){-reg, 0});
 				fprintf(output, "; place(var)\n");
@@ -3371,15 +3534,19 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				fprintf(output, "\tmov ");
 				Trace_printUsage(trace, output, psize, (Use){-reg, 0});
 				fprintf(output, ", ");
-				Trace_printUsage(trace, output, psize, uses[0]);
+				Trace_printUsage(trace, output, psize, useAt(0));
 				fprintf(output, "; place(reg)\n");
 			}
+
+			desallowRsp(0);
 
 			break;
 		}
 
 		case TRACECODE_ARITHMETIC:
 		{
+			allowRsp(1);
+
 			int operation = (line >> 10) & 0x7;
 			int psize = (line >> 13) & 0x3;
 
@@ -3399,35 +3566,41 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			// Move value
 			fprintf(output, "\tmov ");
-			Trace_printUsage(trace, output, psize, uses[1]);
+			Trace_printUsage(trace, output, psize, useAt(1));
 			fprintf(output, ", ");
-			Trace_printUsage(trace, output, psize, uses[0]);
+			Trace_printUsage(trace, output, psize, useAt(0));
 			fprintf(output, "; prepare arithmetic operation\n");
 
 			// Perform real operation
 			fprintf(output, "\t%s ", ARITHMETIC_NAMES[operation]);
-			Trace_printUsage(trace, output, psize, uses[1]);
+			Trace_printUsage(trace, output, psize, useAt(1));
 			fprintf(output, ", ");
-			Trace_printUsage(trace, output, psize, uses[2]);
+			Trace_printUsage(trace, output, psize, useAt(2));
 			fprintf(output, "\n");
+
+			desallowRsp(0);
+			desallowRsp(2);
+
 			break;
 		}
 
 		case TRACECODE_ARITHMETIC_IMM:
 		{
+			allowRsp(1);
+
 			int operation = (line >> 10) & 0x7;
 			int psize = (line >> 13) & 0x3;
 
 			// Move value
 			fprintf(output, "\tmov ");
-			Trace_printUsage(trace, output, psize, uses[1]);
+			Trace_printUsage(trace, output, psize, useAt(1));
 			fprintf(output, ", ");
-			Trace_printUsage(trace, output, psize, uses[0]);
+			Trace_printUsage(trace, output, psize, useAt(0));
 			fprintf(output, "; prepare arithmetic operation\n");
 
 			// Perform real operation
 			fprintf(output, "\t%s ", ARITHMETIC_NAMES[operation]);
-			Trace_printUsage(trace, output, psize, uses[1]);
+			Trace_printUsage(trace, output, psize, useAt(1));
 			
 			if (operation >= TRACEOP_INC) {
 				fprintf(output, "\n");
@@ -3440,48 +3613,16 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			}
 
 			/// TODO: check sign
-			switch (psize) {
-			case 0:
-			{
-				fprintf(output, ", %d\n", (line>>16) & 0xff);
-				break;
-			}
+			printNumber();
+			fprintf(output, "\n");
 
-			case 1:
-			{
-				fprintf(output, ", %d\n", line>>16);
-				break;
-			}
-
-			case 2:
-			{
-				line = *linePtr;
-				linePtr++;
-				ip++;
-				fprintf(output, ", %d\n", line);
-				break;
-			}
-
-			case 3:
-			{
-				uint lo = *linePtr;
-				linePtr++;
-				uint hi = *linePtr;
-				linePtr++;
-				ip += 2;
-
-				uint64_t value = (uint64_t)lo | (((uint64_t)hi) << 32);
-				fprintf(output, ", %ld\n", value);
-
-
-			}
-			}
-
+			desallowRsp(0);
 			break;	
 		}
 
 		case TRACECODE_LOGIC:
 		{
+			allowRsp(1);
 			int operation = (line >> 10) & 0xf;
 			int psize = (line >> 14) & 0x3;
 
@@ -3489,34 +3630,23 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			case TRACEOP_BITWISE_AND:
 			case TRACEOP_BITWISE_OR:
 			case TRACEOP_BITWISE_XOR:
+			case TRACEOP_LEFT_SHIFT:
+			case TRACEOP_RIGHT_SHIFT:
 			{
 				fprintf(output, "\tmov ");
-				Trace_printUsage(trace, output, psize, uses[1]);
+				Trace_printUsage(trace, output, psize, useAt(1));
 				fprintf(output, ", ");
-				Trace_printUsage(trace, output, psize, uses[0]);
+				Trace_printUsage(trace, output, psize, useAt(0));
 				fprintf(output, "; prepare logic operation\n");
 
 				// Perform real operation
 				fprintf(output, "\t%s ", LOGIC_NAMES[operation]);
-				Trace_printUsage(trace, output, psize, uses[1]);
+				Trace_printUsage(trace, output, psize, useAt(1));
 				fprintf(output, ", ");
-				Trace_printUsage(trace, output, psize, uses[2]);
+				Trace_printUsage(trace, output, psize, useAt(2));
 				fprintf(output, "\n");
 				break;
 			}
-
-			case TRACEOP_LEFT_SHIFT:
-			{
-				raiseError("[TODO] shl");
-				break;
-			}
-			
-			case TRACEOP_RIGHT_SHIFT:
-			{
-				raiseError("[TODO] shr");
-				break;
-			}
-
 
 			case TRACEOP_LOGICAL_AND:
 			{
@@ -3571,12 +3701,64 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 
 			}
+		
+			desallowRsp(0);
+			desallowRsp(2);
 			break;	
 		};
 
 		case TRACECODE_LOGIC_IMM_LEFT:
 		case TRACECODE_LOGIC_IMM_RIGHT:
 		{
+			allowRsp(1);
+
+			int operation = (line >> 10) & 0xf;
+			int psize = (line >> 14) & 0x3;
+			printf("psize is %d\n", psize);
+
+			// Move value
+			fprintf(output, "\tmov ");
+			Trace_printUsage(trace, output, psize, useAt(1));
+			fprintf(output, ", ");
+			Trace_printUsage(trace, output, psize, useAt(0));
+			fprintf(output, "; prepare logic operation\n");
+			
+			// Perform real operation
+			switch (operation) {
+			case TRACEOP_BITWISE_AND:
+			case TRACEOP_BITWISE_OR:
+			case TRACEOP_BITWISE_XOR:
+			case TRACEOP_LEFT_SHIFT:
+			case TRACEOP_RIGHT_SHIFT:
+				if (code == TRACECODE_LOGIC_IMM_LEFT) {
+					fprintf(output, "\t%s ", LOGIC_NAMES[operation]);
+					printNumber();
+					Trace_printUsage(trace, output, psize, useAt(1));
+					fprintf(output, "\n");
+				} else {
+					fprintf(output, "\t%s ", LOGIC_NAMES[operation]);
+					Trace_printUsage(trace, output, psize, useAt(1));
+					printNumber();
+					fprintf(output, "\n");
+				}
+				break;
+
+			case TRACEOP_LOGICAL_AND:
+			case TRACEOP_LOGICAL_OR:
+
+			case TRACEOP_EQUAL:
+			case TRACEOP_NOT_EQUAL:
+			case TRACEOP_LESS:
+			case TRACEOP_LESS_EQUAL:
+			case TRACEOP_GREATER:
+			case TRACEOP_GREATER_EQUAL:
+				break;
+
+			}
+			
+
+			desallowRsp(0);
+
 			break;	
 		};
 
@@ -3696,7 +3878,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		{
 			/// TODO: mark real size
 			fprintf(output, "\tcmp ");
-			Trace_printUsage(trace, output, 2, uses[0]);
+			Trace_printUsage(trace, output, 2, useAt(0));
+			desallowRsp(0);
 			fprintf(output, ", 0\n\tjz .l%04d\n", line>>10);
 
 
@@ -3712,6 +3895,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		
 		case TRACECODE_CAST:
 		{
+			allowRsp(1);
 			trline_t srcSigned = line & (1<<10);
 			trline_t srcFloat = line & (1<<11);
 			trline_t destSigned = line & (1<<12);
@@ -3727,14 +3911,15 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			trline_t dstPSize = (line >> 18) & 0x3;
 			if (dstPSize >= srcPSize) {
 				fprintf(output, "\tmov%s ", destSigned ? "sx" : "zx");
-				Trace_printUsage(trace, output, dstPSize, uses[1]);
+				Trace_printUsage(trace, output, dstPSize, useAt(1));
 				fprintf(output, ", ");
-				Trace_printUsage(trace, output, srcPSize, uses[0]);
+				Trace_printUsage(trace, output, srcPSize, useAt(0));
 				fprintf(output, "\n");
 			} else {
-				
+				/// TODO: handle something
 			}
 			
+			desallowRsp(0);
 
 			break;
 		}
@@ -3743,9 +3928,13 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 
 		}
-
-
+	
+		#undef adaptAllow
+		#undef adaptDesalloc
+		#undef useAt
 	}
+
+	#undef printNumber
 
 	finishWhile:
 	if (placementsObj)
