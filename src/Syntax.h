@@ -45,7 +45,8 @@ void Syntax_order(Scope* scope, Parser* parser);
 void Syntax_declarationList(Scope* scope, Parser* parser);
 
 void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_ClassDeclarationArg* defaultData);
-void Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs);
+bool Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs);
+Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma);
 
 void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
 Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);
@@ -53,6 +54,13 @@ void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn,
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
 int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
 
+
+/**
+ * Returns an expression which type can be:
+ * - `EXPRESSION_VALUE`
+ * - `EXPRESSION_PROPERTY`
+ * - `EXPRESSION_FNCALL`
+ */
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope);
 void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool);
 

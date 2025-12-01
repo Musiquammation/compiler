@@ -1,9 +1,12 @@
 #include "Syntax.h"
 
+#include "ScopeBuffer.h"
 #include "Scope.h"
 #include "Parser.h"
 #include "globalLabelPool.h"
 #include "helper.h"
+
+#include "MemoryCursor.h"
 
 #include "syntaxList.c" // !do not include twice!
 
@@ -16,10 +19,15 @@
 #include "Trace.h"
 
 #include "primitives.h"
+#include "langstd.h"
+
 #include "Type.h"
 #include "Prototype.h"
 
 #include <string.h>
+
+
+
 
 #define TokenCompare(list, flags) (Token_compare(token, list, sizeof(list)/sizeof(Token), flags))
 
@@ -525,100 +533,12 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 
 
 
-Class* Syntax_proto(Parser* parser, Scope* scope, Prototype* proto, bool finishByComma) {
-	Token token = Parser_read(parser, &_labelPool);
-
-	// Get type name
-	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
-		return NULL;
-
-	const label_t name = token.label;
-	int syntaxIndex = -1;
-	bool canBePrimitive = true;
-
-	// Collect syntax data
-	while (true) {
-		// Collect next syntaxIndex
-		{
-			token = Parser_read(parser, &_labelPool);
-			int next = TokenCompare(SYNTAXLIST_TYPE, 0);
-			if (next <= syntaxIndex) {
-				raiseError("[Syntax] Illegal order in type declaration");
-				return NULL;
-			}
-			
-			syntaxIndex = next;
-		}
-
-
-		switch (syntaxIndex) {
-		// Settings
-		case 0:
-			canBePrimitive = false;
-			raiseError("[TODO] read settings");
-			break;
-			
-		// Read verified functions
-		case 1:
-			canBePrimitive = false;
-			raiseError("[TODO] verified functions");
-			break;
-
-		// Finish by comma (or right parenthesis) operator
-		case 2:
-		case 3:
-			if (!finishByComma)
-				raiseError("[SYNTAX] type should finish by semicolon");
-
-			// Save right parenthesis
-			if (syntaxIndex == 3)
-				Parser_saveToken(parser, &token);
-
-			goto generate;
-
-		// Finish by end operator (or equal / lbrace)
-		case 4:
-		case 5:
-		case 6:
-			if (finishByComma)
-				raiseError("[SYNTAX] type should finish by a comma");
-
-			Parser_saveToken(parser, &token);
-			goto generate;
-			
-		}
-	}
-
-	// Generate type
-	generate:
-	/// TODO: check this call
-	Class* cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
-	if (!cl) {
-		if (!Scope_defineOnFly(scope, name))
-			goto classNotFound;
-		
-		cl = Scope_search(scope, name, NULL, SCOPESEARCH_CLASS);
-		if (!cl) {
-			classNotFound:
-			raiseError("[UNKOWN] Class not found");
-			return NULL;
-		}
-	}
-
-	Prototype_createWithSizeCode(proto, cl, canBePrimitive ? cl->primitiveSizeCode : 0);
-	return cl;
-}
-
-
-
-
-
-
 
 void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_ClassDeclarationArg* defaultData) {
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
 	bool definitionToRead;
+	bool langstd = false;
 	
 	// Handle annotations
 	/// TODO: complete annotations 
@@ -626,6 +546,12 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		int annotType = annotation->type;
 
 		switch (annotType) {
+		case ANNOTATION_LANGSTD:
+		{
+			langstd = true;
+			break;
+		}
+		
 		default:
 		{
 			raiseError("[Syntax] Illegal annotation");
@@ -723,11 +649,28 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		cl = malloc(sizeof(Class));
 		Class_create(cl);
 		cl->name = name;
-		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
+		cl->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_UNDEFINED;
 		cl->primitiveSizeCode = 0;
-		cl->isRegistrable = false;
 		Scope_addClass(scope, scope->type, cl);
+		
+		if (langstd) {
+			#define check(label, Label) if (name == _commonLabels._##Label) {\
+				if (_langstd.label) {raiseError("[Architecture] langstd" #Label "already defined"); return;}\
+				_langstd.label = cl; goto langstdDone;\
+			}
+			
+			check(pointer, Pointer);
+			check(type, Type);
+			check(variadic, Variadic);
+
+			#undef check
+
+
+			raiseError("[Unknown] Cannot find langstd object to define");
+			langstdDone:
+		}
 	}
+
 
 
 	// Read definition
@@ -741,41 +684,10 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 
-typedef struct {
-	int offset;
-	int maxMinimalSize;
-} Cursor;
 
-static int alignCursor(Cursor cursor) {
-	if (cursor.maxMinimalSize == 0) {
-		return 0;
-	}
+bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
+	printf("START %s as %p\n", cl->name, cl);
 
-	int d = cursor.offset % cursor.maxMinimalSize;
-	if (d) {
-		return cursor.offset + cursor.maxMinimalSize - d;
-	}
-
-	return cursor.offset;
-}
-
-static int giveCursor(Cursor* cursor, int size, int maxMinimalSize) {
-	int mms = maxMinimalSize;
-	if (mms > cursor->maxMinimalSize)
-		cursor->maxMinimalSize = mms;
-
-	int d = cursor->offset % mms;
-	if (d) {
-		cursor->offset += mms - d;
-	}
-
-	int offset = cursor->offset;
-	cursor->offset += maxMinimalSize;
-	return offset;
-}
-
-
-void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
 	cl->definitionState = DEFINITIONSTATE_READING;
 
 	ScopeClass insideScope = {
@@ -792,12 +704,15 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 
 	Class* meta = NULL;
-	Array metaControlFunctions;
-	Cursor cursor = {0, 0};
+	MemoryCursor cursor = {0, 0};
 	bool containsMetaArguments = false;
+	bool doesMetaContainsMetaArgs = false;
+	Array metaControlFunctions;
+	metaControlFunctions.reserved = 0; // to prevent Array_free
 
 	// Read content
 	while (true) {
+
 		Token token = Parser_readAnnotated(parser, &_labelPool);
 
 		Array_loop(Annotation, parser->annotations, annotation) {
@@ -807,17 +722,17 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			case ANNOTATION_CONTROL:
 			{
 				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
-					return;
+					return false; 
 				
 				label_t name = token.label;
 
 				token = Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-					return;
+					return false; 
 
 				if (cdefs->controlFunctions.size == 0) {
 					raiseError("[Architecture] Adapt functions are forbidden");
-					return;
+					return false; 
 				}
 
 				*Array_push(label_t, &cdefs->controlFunctions) = name;
@@ -828,7 +743,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
-				return;
+				return false; 
 			}
 			}
 		}
@@ -854,19 +769,19 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		// meta class
 		case 2:
 		{
+			cl->metaDefinitionState = DEFINITIONSTATE_READING;
 			meta = malloc(sizeof(Class));
-			Class_create(meta);
 			meta->name = NULL;
-			meta->meta = NULL;
-			meta->isRegistrable = false;
+			Class_create(meta);
 
 			token = Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
-				return;
+				return false; 
 
 			Syntax_ClassDefinitionArg cdefs;
 			Array_create(&cdefs.controlFunctions, sizeof(label_t));
-			Syntax_classDefinition(&outsideScope.scope, parser, meta, &cdefs);
+			doesMetaContainsMetaArgs =
+				Syntax_classDefinition(&outsideScope.scope, parser, meta, &cdefs);
 			metaControlFunctions = cdefs.controlFunctions;
 						
 			break;
@@ -883,28 +798,34 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			{
 				Variable* variable = malloc(sizeof(Variable));
 				*Array_push(Variable*, &cl->variables) = variable;
-
-				variable->name = name;
 				
-				Class* tcl = Syntax_proto(parser, &outsideScope.scope, &variable->proto, false);
+				variable->name = name;
+
+				printf("define %s\n", name);
+				variable->proto = Syntax_proto(parser, &outsideScope.scope, false);
+				char mdef = Prototype_reachMetaDefinition(variable->proto, &outsideScope.scope, true);
+				if (mdef == DEFINITIONSTATE_DONE) {
+					containsMetaArguments = true;
+				}
 	
 				// Finish by end operation
 				token = Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-					return;;
+					return false; 
 
-				if (!containsMetaArguments && tcl->meta) {
-					containsMetaArguments = true;
-				}
 
 				// Get object size
-				int vsize = Prototype_reachSize(&variable->proto, parentScope);
+				ExtendedPrototypeSize vsize = Prototype_reachSizes(variable->proto, parentScope, false);
+				if (vsize.size >= 0) {
+					variable->offset = MemoryCursor_give(
+						&cursor,
+						vsize.size,
+						vsize.maxMinimalSize
+					);
+				} else {
+					raiseError("[TODO] handle unknown sizes in class declaration for MemoryCursor");
+				}
 
-				variable->offset = giveCursor(
-					&cursor,
-					vsize,
-					variable->proto.maxMinimalSize
-				);
 
 
 				break;
@@ -957,31 +878,33 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	close:
 
 	// Align offset
-	cl->size = alignCursor(cursor);
+	cl->size = MemoryCursor_align(cursor);
 	cl->maxMinimalSize = cursor.maxMinimalSize;
+
+
+	// Registrable ?
+	if (cl->variables.length == 1) {
+		Variable* v = *Array_get(Variable*, cl->variables, 0);
+		cl->isRegistrable = Prototype_isRegistrable(v->proto, false);
+	} else {
+		cl->isRegistrable = REGISTRABLE_FALSE;
+	}
 
 	
 
 	// Get meta
+	printf("meta %s %d %d\n", cl->name, meta ?1:0, containsMetaArguments);
 	if (meta || containsMetaArguments) {
-		if (meta) {
-			cursor.offset = meta->size;
-			cursor.maxMinimalSize = meta->maxMinimalSize;
-		} else {
-			cursor.offset = 0;
-			cursor.maxMinimalSize = 0;
-			
-			meta = malloc(sizeof(Class));
-			Class_create(meta);
-			meta->name = NULL;
-			meta->meta = NULL;
-			meta->isRegistrable = false;
-
+		if (!meta) {
 			metaControlFunctions.length = 0;
-			/// TODO: handle submetas
 		}
 
+		// Append variables
+		meta = Class_appendMeta(cl, meta, containsMetaArguments);
+		
+		
 		// Add control methods
+
 		Array_loop(label_t, metaControlFunctions, name_ptr) {
 			label_t fnname = *name_ptr;
 			Function* ref = ScopeClass_searchFunction(&outsideScope, fnname, NULL);
@@ -990,22 +913,25 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			Function_create(fn);
 			fn->name = fnname;
 			Array_create(&fn->arguments, sizeof(Variable*));
-			fn->returnType.cl = NULL;
-			fn->returnType.primitiveSizeCode = 0;
+			fn->returnType = NULL;
 
 
 			typedef Variable* var_ptr_t;
 			Array_loop(var_ptr_t, ref->arguments, vptr) {
 				Variable* v = *vptr;
-				Class* meta = v->proto.cl->meta;
+				Class* meta = Prototype_getMetaClass(v->proto);
 				if (!meta)
 					continue;
 
 				Variable* next = malloc(sizeof(Variable));
+				v->meta = next;
+
 				Variable_create(next);
+				/// TODO: check this constructor
+				Prototype_copy(next->proto, v->proto);
 				next->name = v->name;
 				next->id = -1;
-				Prototype_generateMeta(&next->proto, &v->proto);
+
 
 				*Array_push(Variable*, &fn->arguments) = next;
 			}
@@ -1015,45 +941,17 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		}
 
 
-
-		// Add variables
-		typedef Variable* var_ptr_t;
-		Array_loop(var_ptr_t, cl->variables, vptr) {
-			Variable* source = *vptr;
-			Class* meta = source->proto.cl->meta;
-			if (!meta)
-				continue;
-
-			int offset = giveCursor(&cursor, meta->size, meta->maxMinimalSize);
-			
-			Variable* variable = malloc(sizeof(Variable));
-			Variable_create(variable);
-			variable->name = source->name;
-			variable->proto.cl = meta;
-			variable->proto.primitiveSizeCode = 0;
-			/// TODO: generate proto
-			variable->offset = offset;
-
-			*Array_push(Variable*, &meta->variables) = variable;
-		}
-
-		meta->maxMinimalSize = cursor.maxMinimalSize;
-		meta->size = alignCursor(cursor);
-
-
-		cl->meta = meta;
 		Array_free(metaControlFunctions);
 	} else {
 		cl->meta = NULL;
+		cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
 	}
 
 
 
-
-	printf("define %p %s %d\n", cl, cl->name, cl->variables.length);
+	printf("FINIT %s as %p\n", cl->name, cl);
 	cl->definitionState = DEFINITIONSTATE_DONE;
-
-	return;
+	return containsMetaArguments;
 }
 
 
@@ -1061,6 +959,247 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 
 
+
+
+void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array* settings) {
+	label_t label = NULL;
+	enum {NODEFINE = -1, NEEDS_COMMA = -2};
+
+	int offsetToDefine = NODEFINE;
+	bool typeToDefine = false;
+	Array_create(settings, sizeof(Prototype*));
+	
+	while (true) {
+		Token token = Parser_read(parser, &_labelPool);
+		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
+
+		switch (syntaxResult) {
+		// label
+		case 0:
+		case 1:
+		{
+			if (syntaxResult == 0 && !typeToDefine) {
+				raiseError("[Syntax] No type to define");
+				return;
+			}
+
+			if (typeToDefine) {
+				Parser_saveToken(parser, &token);
+				*Array_push(Prototype*, settings) = Syntax_proto(parser, scope, true);
+				
+				typeToDefine = false;
+				offsetToDefine = NEEDS_COMMA;
+				break;
+			}
+
+
+			if (offsetToDefine == NEEDS_COMMA) {goto raiseComma;}
+
+
+			if (label) {
+				raiseError("[Syntax] Previous label not defined in setting list");
+				return;
+			}
+
+			label = token.label;
+			break;
+		}
+
+
+		// assign value
+		case 2:
+		{
+			if (offsetToDefine == NEEDS_COMMA) {goto raiseComma;}
+
+			raiseError("[TODO] assign value in settings");
+			break;
+		}
+
+		// assign type
+		case 3:
+		{
+			if (offsetToDefine == NEEDS_COMMA) {goto raiseComma;}
+
+			// Search type to define
+			typedef Variable* v_ptr;
+			Array_loop(v_ptr, meta->variables, vptr) {
+				Variable* v = *vptr;
+				if (v->name == label) {
+					offsetToDefine = v->offset;
+					typeToDefine = true;
+					label = NULL;
+					goto varFound_type;
+				}
+			}
+
+			raiseError("[Unknown] Cannot find type to set\n");
+
+			varFound_type:
+
+			break;
+		}
+
+		// finish
+		case 4:
+		case 5:
+		case 6:
+		{
+			if (label) {
+				// Label is a type that we have to define
+				raiseError("[TODO] define in order in settings\n");
+			}
+
+			// Closing angle
+			if (syntaxResult == 4) {
+				return;
+			}
+
+			// Save end character
+			if (syntaxResult == 6) {
+				Parser_saveToken(parser, &token);
+				return;
+			}
+			break;
+		}
+
+		}
+	}
+
+	return;
+	
+	
+	raiseComma:
+	raiseError("[Syntax] A comma was expected\n");
+
+}
+
+Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
+	Token token = Parser_read(parser, &_labelPool);
+
+	// Start with class keyword
+	if (TokenCompare(SYNTAXLIST_START_TYPE, 0) == 0) {
+		// Opening bracket or something else
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACKET, SYNTAXFLAG_UNFOUND) < 0) {
+			// Variadic prototype
+			Prototype* proto = Prototype_create_variadic();
+			Parser_saveToken(parser, &token);
+			return proto;
+		}
+			
+
+		// Here, it's type of a variable
+
+		// Variable
+		token = Parser_read(parser, &_labelPool);
+		Token_println(&token);
+		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+			return false;
+		
+		// Expression
+		Expression* expression = Syntax_readPath(token.label, parser, scope);
+		Prototype* proto = Prototype_create_expression(expression);
+		
+
+		// Closing bracket
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RBRACKET, 0))
+			return false;
+
+
+		raiseError("[TODO] define if we have a meta class");
+		return proto; // or true, maybe?
+	}
+
+	// Default behavior
+	Class* cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
+	if (cl) {
+		Prototype* proto = primitives_getPrototype(cl);
+		if (proto)
+			return proto;
+	} else {
+		if (!Scope_defineOnFly(scope, token.label))
+			goto classNotFound;
+		
+		cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
+		if (!cl) {
+			classNotFound:
+			raiseError("[Unknown] Class not found");
+			return false;
+		}
+	}
+
+	int syntaxIndex = -1;
+	bool canBePrimitive = true;
+	Array settings = {.length = 0, .reserved = 0};
+
+	// Collect settings data
+	while (true) {
+		// Collect next syntaxIndex
+		{
+			token = Parser_read(parser, &_labelPool);
+			int next = TokenCompare(SYNTAXLIST_TYPE, 0);
+			if (next <= syntaxIndex) {
+				raiseError("[Syntax] Illegal order in type declaration");
+				return false;
+			}
+			
+			syntaxIndex = next;
+		}
+
+
+		switch (syntaxIndex) {
+		// Settings
+		case 0:
+			canBePrimitive = false;
+			if (!cl->meta) {
+				raiseError("[Architecture] Cannot append settings to a class within meta-class");
+			}
+
+			Syntax_proto_readSettings(parser, scope, cl->meta, &settings);
+			break;
+			
+		// Read verified functions
+		case 1:
+			canBePrimitive = false;
+			raiseError("[TODO] verified functions");
+			break;
+
+		// Finish by comma (or right parenthesis) operator
+		case 2:
+		case 3:
+		case 4:
+			if (!finishByComma)
+				raiseError("[SYNTAX] type should finish by semicolon");
+
+			// Save
+			if (syntaxIndex >= 3)
+				Parser_saveToken(parser, &token);
+
+			goto generate;
+
+		// Finish by end operator (or equal / lbrace)
+		case 5:
+		case 6:
+		case 7:
+			if (finishByComma)
+				raiseError("[SYNTAX] type should finish by a comma");
+
+			// Save
+			Parser_saveToken(parser, &token);
+			goto generate;
+			
+		}
+	}
+
+	// Generate prototype
+	generate:
+
+	/// TODO: Array_shrinkToFit
+	// Array_shrinkToFit()
+	return Prototype_create_direct(cl, canBePrimitive ? cl->primitiveSizeCode : 0,
+		settings.data, settings.length);
+}
 
 
 
@@ -1073,7 +1212,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 	bool definitionToRead;
 	bool returnTypeAlreadyRead = false;
 	Array arguments = {.length = 0xffff}; // no args read ; type: Variable*
-	Prototype returnType = {.cl = NULL, .primitiveSizeCode = 0};
+	Prototype* returnType = NULL;
 	
 	// Handle annotations
 	/// TODO: complete annotations 
@@ -1085,8 +1224,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 			name = _commonLabels._main;
 
 			// Return type
-			returnType.cl = &_primitives.class_i32;
-			returnType.primitiveSizeCode = -4;
+			returnType = &_primitives.proto_i32;
 			returnTypeAlreadyRead = true;
 
 			// Arguments
@@ -1094,8 +1232,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 			Variable* argc = malloc(sizeof(Variable));
 			Variable_create(argc);
 			argc->id  -1;
-			argc->proto.cl = &_primitives.class_i32;
-			argc->proto.primitiveSizeCode = -4;
+			argc->proto = &_primitives.proto_i32;
 			
 			/// TODO: edit this prototype (add char** argv)
 			argList[0] = argc;
@@ -1164,7 +1301,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 				break;
 			}
 			returnTypeAlreadyRead = true;
-			Syntax_proto(parser, scope, &returnType, false);
+			returnType = Syntax_proto(parser, scope, false);
 			break;
 		
 		// Definition
@@ -1245,7 +1382,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 			return;
 		}
 
-		if (returnType.cl) {
+		if (returnType) {
 			raiseError("[Architecture] A definition of return type already exists for this function");
 			return;
 		}
@@ -1269,7 +1406,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 		fn = malloc(sizeof(Function));
 		Function_create(fn);
 		fn->name = name;
-		fn->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_NOT;
+		fn->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_UNDEFINED;
 		fn->arguments = arguments;
 		fn->returnType = returnType;
 
@@ -1310,7 +1447,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 			variable->name = name;
 			variable->id = position;
 
-			Syntax_proto(parser, scope, &variable->proto, true);
+			variable->proto = Syntax_proto(parser, scope, true);
 			
 			break;
 		}
@@ -1374,9 +1511,8 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 	Array expressions; // type: Expression
 	Array_create(&expressions, sizeof(Expression)); 
 
-	union {
-		ScopeClass cl;
-	} subScope;
+	ScopeBuffer subScope;
+	
 
 	ScopeFunction* baseScope = scope->type == SCOPE_FUNCTION ? (ScopeFunction*)scope : NULL;
 
@@ -1391,7 +1527,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 	while (true) {
 		ScopeSearchArgs searchArg;
-		void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANYTYPE);
+		void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
 
 
 		if (!object) {
@@ -1409,14 +1545,17 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			*(Variable**)currentVarPath.data = (Variable*)object;
 
 			while (true) {
-				subScope.cl.scope.parent = NULL;
-				subScope.cl.scope.type = SCOPE_CLASS;
-				subScope.cl.cl = ((Variable*)object)->proto.cl;
-				subScope.cl.allowThis = false;
-				subScopePtr = &subScope.cl.scope;
-
 				token = Parser_read(parser, &_labelPool);
 				syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
+
+				if (syntaxIndex < 0) {
+					hasNext = false;
+					goto generatePathExpr;
+				}
+
+				// Search sub scope
+				subScopePtr = Prototype_reachSubScope(((Variable*)object)->proto, &subScope);
+
 				switch (syntaxIndex) {
 				case 0:
 				{
@@ -1425,10 +1564,11 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						return NULL;
 
 					label = token.label;
-					object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANYTYPE);
+					object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
 
 					if (!object) {
 						raiseError("[Unknown] Property not found");
+						return NULL;
 					}
 
 					if (searchArg.resultType == SCOPESEARCH_VARIABLE) {
@@ -1453,7 +1593,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				case 2:
 				{
 					Variable* first = *Array_get(Variable*, currentVarPath, 0);
-					Class* meta = first->proto.cl->meta;
+					Class* meta = Prototype_getMetaClass(first->proto);
 					if (!meta) {
 						raiseError("[Unknown] This variable does not have meta class");
 						return NULL;
@@ -1482,7 +1622,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						currentVarPath.length
 					);
 
-					metaProto = &first->proto;
+					metaProto = first->proto;
 
 					// Read next
 					token = Parser_read(parser, &_labelPool);
@@ -1492,14 +1632,6 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 					label = token.label;
 					break;
 				}
-
-				// end
-				case -3:
-				{
-					hasNext = false; 
-					goto generatePathExpr;
-				}
-
 				}
 
 			}
@@ -1508,11 +1640,11 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			if (metaPtr) {
 				
 				Variable* first = *Array_get(Variable*, currentVarPath, 0);
-				Class* meta = first->proto.cl->meta;
+				Class* meta = Prototype_getMetaClass(first->proto);
 				
 				/// TODO: test this line
 				int offset = Prototype_getGlobalVariableOffset(
-					&first->proto,
+					first->proto,
 					currentVarPath.data,
 					currentVarPath.length
 				);
@@ -1521,7 +1653,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				
 				Expression_Value* ev = malloc(sizeof(Expression_Value));
 				ev->value = metaPtr;
-				ev->proto = &(*Array_get(Variable*, currentVarPath, currentVarPath.length-1))->proto;
+				ev->proto = (*Array_get(Variable*, currentVarPath, currentVarPath.length-1))->proto;
 
 				Array_free(currentVarPath);
 
@@ -1648,9 +1780,9 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		// Type
 		case 0:
 		{
-			Class* cl = Syntax_proto(parser, &scope->scope, &variable->proto, false);
-			int size = Prototype_reachSize(&variable->proto, &scope->scope);
-			variable->id = (int)Trace_ins_create(trace, variable, size, 0, cl->isRegistrable);
+			variable->proto = Syntax_proto(parser, &scope->scope, false);
+			ExtendedPrototypeSize eps = Prototype_reachSizes(variable->proto, &scope->scope, true);
+			variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.isRegistrable);
 			break;
 		}
 
@@ -1774,7 +1906,7 @@ void Syntax_functionScope_freeLabel(
 
 				Variable** varrDest = expression->data.property.variableArr;
 				int subLength = expression->data.property.length - 1;
-				int signedSize = Prototype_getSignedSize(&varrDest[subLength]->proto);
+				int signedSize = Prototype_getSignedSize(varrDest[subLength]->proto);
 
 				Trace_set(
 					trace,
@@ -1800,7 +1932,7 @@ void Syntax_functionScope_freeLabel(
 					expr,
 					varrDest[0]->id,
 					Prototype_getVariableOffset(varrDest, subLength),
-					Prototype_getSignedSize(&varrDest[subLength]->proto),
+					Prototype_getSignedSize(varrDest[subLength]->proto),
 					EXPRESSION_FNCALL
 				);
 
@@ -1828,7 +1960,7 @@ void Syntax_functionScope_freeLabel(
 				expr,
 				varrDest[0]->id,
 				Prototype_getVariableOffset(varrDest, subLength),
-				Prototype_getSignedSize(&varrDest[subLength]->proto),
+				Prototype_getSignedSize(varrDest[subLength]->proto),
 				exprSourceType
 			);
 
@@ -1841,7 +1973,7 @@ void Syntax_functionScope_freeLabel(
 			Variable** varr = expression->data.property.variableArr;
 			int subLength = expression->data.property.length - 1;
 			/// TODO: check sizes
-			int signedSize = Prototype_getSignedSize(&varr[subLength]->proto);
+			int signedSize = Prototype_getSignedSize(varr[subLength]->proto);
 
 			Trace_ins_def(
 				trace,
@@ -1944,7 +2076,7 @@ static void Syntax_functionScope_if(
 
 
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, REGISTRABLE_TRUE);
 	
 	/// TODO: handle size
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
@@ -2037,7 +2169,7 @@ static void Syntax_functionScope_while(
 	/// TODO: handle size
 	// Collect test value
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, true);
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, REGISTRABLE_TRUE);
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
 	Expression_free(exprType, expr);
 	free(expr);
@@ -2120,15 +2252,14 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		{
 			Expression* expr = Syntax_expression(parser, &scope->scope, 1);
 			int exprType = expr->type;
-			int signedSize = Prototype_getSignedSize(&scope->fn->returnType);
+			int signedSize = Prototype_getSignedSize(scope->fn->returnType);
 			int size = signedSize >= 0 ? signedSize : -signedSize;
 
-			Class* returnClass = scope->fn->returnType.cl;
-			if (returnClass == NULL) {
+			if (!scope->fn->returnType) {
 				raiseError("[Architecture] Tried to return void");
 				return -1;
 			}
-			char isRegistrable = returnClass->isRegistrable;
+			char isRegistrable = Prototype_isRegistrable(scope->fn->returnType, false);
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
 
 			
@@ -2203,8 +2334,8 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 		thisvar.name = _commonLabels._this;
 
 		thisvar.id = Trace_pushVariable(&trace);
-		thisvar.proto.cl = thisclass;
-		thisvar.proto.primitiveSizeCode = 0;
+		/// TODO: warning with this declaration (no settings)
+		thisvar.proto = Prototype_create_direct(thisclass, 0, NULL, 0);
 		Variable_create(&thisvar);
 
 		fnScope = (ScopeFunction){
@@ -2227,7 +2358,6 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	// Add arguments
 	Trace_pushArgs(&trace, fn->arguments.data, fn->arguments.length);
 	
-	printf("dfn %s %d\n", fn->name, fn->arguments.length);
 
 	// Function procedure
 	ScopeFunction_create(&fnScope);	
@@ -2268,7 +2398,9 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	if (fnScope.thisvar) {
 		Variable_delete(&thisvar);
 	}
+
 	fn->definitionState = DEFINITIONSTATE_DONE;
+	return true;
 }
 
 
@@ -2286,6 +2418,11 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 
 	if (token.label == _commonLabels._control) {
 		annotation->type = ANNOTATION_CONTROL;
+		return;
+	}
+
+	if (token.label == _commonLabels._langstd) {
+		annotation->type = ANNOTATION_LANGSTD;
 		return;
 	}
 

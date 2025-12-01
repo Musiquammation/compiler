@@ -105,8 +105,8 @@ enum {
 
 	TOKEN_OPERATOR_EQ = 4,              // ==
 	TOKEN_OPERATOR_NEQ = 5,             // !=
-	TOKEN_OPERATOR_LT = 31,             // <
-	TOKEN_OPERATOR_GT = 32,             // >
+	TOKEN_OPERATOR_LANGLE = 31,         // <
+	TOKEN_OPERATOR_RANGLE = 32,         // >
 	TOKEN_OPERATOR_LE = 6,              // <=
 	TOKEN_OPERATOR_GE = 7,              // >=
 
@@ -155,8 +155,6 @@ enum {
 	TOKEN_OPERATOR_RBRACKET = 51,       // ]
 	TOKEN_OPERATOR_LBRACE = 52,         // {
 	TOKEN_OPERATOR_RBRACE = 53,         // }
-	TOKEN_OPERATOR_LANGLE = 54,         // <
-	TOKEN_OPERATOR_RANGLE = 55,         // >
 
 	TOKEN_OPERATOR_COMMENT_LINE = 21,   // //
 	TOKEN_OPERATOR_COMMENT_START = 22,  // /*
@@ -176,6 +174,7 @@ enum {
 enum {
 	ANNOTATION_MAIN,
 	ANNOTATION_CONTROL,
+	ANNOTATION_LANGSTD,
 };
 
 

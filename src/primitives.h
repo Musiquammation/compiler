@@ -47,6 +47,7 @@ typedef struct {
 
 	label_t sortedLabels[PRIMITIVE_NAMES_COUNT];
 	Class* sortedClasses[PRIMITIVE_NAMES_COUNT];
+	Prototype* sortedPrototypes[PRIMITIVE_NAMES_COUNT];
 	Type* sortedTypes[PRIMITIVE_NAMES_COUNT];
 
 } PrimitiveContainer;
@@ -60,5 +61,6 @@ extern PrimitiveContainer _primitives;
 void primitives_init(void);
 Class* primitives_getClass(label_t name);
 Type* primitives_getType(Class* cl);
+Prototype* primitives_getPrototype(Class* cl);
 
 #endif

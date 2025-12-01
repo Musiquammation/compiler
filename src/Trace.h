@@ -159,7 +159,7 @@ void TracePack_print(const TracePack* pack, int position);
 void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode);
 
 
-uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, bool registrable);
+uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, char registrable);
 void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value);
 void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size);
 trline_t* Trace_ins_if(Trace* trace, uint destVar);

@@ -1,0 +1,16 @@
+class {
+	for {
+		T: Type;
+		knownAddress: size_t;
+		
+		isValueKnown: bool;
+		isFromStack: bool;
+		isOwner: bool;
+		isReadable: bool;
+		isWritable: bool;
+	}
+
+
+	address: size_t;
+}
+

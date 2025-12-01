@@ -668,12 +668,12 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 		goto restart;
 
 	case EXPRESSION_FNCALL:
-		return Prototype_getSignedSize(&expr->data.fncall.object->fn->returnType);
+		return Prototype_getSignedSize(expr->data.fncall.object->fn->returnType);
 
 	case EXPRESSION_PROPERTY:
 	{
 		int subLength = expr->data.property.length - 1;
-		return Prototype_getSignedSize(&expr->data.property.variableArr[subLength]->proto);
+		return Prototype_getSignedSize(expr->data.property.variableArr[subLength]->proto);
 	}
 
 

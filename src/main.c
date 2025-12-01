@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
 
 	Module_delete(&module);
 	LabelPool_delete(&_labelPool);
-	printf("Sucessuly exited!\n");
+	printf("\nSucessfully exited!\n");
 
 	return 0;
 }

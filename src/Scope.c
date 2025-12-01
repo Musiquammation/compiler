@@ -14,8 +14,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/stat.h>
+
 
 
 void Scope_delete(Scope* scope, int scopeType) {
@@ -132,6 +131,8 @@ ScopeFile* Scope_reachFile(Scope* scope) {
 
 
 bool Scope_defineOnFly(Scope* scope, label_t name) {
+	printf("defineOnFly %s\n", name);
+
 	/// TODO: complete this function
 	ScopeFile* file = Module_findModuleFile(Scope_reachModule(scope), name);
 	if (!file) {
@@ -305,7 +306,6 @@ void ScopeFile_free(ScopeFile* file) {
 		Class* o = *c;
 		Class_delete(o);
 		free(o);
-
 	}
 	
 	Array_free(file->classes);
@@ -314,7 +314,6 @@ void ScopeFile_free(ScopeFile* file) {
 		Function* o = *f;
 		Function_delete(o);
 		free(o);
-
 	}
 	
 	Array_free(file->functions);

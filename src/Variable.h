@@ -9,12 +9,14 @@
 
 struct Variable {
 	label_t name;
-	Prototype proto;
+	Variable* meta;
+	Prototype* proto;
 	union {int offset; int id;};
 };
 
 void Variable_create(Variable* variable);
 void Variable_delete(Variable* variable);
+void Variable_destroy(Variable* variable);
 
 
 

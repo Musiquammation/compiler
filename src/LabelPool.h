@@ -30,6 +30,11 @@ struct CommonLabels {
 	label_t _module;
 	label_t _main;
 	label_t _control;
+	label_t _langstd;
+	
+	label_t _Pointer;
+	label_t _Type;
+	label_t _Variadic;
 	
 	label_t _i8;
 	label_t _u8;

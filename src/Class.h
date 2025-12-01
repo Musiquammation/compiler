@@ -5,6 +5,7 @@
 #include "definitionState_t.h"
 
 #include "Scope.h"
+#include "MemoryCursor.h"
 
 #include <tools/Array.h>
 
@@ -15,8 +16,14 @@ enum {
 enum {
 	CLASSSIZE_UNDEFINED = -1,
 	CLASSSIZE_NOEXIST = -2,
-	CLASSSIZE_UNDIRECT = -3,
-	CLASSSIZE_LATER = -4,
+	CLASSSIZE_LATER = -3,
+	CLASSSIZE_TOSEARCH = -4,
+};
+
+enum {
+	REGISTRABLE_UNKNOWN = -1,
+	REGISTRABLE_FALSE = 0,
+	REGISTRABLE_TRUE = 1,
 };
 
 struct Class {
@@ -25,10 +32,11 @@ struct Class {
 
 	Class* meta;
 	definitionState_t definitionState;
+	definitionState_t metaDefinitionState;
 	label_t name;
 	
 	char primitiveSizeCode;
-	bool isRegistrable;
+	char isRegistrable;
 
 	int size;
 	int maxMinimalSize;
@@ -44,6 +52,7 @@ void Class_create(Class* cl);
 void Class_delete(Class* cl);
 
 
+Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments);
 
 void ScopeClass_delete(ScopeClass* scope);
 
@@ -54,6 +63,7 @@ Function* ScopeClass_searchFunction(ScopeClass* scope, label_t name, ScopeSearch
 void ScopeClass_addVariable(ScopeClass* scope, Variable* v);
 void ScopeClass_addClass(ScopeClass* scope, Class* cl);
 void ScopeClass_addFunction(ScopeClass* scope, Function* fn);
+
 
 
 #endif

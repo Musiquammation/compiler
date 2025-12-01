@@ -127,8 +127,8 @@ void Module_generateFilesScopes(Module* module) {
 		snprintf(sf->filepath, pathLen, "%s/%s", path, nameBuf);
 
 		sf->definitionMode = definitionMode;
-		sf->state_tc = DEFINITIONSTATE_NOT;
-		sf->state_th = DEFINITIONSTATE_NOT;
+		sf->state_tc = DEFINITIONSTATE_UNDEFINED;
+		sf->state_th = DEFINITIONSTATE_UNDEFINED;
 	}
 
 	closedir(d);
@@ -179,7 +179,7 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing class definition file\n");
 		}
 
-		if (file->definitionMode >= 0 && file->state_th == DEFINITIONSTATE_NOT)
+		if (file->definitionMode >= 0 && file->state_th == DEFINITIONSTATE_UNDEFINED)
 			Syntax_thFile(file);
 	}
 
@@ -194,7 +194,7 @@ void Module_generateDefinitions(Module* module) {
 		}
 
 
-		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_NOT)
+		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_UNDEFINED)
 			Syntax_tcFile(file);
 	}
 
@@ -208,7 +208,7 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing module file\n");
 		}
 
-		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_NOT)
+		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_UNDEFINED)
 			Syntax_tcFile(file);
 	}
 }

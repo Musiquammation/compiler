@@ -1,7 +1,7 @@
 class {
 	for {
 		val: int;
-		value_known: bool;
+		isValueKnown: bool;
 		positive: char;
 
 		isPositive(): bool;

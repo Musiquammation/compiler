@@ -48,8 +48,8 @@ const char PARSER_OPERATORS[][TOKEN_OPERATORMAXLENGTH] = {
 	"*",    // 28 TOKEN_OPERATOR_MUL
 	"/",    // 29 TOKEN_OPERATOR_DIV
 	"%",    // 30 TOKEN_OPERATOR_MOD
-	"<",    // 31 TOKEN_OPERATOR_LT
-	">",    // 32 TOKEN_OPERATOR_GT
+	"<",    // 31 TOKEN_OPERATOR_LANGLE
+	">",    // 32 TOKEN_OPERATOR_RANGLE
 	"!",    // 33 TOKEN_OPERATOR_LOGICAL_NOT
 	"~",    // 34 TOKEN_OPERATOR_BIT_NOT
 	"&",    // 35 TOKEN_OPERATOR_BIT_AND
@@ -71,8 +71,6 @@ const char PARSER_OPERATORS[][TOKEN_OPERATORMAXLENGTH] = {
 	"]",    // 51 TOKEN_OPERATOR_RBRACKET
 	"{",    // 52 TOKEN_OPERATOR_LBRACE
 	"}",    // 53 TOKEN_OPERATOR_RBRACE
-	"<",    // 54 TOKEN_OPERATOR_LANGLE
-	">",    // 55 TOKEN_OPERATOR_RANGLE
 
 };
 
@@ -317,7 +315,6 @@ void Parser_open(Parser* parser, const char* filepath) {
 
 	parser->file = file;
 	parser->scopeLevel = 0;
-
 
 	loadNextLine(parser);
 }

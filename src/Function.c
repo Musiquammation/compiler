@@ -15,8 +15,10 @@ void Function_create(Function* fn) {
 }
 
 void Function_delete(Function* fn) {
-	Array_loopPtr(Variable, fn->arguments, v) {
-		free(*v);
+	Array_loopPtr(Variable, fn->arguments, vptr) {
+		Variable* v = *vptr;
+		Variable_destroy(v);
+		free(v);
 	}
 
 	Array_free(fn->arguments);
@@ -44,10 +46,9 @@ void ScopeFunction_create(ScopeFunction* scope) {
 	for (int i = 0; i < argLength; i++) {
 		Variable* v = arguments[i];
 		TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
-		Prototype_reachSize(&v->proto, &scope->scope);
+		Prototype_reachMetaSizes(v->proto, &scope->scope, true);
 
-		Type* type = Prototype_generateType(&v->proto);
-		printf("generate %p\n", type);
+		Type* type = Prototype_generateType(v->proto);
 		def->variable = v;
 		def->type = type;
 	}
@@ -64,7 +65,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 		
 		if (i >= arglen) {
 			Variable* v = td->variable;
-			Variable_delete(v);
+			Variable_destroy(v);
 			free(v);
 		}
 	}
@@ -113,7 +114,7 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 
 Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
 	TypeDefinition* td = Array_push(TypeDefinition, &scope->types);
-	Type* type = Prototype_generateType(&v->proto);
+	Type* type = Prototype_generateType(v->proto);
 	td->type = type;
 	td->variable = v;
 

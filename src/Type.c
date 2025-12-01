@@ -16,7 +16,7 @@ Type* Type_newCopy(Type* src) {
 
 	void* srcData = src->data;
 	if (srcData) {
-		size_t size = Prototype_getMetaSize(proto);
+		size_t size = Prototype_getMetaSizes(proto).size;
 		void* data = malloc(size);
 		memcpy(data, src->data, size);
 		dest->data = data;

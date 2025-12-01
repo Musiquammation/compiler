@@ -88,6 +88,11 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(module);
 	def(main);
 	def(control);
+	def(langstd);
+
+	def(Pointer);
+	def(Type);
+	def(Variadic);
 
 	def(i8);
 	def(u8);

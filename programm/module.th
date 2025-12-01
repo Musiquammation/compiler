@@ -1,4 +1,8 @@
 @!module {
+	class Container;
 	class Integer;
+	@langstd class Variadic;
+	@langstd class Type;
+
 	function main(): int;
 }

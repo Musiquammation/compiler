@@ -6,6 +6,7 @@
 
 
 structdef(Scope);
+typedef union ScopeBuffer ScopeBuffer;
 structdef(ScopeFile);
 structdef(ScopeFolder);
 

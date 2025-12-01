@@ -16,7 +16,7 @@ struct Function {
 	definitionState_t definitionState;
 
 	Array arguments; // type: Variable*
-	Prototype returnType;
+	Prototype* returnType;
 };
 
 /// TODO: init defnodes
