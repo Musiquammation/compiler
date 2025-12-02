@@ -661,7 +661,6 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 			
 			check(pointer, Pointer);
 			check(type, Type);
-			check(variadic, Variadic);
 
 			#undef check
 
@@ -686,7 +685,6 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
-	printf("START %s as %p\n", cl->name, cl);
 
 	cl->definitionState = DEFINITIONSTATE_READING;
 
@@ -801,18 +799,18 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				
 				variable->name = name;
 
-				printf("define %s\n", name);
-				variable->proto = Syntax_proto(parser, &outsideScope.scope, false);
-				char mdef = Prototype_reachMetaDefinition(variable->proto, &outsideScope.scope, true);
-				if (mdef == DEFINITIONSTATE_DONE) {
-					containsMetaArguments = true;
-				}
-	
+				variable->proto = Syntax_proto(parser, &outsideScope.scope);
+
 				// Finish by end operation
 				token = Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 					return false; 
 
+				char mdef = Prototype_reachMetaDefinition(variable->proto, &outsideScope.scope, true);
+				if (mdef == DEFINITIONSTATE_DONE) {
+					containsMetaArguments = true;
+				}
+	
 
 				// Get object size
 				ExtendedPrototypeSize vsize = Prototype_reachSizes(variable->proto, parentScope, false);
@@ -893,7 +891,6 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	
 
 	// Get meta
-	printf("meta %s %d %d\n", cl->name, meta ?1:0, containsMetaArguments);
 	if (meta || containsMetaArguments) {
 		if (!meta) {
 			metaControlFunctions.length = 0;
@@ -949,7 +946,6 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 
 
-	printf("FINIT %s as %p\n", cl->name, cl);
 	cl->definitionState = DEFINITIONSTATE_DONE;
 	return containsMetaArguments;
 }
@@ -966,8 +962,9 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 	enum {NODEFINE = -1, NEEDS_COMMA = -2};
 
 	int offsetToDefine = NODEFINE;
+	Variable* variableToDefine;
 	bool typeToDefine = false;
-	Array_create(settings, sizeof(Prototype*));
+	Array_create(settings, sizeof(ProtoSetting));
 	
 	while (true) {
 		Token token = Parser_read(parser, &_labelPool);
@@ -985,7 +982,11 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 
 			if (typeToDefine) {
 				Parser_saveToken(parser, &token);
-				*Array_push(Prototype*, settings) = Syntax_proto(parser, scope, true);
+				Prototype* p = Syntax_proto(parser, scope);
+				ProtoSetting* ps = Array_push(ProtoSetting, settings);
+				ps->useProto = true;
+				ps->variable = variableToDefine;
+				ps->proto = p;
 				
 				typeToDefine = false;
 				offsetToDefine = NEEDS_COMMA;
@@ -1024,12 +1025,19 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 			typedef Variable* v_ptr;
 			Array_loop(v_ptr, meta->variables, vptr) {
 				Variable* v = *vptr;
-				if (v->name == label) {
-					offsetToDefine = v->offset;
-					typeToDefine = true;
-					label = NULL;
-					goto varFound_type;
+				if (v->name != label)
+					continue;
+
+				if (!Prototype_isType(v->proto)) {
+					raiseError("[Type] Variadic type was expected");
+					return;
 				}
+
+				offsetToDefine = v->offset;
+				typeToDefine = true;
+				label = NULL;
+				variableToDefine = v;
+				goto varFound_type;
 			}
 
 			raiseError("[Unknown] Cannot find type to set\n");
@@ -1073,7 +1081,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 
 }
 
-Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
+Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 	Token token = Parser_read(parser, &_labelPool);
 
 	// Start with class keyword
@@ -1082,7 +1090,12 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
 		token = Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACKET, SYNTAXFLAG_UNFOUND) < 0) {
 			// Variadic prototype
-			Prototype* proto = Prototype_create_variadic();
+			raiseError("[TODO] check type existence");
+			Prototype* proto = Prototype_create_direct(
+				_langstd.type,
+				_langstd.type->primitiveSizeCode,
+				NULL, 0
+			);
 			Parser_saveToken(parser, &token);
 			return proto;
 		}
@@ -1092,7 +1105,6 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
 
 		// Variable
 		token = Parser_read(parser, &_labelPool);
-		Token_println(&token);
 		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 			return false;
 		
@@ -1111,6 +1123,9 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
 		return proto; // or true, maybe?
 	}
 
+	
+	
+	/// TODO: handle variadic search
 	// Default behavior
 	Class* cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
 	if (cl) {
@@ -1138,7 +1153,12 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
 		// Collect next syntaxIndex
 		{
 			token = Parser_read(parser, &_labelPool);
-			int next = TokenCompare(SYNTAXLIST_TYPE, 0);
+			int next = TokenCompare(SYNTAXLIST_TYPE, SYNTAXFLAG_UNFOUND);
+			if (next < 0) {
+				Parser_saveToken(parser, &token);
+				goto generate;
+			}
+
 			if (next <= syntaxIndex) {
 				raiseError("[Syntax] Illegal order in type declaration");
 				return false;
@@ -1164,31 +1184,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma) {
 			canBePrimitive = false;
 			raiseError("[TODO] verified functions");
 			break;
-
-		// Finish by comma (or right parenthesis) operator
-		case 2:
-		case 3:
-		case 4:
-			if (!finishByComma)
-				raiseError("[SYNTAX] type should finish by semicolon");
-
-			// Save
-			if (syntaxIndex >= 3)
-				Parser_saveToken(parser, &token);
-
-			goto generate;
-
-		// Finish by end operator (or equal / lbrace)
-		case 5:
-		case 6:
-		case 7:
-			if (finishByComma)
-				raiseError("[SYNTAX] type should finish by a comma");
-
-			// Save
-			Parser_saveToken(parser, &token);
-			goto generate;
-			
+		
 		}
 	}
 
@@ -1301,7 +1297,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 				break;
 			}
 			returnTypeAlreadyRead = true;
-			returnType = Syntax_proto(parser, scope, false);
+			returnType = Syntax_proto(parser, scope);
 			break;
 		
 		// Definition
@@ -1427,12 +1423,15 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 	Array arguments;
 	Array_create(&arguments, sizeof(Variable*));
 
+	Token token = Parser_read(parser, &_labelPool);
+	bool cannotFinish = false;
 	while (true) {
-		Token token = Parser_read(parser, &_labelPool);
 		switch (TokenCompare(SYNTAXLIST_ARGS, 0)) {
 		// variable
 		case 0:
 		{
+			cannotFinish = true;
+
 			const label_t name = token.label;
 
 			// Get COLON operator for type
@@ -1447,13 +1446,26 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 			variable->name = name;
 			variable->id = position;
 
-			variable->proto = Syntax_proto(parser, scope, true);
+			variable->proto = Syntax_proto(parser, scope);
+
+			token = Parser_read(parser, &_labelPool);
+			switch (TokenCompare(SYNTAXLIST_ARGS_ENDING, 0)) {
+			case 0:
+				token = Parser_read(parser, &_labelPool);
+				break;
+
+			case 1: // end
+				goto finish;
+			}
 			
 			break;
 		}
 
 		// end
 		case 1:
+			if (cannotFinish) {
+				raiseError("[Syntax] Closing in function declaration already marked");
+			}
 			goto finish;
 		}
 	}
@@ -1780,7 +1792,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		// Type
 		case 0:
 		{
-			variable->proto = Syntax_proto(parser, &scope->scope, false);
+			variable->proto = Syntax_proto(parser, &scope->scope);
 			ExtendedPrototypeSize eps = Prototype_reachSizes(variable->proto, &scope->scope, true);
 			variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.isRegistrable);
 			break;
@@ -2370,14 +2382,12 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	
 
 	TracePack* pack = trace.first;
-	printf("function %s:\n", fn->name);
 	int position = 0;
 	while (pack) {
 		TracePack_print(pack, position);
 		position += pack->completion+1;
 		pack = pack->next;
 	}
-	printf("\n");
 
 
 	Trace_placeRegisters(&trace);

@@ -1,3 +1,4 @@
 function {
-	let v: Container;
+	let ptr: Pointer<T: Test>;
+
 }

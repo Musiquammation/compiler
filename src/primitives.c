@@ -31,6 +31,7 @@ void primitives_init(void) {
 		_primitives.proto_##id##s.primitive.size = s/8; \
 		_primitives.proto_##id##s.primitive.sizeCode = k; \
 		_primitives.type_##id##s.proto = &_primitives.proto_##id##s; \
+		_primitives.type_##id##s.meta = NULL; \
 		_primitives.type_##id##s.primitiveSizeCode = k;\
 		_primitives.type_##id##s.data = NULL;\
 		

@@ -1,7 +1,7 @@
 @!module {
-	class Container;
+	class Test;
 	class Integer;
-	@langstd class Variadic;
+	class Pointer;
 	@langstd class Type;
 
 	function main(): int;

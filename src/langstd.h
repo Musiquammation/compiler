@@ -6,7 +6,6 @@
 typedef struct {
 	Class* pointer;
 	Class* type;
-	Class* variadic;
 } langstd_t;
 
 extern langstd_t _langstd;

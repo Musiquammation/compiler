@@ -1,0 +1,11 @@
+class {
+    for {
+        isZero: char;
+    }
+
+    x: int;
+    y: int;
+
+    set(x: int, y: int);
+    setToZero();
+}

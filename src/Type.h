@@ -8,12 +8,18 @@ typedef void* mblock_t;
 
 struct Type {
 	Prototype* proto;
+	Type* meta;
 	mblock_t data;
 	char primitiveSizeCode;
 };
 
-Type* Type_newCopy(Type* src);
 void Type_free(Type* type);
+
+
+void Type_defaultConstructors(void* data, Class* cl, ProtoSetting* settings,
+	int settingLength, Type meta);
+
+void Type_defaultDestructors(void* data, Type* meta);
 
 
 #endif

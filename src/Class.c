@@ -18,7 +18,6 @@ void Class_create(Class* cl) {
 
 
 void Class_delete(Class* cl) {
-	printf("for {%p %d} %s (%d) [%d]\n", cl, cl->definitionState, cl->name, cl->metaDefinitionState, cl->size);
 	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Class_delete(cl->meta);
 		free(cl->meta);
@@ -28,11 +27,9 @@ void Class_delete(Class* cl) {
 	// Delete variables
 	Array_loopPtr(Variable, cl->variables, ptr) {
 		Variable* i = *ptr;
-		printf("\t%s\n", i->name);
 		Variable_delete(i);
 		free(i);
 	}
-	printf("end %s\n", cl->name);
 
 
 	Array_free(cl->variables);
@@ -55,12 +52,10 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 	MemoryCursor cursor;
 	typedef Variable* var_ptr_t;
 
-	printf("append %d %p to %p\n", cl->metaDefinitionState, meta, cl);
 
 	switch (cl->metaDefinitionState) {
 	case DEFINITIONSTATE_DONE:
 	{
-		printf("done\n");
 		return meta;
 	}
 
@@ -84,7 +79,6 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 				}
 			}
 			
-			printf("cut\n");
 			cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
 			cl->meta = NULL;
 			cl->definitionState = DEFINITIONSTATE_DONE;
@@ -95,7 +89,6 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 		cursor.offset = 0;
 		cursor.maxMinimalSize = 0;
 		meta = malloc(sizeof(Class));
-		printf("new %p of %p\n", meta, cl);
 		meta->name = NULL;
 		Class_create(meta);
 		break;
@@ -113,7 +106,6 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 
 		/// TODO: check direct usage
 		Class* mcl = mp->direct.cl;
-		printf("add %s[%p] to %p\n", source->name, mcl, cl);
 		int offset = MemoryCursor_give(&cursor, mcl->size, mcl->maxMinimalSize);
 		
 		Variable* variable = malloc(sizeof(Variable));
@@ -133,7 +125,6 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 	
 	/// TODO: warning to this line
 	Class_appendMeta(meta, meta->metaDefinitionState == DEFINITIONSTATE_NOEXIST ? NULL : meta->meta, false);
-	printf("erase %p of %p\n", cl->meta, cl);
 	
 	cl->definitionState = DEFINITIONSTATE_DONE;
 	return meta;

@@ -7,6 +7,7 @@
 #include "primitives.h"
 #include "Expression.h"
 #include "helper.h"
+#include "langstd.h"
 
 #include <string.h>
 
@@ -18,6 +19,8 @@ static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype* proto, Class
 		proto->direct.isRegistrable = REGISTRABLE_UNKNOWN;
 		return (ExtendedPrototypeSize){CLASSSIZE_LATER, CLASSSIZE_LATER, REGISTRABLE_UNKNOWN};
 	}
+
+	printf("direct %s %d\n", cl->name, cl->size);
 
 	if (cl->size >= 0) {
 		ExtendedPrototypeSize sizes = {cl->size, cl->maxMinimalSize, cl->isRegistrable};
@@ -33,7 +36,7 @@ static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype* proto, Class
 Prototype* Prototype_create_direct(
 	Class* cl,
 	char primitiveSizeCode,
-	Prototype** settings,
+	ProtoSetting* settings,
 	int settingLength
 ) {
 	Prototype* proto = malloc(sizeof(Prototype));
@@ -61,7 +64,6 @@ Prototype* Prototype_create_direct(
 
 	case DEFINITIONSTATE_DONE:
 	{
-		printf("directaof %s\n", cl->name);
 		Prototype* pm = Prototype_create_meta(pm, cl->meta);
 		proto->direct.meta = pm;
 		proto->direct.metaDefintionState = DEFINITIONSTATE_DONE;
@@ -72,8 +74,8 @@ Prototype* Prototype_create_direct(
 		proto->direct.metaDefintionState = DEFINITIONSTATE_UNDEFINED;
 		break;
 
-	case CLASSSIZE_NOEXIST:
-		proto->direct.metaDefintionState = CLASSSIZE_NOEXIST;
+	case DEFINITIONSTATE_NOEXIST:
+		proto->direct.metaDefintionState = DEFINITIONSTATE_NOEXIST;
 		break;
 	}
 
@@ -82,39 +84,12 @@ Prototype* Prototype_create_direct(
 
 
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta) {
-	printf("formetaof %s %p %d\n", meta->name, meta->meta, meta->size);
-	Prototype* proto = malloc(sizeof(Prototype));
-	proto->mode = PROTO_MODE_DIRECT;
-	proto->direct.cl = meta;
-	proto->direct.origin = origin;
-	proto->direct.primitiveSizeCode = meta->primitiveSizeCode;
-	proto->direct.settingLength = -1;
-	proto->direct.settingsMustBeFreed = false;
+	Prototype* mp = Prototype_create_direct(
+		meta, meta->primitiveSizeCode, NULL, -1
+	);
+	mp->direct.origin = origin;
 
-	definitionState_t mds = meta->metaDefinitionState;
-	switch (mds) {
-	case DEFINITIONSTATE_UNDEFINED:
-		proto->direct.metaDefintionState = DEFINITIONSTATE_UNDEFINED;
-		break;
-
-	case DEFINITIONSTATE_DONE:
-	{
-		Prototype* pm = Prototype_create_meta(proto, meta->meta);
-		proto->direct.meta = pm;
-		proto->direct.metaDefintionState = DEFINITIONSTATE_DONE;
-		break;
-	}
-
-	case DEFINITIONSTATE_READING:
-		raiseError("[Architecture] Cannot create a proto with meta-class in reading state");
-		break;
-
-	case DEFINITIONSTATE_NOEXIST:
-		proto->direct.metaDefintionState = DEFINITIONSTATE_NOEXIST;
-		break;
-	}
-
-	return proto;
+	return mp;
 }
 
 Prototype* Prototype_create_expression(Expression* expr) {
@@ -142,8 +117,20 @@ void Prototype_free(Prototype* proto, bool deep) {
 		break;
 	
 	case PROTO_MODE_DIRECT:
-		if (proto->direct.settingsMustBeFreed)
-			free(proto->direct.settings);
+		if (proto->direct.settingsMustBeFreed) {
+			ProtoSetting* settings = proto->direct.settings;
+			int slength = proto->direct.settingLength;
+			Array_for(ProtoSetting, settings, slength, setting) {
+				if (setting->useProto) {
+					Prototype_free(setting->proto, true);
+				} else {
+					Expression_free(setting->expr->type, setting->expr);
+				}
+			}
+
+			if (slength > 0)
+				free(settings);
+		}
 	
 		if (deep && proto->direct.metaDefintionState == DEFINITIONSTATE_DONE) {
 			Prototype_free(proto->direct.meta, deep);
@@ -160,6 +147,7 @@ void Prototype_free(Prototype* proto, bool deep) {
 		break;
 	}
 }
+
 
 
 
@@ -191,21 +179,40 @@ Type* Prototype_generateType(Prototype* proto) {
 
 		case DEFINITIONSTATE_DONE:
 		{
-			ExtendedPrototypeSize sizes = Prototype_getSizes(proto->direct.meta);
+			Prototype* meta = proto->direct.meta;
+			Type* metaType = Prototype_generateType(meta);
+			type->meta = metaType;
+
+			ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
 			if (sizes.size > 0) {
 				void* data = malloc(sizes.size);
 				memset(data, 0, sizes.size);
 				type->data = data;
+
+				// Append data if necessary
+				Type_defaultConstructors(
+					data,
+					meta->direct.cl,
+					proto->direct.settings,
+					proto->direct.settingLength,
+					*metaType
+				);
+
 			} else {
 				type->data = NULL;
 			}
+
 			break;
 		}
 
 		case DEFINITIONSTATE_NOEXIST:
 			type->data = NULL;
+			type->meta = NULL;
 			break;
 
+		default:
+			raiseError("[Intern] Invalid metaDefintionState");
+			break;
 		}
 
 		return type;
@@ -222,6 +229,8 @@ Type* Prototype_generateType(Prototype* proto) {
 		return primitives_getType(proto->primitive.cl);
 	}
 	}
+
+	raiseError("[Intern] Invalid proto mode");
 	
 }
 
@@ -297,12 +306,14 @@ ExtendedPrototypeSize Prototype_getSizes(Prototype* proto) {
 	case PROTO_MODE_DIRECT:
 	{
 		int size = proto->direct.sizes.size;
-		if (size >= 0)
+		if (size >= 0) {
 			return (ExtendedPrototypeSize){
 				proto->direct.sizes.size,
 				proto->direct.sizes.maxMinimalSize,
 				proto->direct.isRegistrable
 			};
+		}
+
 
 		switch (size) {
 		case CLASSSIZE_LATER:
@@ -501,6 +512,31 @@ Class* Prototype_getMetaClass(Prototype* proto) {
 	return p ? p->direct.cl : NULL;
 }
 
+Class* Prototype_getClass(Prototype* proto) {
+	switch (proto->mode) {
+	case PROTO_MODE_EXPRESSION:
+	{
+		raiseError("[TODO] Prototype_getClass");
+		break;
+	}
+
+	case PROTO_MODE_DIRECT:
+		return proto->direct.cl;
+
+	case PROTO_MODE_VARIADIC:
+	{
+		raiseError("[TODO] Prototype_getClass");	
+		break;
+	}
+
+	case PROTO_MODE_PRIMITIVE:
+		return proto->primitive.cl;
+
+	case PROTO_MODE_VOID:
+		return NULL;
+	}
+}
+
 
 
 
@@ -643,4 +679,9 @@ void Prototype_copy(Prototype* dest, const Prototype* src) {
 	case PROTO_MODE_PRIMITIVE:
 		break;
 	}
+}
+
+
+bool Prototype_isType(Prototype* proto) {
+	return proto->mode == PROTO_MODE_DIRECT && proto->direct.cl == _langstd.type;
 }

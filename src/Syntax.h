@@ -46,7 +46,7 @@ void Syntax_declarationList(Scope* scope, Parser* parser);
 
 void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_ClassDeclarationArg* defaultData);
 bool Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs);
-Prototype* Syntax_proto(Parser* parser, Scope* scope, bool finishByComma);
+Prototype* Syntax_proto(Parser* parser, Scope* scope);
 
 void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
 Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);

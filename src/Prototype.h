@@ -24,6 +24,19 @@ typedef struct {
 	char isRegistrable;
 } ExtendedPrototypeSize;
 
+
+
+struct ProtoSetting {
+	char useProto;
+
+	Variable* variable;
+
+	union {
+		Prototype* proto;
+		Expression* expr;
+	};
+};
+
 struct Prototype {
 	char mode;
 
@@ -32,13 +45,13 @@ struct Prototype {
 			Class* cl;
 			Prototype* meta;
 			union {
-				Prototype** settings;
+				ProtoSetting* settings;
 				Prototype* origin;
 			};
 			PrototypeSize sizes;
 			int settingLength; // -1 means origin
-			bool settingsMustBeFreed;
 			char primitiveSizeCode;
+			bool settingsMustBeFreed;
 			char isRegistrable;
 			definitionState_t metaDefintionState;
 		} direct;
@@ -61,7 +74,7 @@ struct Prototype {
 };
 
 
-Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, Prototype** settings, int settingLength);
+Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, ProtoSetting* settings, int settingLength);
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta);
 Prototype* Prototype_create_expression(Expression* expr);
 Prototype* Prototype_create_variadic();
@@ -88,6 +101,7 @@ ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype* proto, Scope* scope, b
 Prototype* Prototype_getMeta(Prototype* proto);
 Class* Prototype_getMetaClass(Prototype* proto);
 
+Class* Prototype_getClass(Prototype* proto);
 
 int Prototype_getSignedSize(Prototype* proto);
 
@@ -100,6 +114,8 @@ int Prototype_getVariableOffset(Variable* path[], int length);
 Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer);
 
 void Prototype_copy(Prototype* dest, const Prototype* src);
+
+bool Prototype_isType(Prototype* proto);
 
 
 #endif

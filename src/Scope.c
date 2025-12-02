@@ -131,7 +131,7 @@ ScopeFile* Scope_reachFile(Scope* scope) {
 
 
 bool Scope_defineOnFly(Scope* scope, label_t name) {
-	printf("defineOnFly %s\n", name);
+	printf("defineOnFly: start %s\n", name);
 
 	/// TODO: complete this function
 	ScopeFile* file = Module_findModuleFile(Scope_reachModule(scope), name);
@@ -151,6 +151,7 @@ bool Scope_defineOnFly(Scope* scope, label_t name) {
 	}
 
 	Syntax_thFile(file);
+	printf("defineOnFly: finis %s\n", name);
 	return true;
 }
 
