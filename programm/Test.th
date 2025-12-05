@@ -5,7 +5,6 @@ class {
 
     x: int;
     y: int;
+    extra: int;
 
-    set(x: int, y: int);
-    setToZero();
 }

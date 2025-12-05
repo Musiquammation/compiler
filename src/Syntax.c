@@ -675,7 +675,12 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	// Read definition
 	if (definitionToRead) {
 		Syntax_ClassDefinitionArg arg = {.controlFunctions.size = 0};
+		printf("DEFINE %s\n", cl->name);
 		Syntax_classDefinition(scope, parser, cl, &arg);
+		
+		// Define metas
+		Class_appendMetas(cl);
+		Class_acheiveDefinition(cl);
 	}
 }
 
@@ -684,7 +689,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 
-bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
+void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
 
 	cl->definitionState = DEFINITIONSTATE_READING;
 
@@ -700,11 +705,15 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		.allowThis = false
 	};
 
-
+	ScopeClass variadicScope = {
+		.scope = {.parent = parentScope, .type = SCOPE_CLASS},
+		.cl = NULL,
+		.allowThis = false
+	};
+	
+	
 	Class* meta = NULL;
 	MemoryCursor cursor = {0, 0};
-	bool containsMetaArguments = false;
-	bool doesMetaContainsMetaArgs = false;
 	Array metaControlFunctions;
 	metaControlFunctions.reserved = 0; // to prevent Array_free
 
@@ -720,17 +729,17 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			case ANNOTATION_CONTROL:
 			{
 				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
-					return false; 
+					return; 
 				
 				label_t name = token.label;
 
 				token = Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-					return false; 
+					return; 
 
 				if (cdefs->controlFunctions.size == 0) {
 					raiseError("[Architecture] Adapt functions are forbidden");
-					return false; 
+					return; 
 				}
 
 				*Array_push(label_t, &cdefs->controlFunctions) = name;
@@ -741,7 +750,7 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
-				return false; 
+				return; 
 			}
 			}
 		}
@@ -767,20 +776,22 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		// meta class
 		case 2:
 		{
-			cl->metaDefinitionState = DEFINITIONSTATE_READING;
 			meta = malloc(sizeof(Class));
-			meta->name = NULL;
+
+			// Temp name
 			Class_create(meta);
+			meta->name = Class_generateMetaName(cl->name, '^');
 
 			token = Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
-				return false; 
+				return; 
 
 			Syntax_ClassDefinitionArg cdefs;
 			Array_create(&cdefs.controlFunctions, sizeof(label_t));
-			doesMetaContainsMetaArgs =
-				Syntax_classDefinition(&outsideScope.scope, parser, meta, &cdefs);
+			Syntax_classDefinition(&outsideScope.scope, parser, meta, &cdefs);
 			metaControlFunctions = cdefs.controlFunctions;
+
+			variadicScope.cl = meta;
 						
 			break;
 		}
@@ -799,17 +810,12 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				
 				variable->name = name;
 
-				variable->proto = Syntax_proto(parser, &outsideScope.scope);
+				variable->proto = Syntax_proto(parser, &variadicScope.scope);
 
 				// Finish by end operation
 				token = Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-					return false; 
-
-				char mdef = Prototype_reachMetaDefinition(variable->proto, &outsideScope.scope, true);
-				if (mdef == DEFINITIONSTATE_DONE) {
-					containsMetaArguments = true;
-				}
+					return; 
 	
 
 				// Get object size
@@ -878,76 +884,19 @@ bool Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	// Align offset
 	cl->size = MemoryCursor_align(cursor);
 	cl->maxMinimalSize = cursor.maxMinimalSize;
+	cl->primitiveSizeCode = Class_getPrimitiveSizeCode(cl);
 
-
-	// Registrable ?
-	if (cl->variables.length == 1) {
-		Variable* v = *Array_get(Variable*, cl->variables, 0);
-		cl->isRegistrable = Prototype_isRegistrable(v->proto, false);
-	} else {
-		cl->isRegistrable = REGISTRABLE_FALSE;
-	}
 
 	
 
 	// Get meta
-	if (meta || containsMetaArguments) {
-		if (!meta) {
-			metaControlFunctions.length = 0;
-		}
-
-		// Append variables
-		meta = Class_appendMeta(cl, meta, containsMetaArguments);
+	if (meta) {
+		cl->meta = meta;
+		cl->metaDefinitionState = DEFINITIONSTATE_READING;
 		
-		
-		// Add control methods
-
-		Array_loop(label_t, metaControlFunctions, name_ptr) {
-			label_t fnname = *name_ptr;
-			Function* ref = ScopeClass_searchFunction(&outsideScope, fnname, NULL);
-
-			Function* fn = malloc(sizeof(Function));
-			Function_create(fn);
-			fn->name = fnname;
-			Array_create(&fn->arguments, sizeof(Variable*));
-			fn->returnType = NULL;
-
-
-			typedef Variable* var_ptr_t;
-			Array_loop(var_ptr_t, ref->arguments, vptr) {
-				Variable* v = *vptr;
-				Class* meta = Prototype_getMetaClass(v->proto);
-				if (!meta)
-					continue;
-
-				Variable* next = malloc(sizeof(Variable));
-				v->meta = next;
-
-				Variable_create(next);
-				/// TODO: check this constructor
-				Prototype_copy(next->proto, v->proto);
-				next->name = v->name;
-				next->id = -1;
-
-
-				*Array_push(Variable*, &fn->arguments) = next;
-			}
-			
-
-			*Array_push(Function*, &meta->functions) = fn;
-		}
-
-
+		/// TODO: handle metaControlFunctions
 		Array_free(metaControlFunctions);
-	} else {
-		cl->meta = NULL;
-		cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
 	}
-
-
-
-	cl->definitionState = DEFINITIONSTATE_DONE;
-	return containsMetaArguments;
 }
 
 
@@ -1125,23 +1074,28 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 
 	
 	
-	/// TODO: handle variadic search
+	
+	// Search variadic
+	Variable* vdic =  Scope_search(scope, token.label, NULL, SCOPESEARCH_VARIABLE);
+	if (vdic) {
+		if (!Prototype_isType(vdic->proto)) {
+			raiseError("[Type] Variadic type must be typed as Type");
+			return NULL;
+		}
+
+		return Prototype_create_variadic(vdic);
+	}
+	
 	// Default behavior
 	Class* cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
 	if (cl) {
 		Prototype* proto = primitives_getPrototype(cl);
 		if (proto)
 			return proto;
-	} else {
-		if (!Scope_defineOnFly(scope, token.label))
-			goto classNotFound;
-		
-		cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
-		if (!cl) {
-			classNotFound:
-			raiseError("[Unknown] Class not found");
-			return false;
-		}
+	} else {		
+		classNotFound:
+		raiseError("[Unknown] Class not found");
+		return false;
 	}
 
 	int syntaxIndex = -1;
@@ -1193,8 +1147,11 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 
 	/// TODO: Array_shrinkToFit
 	// Array_shrinkToFit()
-	return Prototype_create_direct(cl, canBePrimitive ? cl->primitiveSizeCode : 0,
+	Prototype* ret = Prototype_create_direct(cl, canBePrimitive ? cl->primitiveSizeCode : 0,
 		settings.data, settings.length);
+
+
+	return ret;
 }
 
 
@@ -1605,12 +1562,18 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				case 2:
 				{
 					Variable* first = *Array_get(Variable*, currentVarPath, 0);
-					Class* meta = Prototype_getMetaClass(first->proto);
-					if (!meta) {
+
+					char hasMeta = Prototype_hasMeta(first->proto);
+					if (hasMeta == 0) {
 						raiseError("[Unknown] This variable does not have meta class");
 						return NULL;
 					}
-
+					
+					if (hasMeta == -1) {
+						raiseError("[Unknown] This variable does not have meta class (it is unkown)");
+						return NULL;
+					}
+					
 					if (!baseScope) {
 						raiseError("[Structure] Meta content is not accessible");
 						return NULL;
@@ -1652,7 +1615,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			if (metaPtr) {
 				
 				Variable* first = *Array_get(Variable*, currentVarPath, 0);
-				Class* meta = Prototype_getMetaClass(first->proto);
+				// Class* meta = Prototype_getMetaClass(first->proto);
 				
 				/// TODO: test this line
 				int offset = Prototype_getGlobalVariableOffset(
@@ -1761,6 +1724,247 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 }
 
 
+
+
+
+static int giveIdToVariable(Variable* variable, Trace* trace, int size, bool isRegistrable) {
+	int id = variable->id;
+	if (id >= 0)
+		return id;
+
+	variable->id = (int)Trace_ins_create(trace, variable, size, 0, isRegistrable);
+}
+
+static void placeExpression(
+	Parser* parser,
+	Trace* trace,
+	Expression* valueExpr,
+	Expression* targetExpr,
+	int expressionType
+) {
+	// Read targetExpr
+	Expression* const sourceExpr = valueExpr;
+	int sourceExprType = valueExpr->type;
+
+
+	if (sourceExprType == EXPRESSION_PATH) {
+		valueExpr = valueExpr->data.target;
+		switch (valueExpr->type) {
+		case EXPRESSION_PROPERTY:
+		{
+			/// TODO: handle this case
+			if (valueExpr->data.property.next) {
+				raiseError("[TODO]: valueExpr such that next==true not handled for TypeNode");
+				return;
+			}
+
+			Variable** varrDest = targetExpr->data.property.variableArr;
+			int subLength = targetExpr->data.property.length - 1;
+
+			Variable* last = varrDest[subLength];
+			int id;
+			int signedSize;
+			if (last->proto) {
+				signedSize = Prototype_getSignedSize(last->proto);
+				id = last->id;
+			} else {
+				Variable* lv = valueExpr->data.property.variableArr[valueExpr->data.property.length-1];
+				Prototype* lvp = lv->proto;
+
+				switch (Prototype_mode(*lvp)) {
+				case PROTO_MODE_EXPRESSION:
+				{
+
+					break;
+				}
+
+				case PROTO_MODE_DIRECT:
+				{
+					signedSize = Prototype_getSignedSize(lvp);
+					id = Trace_ins_create(trace, lv, lvp->direct.primitiveSizeCode, 0, true);
+					last->proto = Prototype_copy(lvp);
+					last->id = id;
+
+					break;
+				}
+
+				case PROTO_MODE_VARIADIC:
+				{
+
+					break;
+				}
+
+				case PROTO_MODE_PRIMITIVE:
+				{
+					signedSize = lvp->primitive.sizeCode;
+					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
+					last->proto = lvp;
+					last->id = id;
+					break;
+				}
+
+				case PROTO_MODE_VOID:
+				{
+					raiseError("[Intern] Cannot set a variable to void");
+					return;
+				}
+
+
+				}
+			}
+			// int firstId = giveIdToVariable(varrDest);
+
+			Trace_set(
+				trace,
+				valueExpr,
+				id,
+				Prototype_getVariableOffset(varrDest, subLength),
+				signedSize,	
+				EXPRESSION_PROPERTY
+			);
+
+			break;
+		}
+
+		
+		case EXPRESSION_FNCALL:
+		{
+			/// TODO: handle null id
+			Variable** varrDest = targetExpr->data.property.variableArr;
+			int subLength = targetExpr->data.property.length - 1;
+
+			Trace_set(
+				trace,
+				valueExpr,
+				varrDest[0]->id,
+				Prototype_getVariableOffset(varrDest, subLength),
+				Prototype_getSignedSize(varrDest[subLength]->proto),
+				EXPRESSION_FNCALL
+			);
+
+
+			break;
+		}
+
+		case EXPRESSION_VALUE:
+		{
+			raiseError("[TODO]: handle value read/edits");
+			break;
+		}
+
+
+		}
+
+	
+	
+	} else if (sourceExprType >= EXPRESSION_ADDITION && sourceExprType <= EXPRESSION_L_DECREMENT) {
+		Variable** varrDest = targetExpr->data.property.variableArr;
+		int subLength = targetExpr->data.property.length - 1;
+
+		Prototype* vproto = varrDest[subLength]->proto;
+
+		if (vproto) {
+			Trace_set(
+				trace,
+				valueExpr,
+				varrDest[0]->id,
+				Prototype_getVariableOffset(varrDest, subLength),
+				Prototype_getSignedSize(varrDest[subLength]->proto),
+				sourceExprType
+			);
+		
+		} else if (subLength == 0) {
+			Variable* v = varrDest[0];
+			int signedSize = Expression_reachSignedSize(sourceExprType, sourceExpr);
+			Prototype* p = Expression_getPrimitiveProtoFromSize(signedSize);
+			v->proto = p;
+
+			int id = v->id;
+			if (v->id < 0) {
+				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				v->id = id;
+			}
+
+
+			Trace_set(
+				trace,
+				valueExpr,
+				id,
+				Prototype_getVariableOffset(varrDest, subLength),
+				signedSize,
+				sourceExprType
+			);
+
+
+		} else {
+			raiseError("[Intern] No prototype to place expression");
+		}
+
+
+
+	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_F64) {
+		Variable** variableArr = targetExpr->data.property.variableArr;
+		int length = targetExpr->data.property.length;
+		
+		Variable** varrDest = targetExpr->data.property.variableArr;
+		int subLength = targetExpr->data.property.length - 1;
+		/// TODO: check sizes
+
+		Prototype* vproto = varrDest[subLength]->proto;
+
+		if (vproto) {
+			int signedSize = Prototype_getSignedSize(vproto);
+	
+			Trace_ins_def(
+				trace,
+				varrDest[0]->id,
+				Prototype_getVariableOffset(varrDest, length),
+				signedSize,
+				castable_cast(
+					Expression_getSignedSize(sourceExprType),
+					signedSize,
+					valueExpr->data.num
+				)
+			);
+		} else if (subLength == 0) {
+			Variable* v = varrDest[0];
+			int signedSize = Expression_getSignedSize(sourceExprType);
+			v->proto = Expression_getPrimitiveProtoFromType(sourceExprType);
+
+			int id = v->id;
+			if (v->id < 0) {
+				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				v->id = id;
+			}
+
+			Trace_ins_def(
+				trace,
+				id,
+				Prototype_getVariableOffset(varrDest, length),
+				signedSize,
+				castable_cast(
+					Expression_getSignedSize(sourceExprType),
+					signedSize,
+					valueExpr->data.num
+				)
+			);
+		} else {
+			raiseError("[Intern] No prototype to place expression");
+		}
+
+
+	} else {
+		raiseError("[TODO]: this expression is not handled");
+	}
+
+	// Free expression
+	Expression_free(sourceExprType, sourceExpr);
+	free(sourceExpr);
+}
+
+
+
+
 void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	Token token = Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
@@ -1769,10 +1973,12 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 	Variable* variable = malloc(sizeof(Variable));
 	variable->name = token.label;
 	variable->id = -1;
+	variable->proto = NULL;
 	Variable_create(variable);
 	
 	int syntaxIndex = -1;
-	Expression* exprValue = NULL;
+	Prototype* proto = NULL;
+	Expression* valueExpr = NULL;
 
 	
 	// Type
@@ -1792,17 +1998,17 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		// Type
 		case 0:
 		{
-			variable->proto = Syntax_proto(parser, &scope->scope);
+			proto = Syntax_proto(parser, &scope->scope);
+			variable->proto = proto;
 			ExtendedPrototypeSize eps = Prototype_reachSizes(variable->proto, &scope->scope, true);
-			variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.isRegistrable);
+			variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.primitiveSizeCode);
 			break;
 		}
 
 		// Value
 		case 1:
 			/// TODO: handle this expression
-			exprValue = Syntax_expression(parser, &scope->scope, 1);
-
+			valueExpr = Syntax_expression(parser, &scope->scope, 1);
 			break;
 
 		// end
@@ -1814,28 +2020,25 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 
 	// Add variable
 	finish:
-	if (exprValue) {
-		/// TODO: handle this expression
-		Expression_free(exprValue->type, exprValue);
-		free(exprValue);
-		raiseError("[TODO]: read value while creating a new variable");
-		return;
+	if (valueExpr) {
+		Expression exprToSet = {
+			.type = EXPRESSION_PATH,
+			.data = {
+				.property = {&variable, 1, 0}
+			}
+		};
+
+		placeExpression(parser, trace, valueExpr, &exprToSet, EXPRESSION_PATH);
 	}
 	
 	
-	Type* type = ScopeFunction_pushVariable(scope, variable, exprValue);
+	Type* type = ScopeFunction_pushVariable(scope, variable, valueExpr);
 }
 
 
 
 
-void Syntax_functionScope_freeLabel_set(
-	ScopeFunction* scope,
-	Parser* parser,
-	Trace* trace
-) {
 
-}
 
 
 
@@ -1899,119 +2102,16 @@ void Syntax_functionScope_freeLabel(
 			raiseError("[TODO]: must contain equal");
 		}
 
-		// Read expression
-		Expression* expr = Syntax_expression(parser, &scope->scope, 1);
-		Expression* const exprSource = expr;
-		int exprSourceType = expr->type;
-
-
-		if (exprSourceType == EXPRESSION_PATH) {
-			expr = expr->data.target;
-			switch (expr->type) {
-			case EXPRESSION_PROPERTY:
-			{
-				/// TODO: handle this case
-				if (expr->data.property.next) {
-					raiseError("[TODO]: expr such that next==true not handled for TypeNode");
-					return;
-				}
-
-				Variable** varrDest = expression->data.property.variableArr;
-				int subLength = expression->data.property.length - 1;
-				int signedSize = Prototype_getSignedSize(varrDest[subLength]->proto);
-
-				Trace_set(
-					trace,
-					expr,
-					varrDest[0]->id,
-					Prototype_getVariableOffset(varrDest, subLength),
-					signedSize,	
-					EXPRESSION_PROPERTY
-				);
-
-				break;
-			}
-
-			
-			case EXPRESSION_FNCALL:
-			{
-				/// TODO: handle TypeNode
-				Variable** varrDest = expression->data.property.variableArr;
-				int subLength = expression->data.property.length - 1;
-
-				Trace_set(
-					trace,
-					expr,
-					varrDest[0]->id,
-					Prototype_getVariableOffset(varrDest, subLength),
-					Prototype_getSignedSize(varrDest[subLength]->proto),
-					EXPRESSION_FNCALL
-				);
-
-
-				break;
-			}
-
-			case EXPRESSION_VALUE:
-			{
-				raiseError("[TODO]: handle value read/edits");
-				break;
-			}
-
-
-			}
-
 		
-		
-		} else if (exprSourceType >= EXPRESSION_ADDITION && expressionType <= EXPRESSION_L_DECREMENT) {
-			Variable** varrDest = expression->data.property.variableArr;
-			int subLength = expression->data.property.length - 1;
-
-			Trace_set(
-				trace,
-				expr,
-				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, subLength),
-				Prototype_getSignedSize(varrDest[subLength]->proto),
-				exprSourceType
-			);
-
-
-		} else if (exprSourceType >= EXPRESSION_U8 && exprSourceType <= EXPRESSION_F64) {
-			Variable** variableArr = expression->data.property.variableArr;
-			int length = expression->data.property.length;
-			
-
-			Variable** varr = expression->data.property.variableArr;
-			int subLength = expression->data.property.length - 1;
-			/// TODO: check sizes
-			int signedSize = Prototype_getSignedSize(varr[subLength]->proto);
-
-			Trace_ins_def(
-				trace,
-				varr[0]->id,
-				Prototype_getVariableOffset(varr, length),
-				signedSize,
-				castable_cast(
-					Expression_getSignedSize(exprSourceType),
-					signedSize,
-					expr->data.num
-				)
-			);
-
-		} else {
-			raiseError("[TODO]: this expression is not handled");
-		}
-
-		// Free expression
-		Expression_free(exprSourceType, exprSource);
-		free(exprSource);
-
+		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
 
 		// End operand
 		Token token = Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
+
+		placeExpression(parser, trace, valueExpr, expression, expressionType);
+
 
 
 		break;
@@ -2088,7 +2188,7 @@ static void Syntax_functionScope_if(
 
 
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, REGISTRABLE_TRUE);
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, 4);
 	
 	/// TODO: handle size
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
@@ -2181,7 +2281,7 @@ static void Syntax_functionScope_while(
 	/// TODO: handle size
 	// Collect test value
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, REGISTRABLE_TRUE);
+	uint dest = Trace_ins_create(trace, NULL, 4, 0, 4);
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
 	Expression_free(exprType, expr);
 	free(expr);
@@ -2271,7 +2371,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 				raiseError("[Architecture] Tried to return void");
 				return -1;
 			}
-			char isRegistrable = Prototype_isRegistrable(scope->fn->returnType, false);
+			char isRegistrable = Prototype_getPrimitiveSizeCode(scope->fn->returnType);
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
 
 			
@@ -2323,6 +2423,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	// Remove variable traces
 	finishScope:
 	Array_loop(TypeDefinition, scope->types, td) {
+		printf("id[%d]{%s}\n", td->variable->id, td->variable->name);
 		Trace_removeVariable(trace, td->variable->id);
 	}
 

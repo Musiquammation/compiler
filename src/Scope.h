@@ -47,11 +47,20 @@ struct ScopeFolder {
 };
 
 
+enum {SCOPE_POOL_NUM = 2};
+
+typedef struct {
+	Scope scope;
+	Scope* scopes[SCOPE_POOL_NUM];
+} ScopePool;
+
+
 enum {
 	SCOPE_NONE,
 	SCOPE_MODULE,
 	SCOPE_FILE,
 	SCOPE_FOLDER,
+	SCOPE_POOL,
 	SCOPE_CLASS,
 	SCOPE_FUNCTION,
 };
@@ -110,6 +119,15 @@ void ScopeFile_addVariable(ScopeFile* file, Variable* v);
 void ScopeFile_addClass(ScopeFile* file, Class* cl);
 void ScopeFile_addFunction(ScopeFile* file, Function* fn);
 
+
+
+Variable* ScopePool_searchVariable(ScopePool* file, label_t name, ScopeSearchArgs* args);
+Class* ScopePool_searchClass(ScopePool* file, label_t namel, ScopeSearchArgs* args);
+Function* ScopePool_searchFunction(ScopePool* file, label_t namen, ScopeSearchArgs* args);
+
+void ScopePool_addVariable(ScopePool* file, Variable* v);
+void ScopePool_addClass(ScopePool* file, Class* cl);
+void ScopePool_addFunction(ScopePool* file, Function* fn);
 
 
 

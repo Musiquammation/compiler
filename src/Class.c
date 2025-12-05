@@ -6,31 +6,37 @@
 
 #include "helper.h"
 
+
+#include <string.h>
+
 void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
 	Array_create(&cl->functions, sizeof(Function*));
 	cl->definitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
-	cl->isRegistrable = REGISTRABLE_UNKNOWN;
-	cl->primitiveSizeCode = 0;
+	cl->primitiveSizeCode = PSC_UNKNOWN;
 }
 
 
 void Class_delete(Class* cl) {
+	printf("rem %s %d %d %d\n", cl->name, cl->metaDefinitionState, cl->size, cl->variables.length);
 	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Class_delete(cl->meta);
 		free(cl->meta);
 	}
-
+	printf("dne %p\n", cl);
 
 	// Delete variables
 	Array_loopPtr(Variable, cl->variables, ptr) {
 		Variable* i = *ptr;
+		printf("var %s:\n", i->name);
 		Variable_delete(i);
 		free(i);
 	}
 
+
+	printf("kll %p\n", cl);
 
 	Array_free(cl->variables);
 
@@ -42,55 +48,134 @@ void Class_delete(Class* cl) {
 	}
 
 	Array_free(cl->functions);
-
 }
 
 
 
-
-Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
-	MemoryCursor cursor;
-	typedef Variable* var_ptr_t;
-
-
-	switch (cl->metaDefinitionState) {
-	case DEFINITIONSTATE_DONE:
+bool Class_getCompleteDefinition(Class* cl, Scope* scope, bool throwError) {
+	switch (cl->definitionState) {
+	case DEFINITIONSTATE_UNDEFINED:
 	{
-		return meta;
+		if (!Scope_defineOnFly(scope, cl->name)) {
+			if (throwError) {raiseError("[Architecture] Cannot define class on fly");}
+			return false;
+		}
+		return true;
 	}
 
 	case DEFINITIONSTATE_READING:
 	{
+		if (throwError) {raiseError("[Architecture] Cannot complete a class already being read");}
+		return false;
+	}
+
+	case DEFINITIONSTATE_DONE:
+	{
+		return true;
+	}
+
+	case DEFINITIONSTATE_NOEXIST:
+	{
+		if (throwError) {raiseError("[Architecture] Class may not exist");}
+		return false;
+	}
+
+
+	}
+}
+
+
+
+char Class_getPrimitiveSizeCode(const Class* cl) {
+	if (cl->variables.length == 1) {
+		Variable* v = *Array_get(Variable*, cl->variables, 0);
+		return Prototype_getPrimitiveSizeCode(v->proto);
+	}
+
+	return 0;
+}
+
+label_t Class_generateMetaName(label_t name, char addChar) {
+	size_t length = strlen(name);
+	char* dest = malloc(length+2);
+	memcpy(dest, name, length);
+	dest[length] = addChar;
+	dest[length+1] = 0;
+	label_t result = LabelPool_push(&_labelPool, dest);
+	free(dest);
+
+	return result;
+}
+
+
+
+void Class_appendMetas(Class* cl) {
+	MemoryCursor cursor;
+	typedef Variable* var_ptr_t;
+
+
+	Class* meta;
+	switch (cl->metaDefinitionState) {
+	case DEFINITIONSTATE_DONE:
+	{
+		printf("append %s %d\n", cl->name, cl->meta->size);
+		raiseError("[Architecture] Cannot append meta to a DONE class");
+		break;
+	}
+
+	case DEFINITIONSTATE_NOEXIST:
+	{
+		printf("append %s %d\n", cl->name, cl->meta->size);
+		raiseError("[Architecture] Cannot append meta to a NOEXIST class");
+		break;
+	}
+	
+	case DEFINITIONSTATE_READING:
+	{
+		printf("appendR %s %d\n", cl->name, cl->meta->size);
+		meta = cl->meta;
 		cursor.offset = meta->size;
 		cursor.maxMinimalSize = meta->maxMinimalSize;
 		break;
 	}
 	
 	case DEFINITIONSTATE_UNDEFINED:
-	case DEFINITIONSTATE_NOEXIST:
 	{
+		printf("appendU %s no\n", cl->name);
 		// Search for meta arguments
-		if (!containsMetaArguments) {
-			Array_loop(var_ptr_t, cl->variables, vptr) {
-				Variable* source = *vptr;
-				Prototype* meta = Prototype_getMeta(source->proto);
-				if (meta) {
-					goto containsMetaArgumentsLabel;
-				}
+		Array_loop(var_ptr_t, cl->variables, vptr) {
+			Variable* source = *vptr;
+			char hasMeta = Prototype_hasMeta(source->proto);
+			switch (hasMeta) {
+			case 1:
+				goto containsMetaArgumentsLabel;
+
+			case 0:
+				break;
+
+			case -1:
+				raiseError("[TODO] does not know if there is a meta");
+				return;
 			}
-			
-			cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
-			cl->meta = NULL;
-			cl->definitionState = DEFINITIONSTATE_DONE;
-			return NULL;
 		}
+
 		
+		// Here, no meta argument to append found
+		printf("\trefused\n");
+		return;
+
+
 		containsMetaArgumentsLabel:
 		cursor.offset = 0;
 		cursor.maxMinimalSize = 0;
+		
 		meta = malloc(sizeof(Class));
-		meta->name = NULL;
 		Class_create(meta);
+		cl->meta = meta;
+
+		cl->metaDefinitionState = DEFINITIONSTATE_READING;
+		meta->definitionState = DEFINITIONSTATE_READING;
+		meta->name = Class_generateMetaName(cl->name, '~');
 		break;
 	}
 
@@ -100,10 +185,19 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 
 	Array_loop(var_ptr_t, cl->variables, vptr) {
 		Variable* source = *vptr;
-		Prototype* mp = Prototype_getMeta(source->proto);
-		if (!mp)
+
+		char hasMeta = Prototype_hasMeta(source->proto);
+
+		if (hasMeta == 0)
 			continue;
 
+		if (hasMeta == -1) {
+			printf("While appending to %s:\n", source->name);
+			raiseError("[TODO] handle unknown meta");
+			continue;
+		}
+
+		Prototype* mp = Prototype_reachMeta(source->proto);
 		/// TODO: check direct usage
 		Class* mcl = mp->direct.cl;
 		int offset = MemoryCursor_give(&cursor, mcl->size, mcl->maxMinimalSize);
@@ -115,20 +209,43 @@ Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments) {
 		variable->name = source->name;
 		variable->proto = mp;
 		variable->offset = offset;
+		printf("push %s\n", variable->name);
 	}
 
 	meta->maxMinimalSize = cursor.maxMinimalSize;
 	meta->size = MemoryCursor_align(cursor);
+	meta->primitiveSizeCode = Class_getPrimitiveSizeCode(meta);
 
-	cl->meta = meta;
-	cl->metaDefinitionState = DEFINITIONSTATE_DONE;
-	
-	/// TODO: warning to this line
-	Class_appendMeta(meta, meta->metaDefinitionState == DEFINITIONSTATE_NOEXIST ? NULL : meta->meta, false);
+	Class_appendMetas(meta);
+	return;
+}
+
+
+
+void Class_acheiveDefinition(Class* cl) {
+	printf("acheive %s %d\n", cl->name, cl->metaDefinitionState);
+	switch (cl->metaDefinitionState) {
+	case DEFINITIONSTATE_UNDEFINED:
+		// raiseError("[Architecture] Cannot acheive a class with unknown meta");
+		cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
+		break;
+
+	case DEFINITIONSTATE_READING:
+		Class_acheiveDefinition(cl->meta);
+		cl->metaDefinitionState = DEFINITIONSTATE_DONE;
+		break;
+		
+	case DEFINITIONSTATE_NOEXIST:
+	case DEFINITIONSTATE_DONE:
+		raiseError("[Intern] Cannot acheive a class with NOEXIST/DONE state");
+		break;
+	}
 	
 	cl->definitionState = DEFINITIONSTATE_DONE;
-	return meta;
 }
+
+
+
 
 
 void ScopeClass_delete(ScopeClass* scope) {
@@ -138,6 +255,9 @@ void ScopeClass_delete(ScopeClass* scope) {
 
 
 Variable* ScopeClass_searchVariable(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
+	if (!scope->cl)
+		return NULL;
+
 	Array_loopPtr(Variable, scope->cl->variables, ptr) {
 		Variable* v = *ptr;
 		if (v->name == name)
@@ -148,10 +268,16 @@ Variable* ScopeClass_searchVariable(ScopeClass* scope, label_t name, ScopeSearch
 }
 
 Class* ScopeClass_searchClass(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
+	if (!scope->cl)
+		return NULL;
+
 	return NULL;
 }
 
 Function* ScopeClass_searchFunction(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
+	if (!scope->cl)
+		return NULL;
+
 	Array_loopPtr(Function, scope->cl->functions, ptr) {
 		Function* f = *ptr;
 		if (f->name == name)

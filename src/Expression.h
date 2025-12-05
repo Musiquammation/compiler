@@ -148,4 +148,7 @@ int Expression_reachSignedSize(int type, const Expression* expr);
 int Expression_evalNextLength(const Expression* arr);
 
 
+Prototype* Expression_getPrimitiveProtoFromType(int type);
+Prototype* Expression_getPrimitiveProtoFromSize(int type);
+
 #endif

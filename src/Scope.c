@@ -485,3 +485,76 @@ void ScopeFile_addFunction(ScopeFile* file, Function* fn) {
 
 
 
+
+
+
+
+
+
+
+
+Variable* ScopePool_searchVariable(ScopePool* scope, label_t name, ScopeSearchArgs* args) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Variable* res = Scope_searchVariable(s, s->type, name, args);
+		if (res)
+			return res;
+	}
+
+	return NULL;
+}
+
+Class* ScopePool_searchClass(ScopePool* scope, label_t name, ScopeSearchArgs* args) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Class* res = Scope_searchClass(s, s->type, name, args);
+		if (res)
+			return res;
+	}
+
+	return NULL;
+}
+
+Function* ScopePool_searchFunction(ScopePool* scope, label_t name, ScopeSearchArgs* args) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Function* res = Scope_searchFunction(s, s->type, name, args);
+		if (res)
+			return res;
+	}
+
+	return NULL;
+}
+
+
+
+
+
+void ScopePool_addVariable(ScopePool* scope, Variable* v) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Scope_addVariable(s, s->type, v);
+	}
+}
+
+void ScopePool_addClass(ScopePool* scope, Class* cl) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Scope_addClass(s, s->type, cl);
+	}
+}
+
+void ScopePool_addFunction(ScopePool* scope, Function* fn) {
+	typedef Scope* ptr_t;
+	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
+		Scope* s = *sptr;
+		Scope_addFunction(s, s->type, fn);
+	}
+}
+
+

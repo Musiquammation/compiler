@@ -10,7 +10,6 @@ class {
 		isWritable: bool;
 	}
 
-
 	address: size_t;
 }
 

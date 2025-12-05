@@ -5,15 +5,10 @@ class {
 		positive: char;
 
 		isPositive(): bool;
-
-		@control add;
-		@control setToZero;
 	}
 
 	value: int;
 
-	add(factor: Integer);
-	setToZero();
 }
 
 

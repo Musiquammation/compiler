@@ -285,7 +285,7 @@ void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
 		Trace_ins_create(
 			trace, v,
 			Prototype_getSizes(v->proto).size, 2,
-			Prototype_isRegistrable(v->proto, true)
+			Prototype_getPrimitiveSizeCode(v->proto)
 		);
 	}
 
@@ -394,7 +394,14 @@ void TracePack_print(const TracePack* pack, int position) {
 
 				case TRACECODE_MOVE:
 				{
-					printf("[%04d] MOVE size=%d\n", i+position, n >> 16);
+					printf("[%04d] MOVE size=%d", i+position, n >> 16);
+
+					if (n & (1<<10)) {
+						printf("\n"); // registrable
+					} else {
+						printf(" complex\n");
+					}
+
 					break;
 				}
 
@@ -679,13 +686,12 @@ static Write* reachWrite(int idx, int deep, int usageCapacity, VariableTrace* vt
 	return &nextWrites[usageCapacity];
 }
 
-void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr) {
+static void addUsageAt(Trace* trace, uint variable, int traceInstruction, bool readMode, trline_t* ptr) {
 	if (variable == TRACE_VARIABLE_NONE) {
 		return;
 	}
 
 	VariableTrace* vt = Array_get(VariableTrace, trace->variables, variable);
-	int traceInstruction = trace->instruction;
 	
 	int usageCapacity = vt->usageCapacity;
 	
@@ -831,14 +837,14 @@ void Trace_addUsageAt(Trace* trace, uint variable, bool readMode, trline_t* ptr)
 }
 
 void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode) {
-	printf("usage %2d %2d | %s\n", variable, offset, readMode ? "read" : "write");
+	printf("usage v%d off=%02d | %s\n", variable, offset, readMode ? "read" : "write");
 
 	if (offset < 0) {
 		trline_t* ptr = Trace_push(trace, 1);
-		Trace_addUsageAt(trace, variable, readMode, ptr);
+		addUsageAt(trace, variable, trace->instruction, readMode, ptr);
 	} else {
 		trline_t* ptr = Trace_push(trace, 2);
-		Trace_addUsageAt(trace, variable, readMode, &ptr[0]);
+		addUsageAt(trace, variable, trace->instruction-1, readMode, &ptr[0]);
 		ptr[1] = (uint)offset;
 
 	}
@@ -1064,6 +1070,11 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			}
 		} else {
 			signedObjSize = Prototype_getSizes(varr[subLength]->proto).size;
+
+			if (signedObjSize != signedSize) {
+				raiseError("[Type] Sizes do not match on copy");
+				return;
+			}
 		}
 
 
@@ -1075,21 +1086,23 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				varr[0]->id,
 				destOffset,
 				Prototype_getVariableOffset(varr, subLength),
-				size
+				size,
+				primitiveSizeCode
 			);
 			return;
 		}
 
 		// Let's cast
 		int objSize = signedObjSize >= 0 ? signedObjSize : -signedObjSize;
-		uint tempVar = Trace_ins_create(trace, NULL, objSize, 0, REGISTRABLE_TRUE);
+		uint tempVar = Trace_ins_create(trace, NULL, objSize, 0, primitiveSizeCode);
 		Trace_ins_move(
 			trace,
 			tempVar,
 			varr[0]->id,
 			-1,
 			destOffset,
-			objSize
+			objSize,
+			1
 		);
 
 		Trace_addUsage(trace, tempVar, TRACE_OFFSET_NONE, true);
@@ -1121,20 +1134,20 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		for (int i = 0; i < fncall.argsLength; i++) {
 			/// TODO: check sizes
 			printf("args_are(%d) %p for %s\n", i, arguments, fncall.fn->name);
-			char isRegistrable = Prototype_isRegistrable(arguments[i]->proto, true);
+			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			int size = Prototype_getSizes(arguments[i]->proto).size;
-			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
+			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
 			
 			Trace_set(
 				trace,
 				fncall.args[i],
 				bufferVar,
-				Prototype_isRegistrable(arguments[i]->proto, true) ? TRACE_OFFSET_NONE : 0,
+				primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
 				Prototype_getSignedSize(arguments[i]->proto),
 				fncall.args[i]->type
 			);
 
-			uint finalVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
+			uint finalVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
 			variables[i] = finalVar;
 			
 			if (i < ARGUMENT_REGISTERS_LENGTH) {
@@ -1163,9 +1176,14 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		// Add usages
 		for (int i = 0; i < fncall.argsLength; i++) {
+			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
+			if (psc == PSC_UNKNOWN) {
+				raiseError("[Architecture] Registrable status is unknown");
+			}
+
 			Trace_addUsage(
 				trace, variables[i],
-				Prototype_isRegistrable(arguments[i]->proto, true) ? TRACE_OFFSET_NONE : 0,
+				psc ? TRACE_OFFSET_NONE : 0,
 				true
 			);
 		}
@@ -1188,7 +1206,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
 				uint temp = Trace_ins_create(
 					trace, NULL, outputSize, 0,
-					Prototype_isRegistrable(fncall.fn->returnType, true)
+					Prototype_getPrimitiveSizeCode(fncall.fn->returnType)
 				);
 	
 				// Put output in temp variable
@@ -1332,10 +1350,10 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				maxSize = rightSize;
 			}
 			
-			uint leftVar = Trace_ins_create(trace, NULL, maxSize, 0, REGISTRABLE_TRUE);
+			uint leftVar = Trace_ins_create(trace, NULL, maxSize, 0, 1);
 			Trace_set(trace, leftExpr, leftVar, TRACE_OFFSET_NONE, signedMaxSize, leftType);
 
-			uint rightVar = Trace_ins_create(trace, NULL, maxSize, 0, REGISTRABLE_TRUE);
+			uint rightVar = Trace_ins_create(trace, NULL, maxSize, 0, 1);
 			Trace_set(trace, rightExpr, rightVar, TRACE_OFFSET_NONE, signedMaxSize, rightType);
 
 			int tempDestVar;
@@ -1346,7 +1364,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				Trace_addUsage(trace, destVar, destOffset, false);
 				Trace_addUsage(trace, rightVar, TRACE_OFFSET_NONE, true);
 			} else {
-				tempDestVar = Trace_ins_create(trace, NULL, maxSize, 0, REGISTRABLE_TRUE);
+				tempDestVar = Trace_ins_create(trace, NULL, maxSize, 0, 1);
 				Trace_addUsage(trace, leftVar, TRACE_OFFSET_NONE, true);
 				Trace_addUsage(trace, tempDestVar, destOffset, false);
 				Trace_addUsage(trace, rightVar, TRACE_OFFSET_NONE, true);
@@ -1414,7 +1432,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			/// TODO: handle case for same size but different sign
 			if (notCast) {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0, REGISTRABLE_TRUE);
+				variable = Trace_ins_create(trace, NULL, size, 0, 1);
 				signedDestImmediateSize = signedSize;
 				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedSize, operandType);
 
@@ -1424,11 +1442,11 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 			} else {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0, REGISTRABLE_TRUE);
+				variable = Trace_ins_create(trace, NULL, size, 0, 1);
 				signedDestImmediateSize = signedOperandSize;
 				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedOperandSize, operandType);
 
-				resultVariable = Trace_ins_create(trace, NULL, size, 0, REGISTRABLE_TRUE);
+				resultVariable = Trace_ins_create(trace, NULL, size, 0, 1);
 
 				// Add usages
 				Trace_addUsage(trace, variable, TRACE_OFFSET_NONE, true);
@@ -1553,8 +1571,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 
 uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, char registrable) {
-	if (registrable == REGISTRABLE_UNKNOWN) {
-		raiseError("[Architecture] Registrable is unknown");
+	if (registrable == PSC_UNKNOWN) {
+		raiseError("[Architecture] Registrable status is unknown");
 		return -1;
 	}
 
@@ -1562,6 +1580,7 @@ uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, cha
 		raiseError("[TODO] handle create big size variables");
 		return -1;
 	}
+
 
 	uint id = Trace_pushVariable(trace);
 	trline_t* ptr = Trace_push(trace, 2);
@@ -1612,7 +1631,6 @@ void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, casta
 	case -8:
 	case 8:
 	case 9:
-		printf("here with %d\n\n", (unsigned int)(value.u64 >> 32));
 		ptr = Trace_push(trace, 3);
 		ptr[0] = TRACECODE_DEF | (TRACETYPE_S64 << 10);
 		ptr[1] = (unsigned int)(value.u64);
@@ -1622,11 +1640,13 @@ void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, casta
 }
 
 
-void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size) {
+void Trace_ins_move(Trace* trace, int destVar, int srcVar,
+	int destOffset, int srcOffset, int size, char isRegistrable) {
+
 	Trace_addUsage(trace, srcVar, srcOffset, true);
 	Trace_addUsage(trace, destVar, destOffset, false);
 
-	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16);
+	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) | (isRegistrable ? 1<<10 : 0);
 }
 
 trline_t* Trace_ins_if(Trace* trace, uint destVar) {
@@ -3483,16 +3503,22 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_MOVE:
 		{
-			allowRsp(1);
+			if (line & (1<<10)) {
+				// Registrable operation
+				allowRsp(1);
+	
+				int size = (line >> 16);
+				fprintf(output, "\tmov ");
+				Trace_printUsage(trace, output, Trace_packSize(size), useAt(1));
+				fprintf(output, ", ");
+				Trace_printUsage(trace, output, Trace_packSize(size), useAt(0));
+				fprintf(output, "\n");
+			
+				desallowRsp(0);
+			} else {
+				fprintf(output, "\t; [TODO] move stacks\n");
+			}
 
-			int size = (line >> 16);
-			fprintf(output, "\tmov ");
-			Trace_printUsage(trace, output, Trace_packSize(size), useAt(1));
-			fprintf(output, ", ");
-			Trace_printUsage(trace, output, Trace_packSize(size), useAt(0));
-			fprintf(output, "\n");
-		
-			desallowRsp(0);
 
 			break;
 		}

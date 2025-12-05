@@ -1,0 +1,8 @@
+class {
+	for {
+		K: Type;
+	}
+
+	obj: Pointer;
+}
+

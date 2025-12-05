@@ -5,6 +5,8 @@
 #include "Function.h"
 #include "Variable.h"
 
+#include "primitives.h"
+
 #include <stddef.h>
 #include <tools/Array.h>
 
@@ -740,5 +742,72 @@ int Expression_evalNextLength(const Expression* arr) {
 
 		stop:
 		return length;
+	}
+}
+
+
+
+Prototype* Expression_getPrimitiveProtoFromType(int type) {
+	switch (type) {
+	case EXPRESSION_U8:
+		return &_primitives.proto_u8;
+	case EXPRESSION_I8:
+		return &_primitives.proto_i8;
+
+	case EXPRESSION_U16:
+		return &_primitives.proto_u16;
+	case EXPRESSION_I16:
+		return &_primitives.proto_i16;
+
+	case EXPRESSION_U32:
+		return &_primitives.proto_u32;
+	case EXPRESSION_I32:
+		return &_primitives.proto_i32;
+	case EXPRESSION_F32:
+		return &_primitives.proto_f32;
+
+	case EXPRESSION_U64:
+		return &_primitives.proto_u64;
+	case EXPRESSION_I64:
+		return &_primitives.proto_i64;
+	case EXPRESSION_F64:
+		return &_primitives.proto_f64;
+
+
+	default:
+		return NULL;
+	}
+}
+
+Prototype* Expression_getPrimitiveProtoFromSize(int signedSize) {
+	switch (signedSize) {
+	case 1:
+		return &_primitives.proto_u8;
+	case -1:
+		return &_primitives.proto_i8;
+
+	case 2:
+		return &_primitives.proto_u16;
+	case -2:
+		return &_primitives.proto_i16;
+
+	case 4:
+		return &_primitives.proto_u32;
+	case -4:
+		return &_primitives.proto_i32;
+	case 5:
+		return &_primitives.proto_f32;
+
+	case 8:
+		return &_primitives.proto_u64;
+	case -8:
+		return &_primitives.proto_i64;
+	case 9:
+		return &_primitives.proto_f64;
+
+
+	default:
+		return NULL;
+	
 	}
 }

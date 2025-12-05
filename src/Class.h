@@ -10,7 +10,9 @@
 #include <tools/Array.h>
 
 enum {
-	CLASSFLAGS_META = 1
+	CLASSFLAGS_META = 1,
+
+	PSC_UNKNOWN = 42
 };
 
 enum {
@@ -20,11 +22,6 @@ enum {
 	CLASSSIZE_TOSEARCH = -4,
 };
 
-enum {
-	REGISTRABLE_UNKNOWN = -1,
-	REGISTRABLE_FALSE = 0,
-	REGISTRABLE_TRUE = 1,
-};
 
 struct Class {
 	Array variables; // type: Variable*
@@ -36,7 +33,6 @@ struct Class {
 	label_t name;
 	
 	char primitiveSizeCode;
-	char isRegistrable;
 
 	int size;
 	int maxMinimalSize;
@@ -51,8 +47,15 @@ struct ScopeClass {
 void Class_create(Class* cl);
 void Class_delete(Class* cl);
 
+bool Class_getCompleteDefinition(Class* cl, Scope* scope, bool throwError);
 
-Class* Class_appendMeta(Class* cl, Class* meta, bool containsMetaArguments);
+char Class_getPrimitiveSizeCode(const Class* cl);
+label_t Class_generateMetaName(label_t name, char addChar);
+
+void Class_appendMetas(Class* cl);
+
+void Class_acheiveDefinition(Class* cl);
+
 
 void ScopeClass_delete(ScopeClass* scope);
 
@@ -67,3 +70,4 @@ void ScopeClass_addFunction(ScopeClass* scope, Function* fn);
 
 
 #endif
+

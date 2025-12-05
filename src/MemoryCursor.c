@@ -1,6 +1,8 @@
 #include "MemoryCursor.h"
 
 #include <stdio.h>
+
+
 int MemoryCursor_align(MemoryCursor cursor) {
 	if (cursor.maxMinimalSize == 0) {
 		return 0;

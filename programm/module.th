@@ -1,5 +1,4 @@
 @!module {
-	class Test;
 	class Integer;
 	class Pointer;
 	@langstd class Type;
