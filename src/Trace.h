@@ -47,7 +47,7 @@ enum {
 	TRACE_USAGE_MASK = 0x3ff,
 
 	TRACE_USAGE_LAST = 0,
-	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 16,
+	TRACE_USAGE_OUT_OF_BOUNDS = 0x3ff - 18,
 	TRACE_USAGE_LIMIT,
 
 
@@ -166,6 +166,8 @@ trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
 void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize);
 void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize);
+void Trace_ins_getStackPtr(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset);
+
 void Trace_ins_savePlacement(Trace* trace);
 void Trace_ins_openPlacement(Trace* trace);
 void Trace_ins_saveShadowPlacement(Trace* trace);
@@ -279,8 +281,9 @@ enum {
 	 * +22: NEXT
 	 * 
 	 * FLAGS are:
-	 * +0: CASTABLE
-	 * +1: ARGUMENT
+	 * +0 (at +10): CASTABLE
+	 * +1 (at +11): ARGUMENT
+	 * +2 (at +12): STACK_ONLY
 	 * 
 	 */
 	TRACECODE_CREATE,
@@ -426,9 +429,22 @@ enum {
 	 * +20
 	 */
 	TRACECODE_CAST,
+
+
+	/**
+	 * +00: CODE
+	 * +10: [blank]
+	 * +16: VARIABLE
+	 * +28
+	 * 
+	 * +00: OFFSET
+	 * +32
+	 */
+	TRACECODE_STACK_PTR,
 };
 
 
 
 
 #endif
+

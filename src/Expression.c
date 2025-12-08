@@ -33,7 +33,10 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_PROPERTY:
 	{
-		free(e->data.property.variableArr);
+		if (e->data.property.freeVariableArr) {
+			free(e->data.property.variableArr);
+		}
+		
 		if (e->data.property.next) {
 			e++;
 			type = e->type;
@@ -122,6 +125,8 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_POSITIVE:
 	case EXPRESSION_NEGATION:
 	case EXPRESSION_BITWISE_NOT:
+	case EXPRESSION_ADDR_OF:
+	case EXPRESSION_VALUE_AT:
 	case EXPRESSION_LOGICAL_NOT:
 		Expression_free(e->data.operand->type, e->data.operand);
 		break;
@@ -227,6 +232,8 @@ void Expression_exchangeReferences(
 		case EXPRESSION_L_DECREMENT:
 		case EXPRESSION_A_INCREMENT:
 		case EXPRESSION_A_DECREMENT:
+		case EXPRESSION_ADDR_OF:
+		case EXPRESSION_VALUE_AT:
 			exchange(expr->data.operand);
 			break;
 
@@ -402,11 +409,27 @@ Expression* Expression_processLine(Expression* line, int length) {
 			continue;
 
 		int i_type = line[i].type;
+		int nextTypeApplied;
 
 		switch (i_type) {
 			case EXPRESSION_ADDITION:
+				nextTypeApplied = EXPRESSION_POSITIVE;
+				goto applyOneOp;
+
 			case EXPRESSION_SUBSTRACTION:
+				nextTypeApplied = EXPRESSION_NEGATION;
+				goto applyOneOp;
+				
+			case EXPRESSION_MULTIPLICATION:
+				nextTypeApplied = EXPRESSION_VALUE_AT;
+				goto applyOneOp;
+				
+			case EXPRESSION_BITWISE_AND:
+				nextTypeApplied = EXPRESSION_ADDR_OF;
+				goto applyOneOp;
 			
+			
+			applyOneOp:
 			// check if operand is one-operand
 			switch (prev_type) {
 				case -1:
@@ -415,11 +438,12 @@ Expression* Expression_processLine(Expression* line, int length) {
 				case EXPRESSION_MULTIPLICATION:
 				case EXPRESSION_DIVISION:
 				case EXPRESSION_MODULO:
-					i_type += EXPRESSION_POSITIVE - EXPRESSION_ADDITION;
+					i_type = nextTypeApplied;
 					break;
 
-					default:
-						goto nextOneOperand;
+
+				default:
+					goto nextOneOperand;
 				}
 
 				break;

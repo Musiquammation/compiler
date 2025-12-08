@@ -919,6 +919,8 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 		Token token = Parser_read(parser, &_labelPool);
 		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
 
+		printf("at %d: ", offsetToDefine);
+		Token_println(&token);
 		switch (syntaxResult) {
 		// label
 		case 0:
@@ -1007,7 +1009,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 			}
 
 			// Closing angle
-			if (syntaxResult == 4) {
+			if (syntaxResult == 5) {
 				return;
 			}
 
@@ -1026,8 +1028,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 	
 	
 	raiseComma:
-	raiseError("[Syntax] A comma was expected\n");
-
+	raiseError("[Syntax] A comma was expected");
 }
 
 Prototype* Syntax_proto(Parser* parser, Scope* scope) {
@@ -1059,7 +1060,14 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		
 		// Expression
 		Expression* expression = Syntax_readPath(token.label, parser, scope);
-		Prototype* proto = Prototype_create_expression(expression);
+		if (expression->type != EXPRESSION_PROPERTY || expression->data.property.next) {
+			raiseError("[Syntax] class[var] syntax works only with a variable");
+		}
+
+		Prototype* proto = Prototype_create_reference(
+			expression->data.property.variableArr, expression->data.property.length);
+
+		free(expression);
 		
 
 		// Closing bracket
@@ -1068,8 +1076,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 			return false;
 
 
-		raiseError("[TODO] define if we have a meta class");
-		return proto; // or true, maybe?
+		return proto;
 	}
 
 	
@@ -1647,6 +1654,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				expr->data.property.variableArr = currentVarPath.data;
 				expr->data.property.length = currentVarPath.length;
 				expr->data.property.next = hasNext;
+				expr->data.property.freeVariableArr = true;
 	
 				if (!hasNext)
 					break;
@@ -1772,7 +1780,7 @@ static void placeExpression(
 				Prototype* lvp = lv->proto;
 
 				switch (Prototype_mode(*lvp)) {
-				case PROTO_MODE_EXPRESSION:
+				case PROTO_MODE_REFERENCE:
 				{
 
 					break;
@@ -1890,7 +1898,7 @@ static void placeExpression(
 				trace,
 				valueExpr,
 				id,
-				Prototype_getVariableOffset(varrDest, subLength),
+				0,
 				signedSize,
 				sourceExprType
 			);
@@ -1905,9 +1913,9 @@ static void placeExpression(
 	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_F64) {
 		Variable** variableArr = targetExpr->data.property.variableArr;
 		int length = targetExpr->data.property.length;
+		int subLength = length - 1;
 		
 		Variable** varrDest = targetExpr->data.property.variableArr;
-		int subLength = targetExpr->data.property.length - 1;
 		/// TODO: check sizes
 
 		Prototype* vproto = varrDest[subLength]->proto;
@@ -1926,6 +1934,7 @@ static void placeExpression(
 					valueExpr->data.num
 				)
 			);
+
 		} else if (subLength == 0) {
 			Variable* v = varrDest[0];
 			int signedSize = Expression_getSignedSize(sourceExprType);
@@ -1940,7 +1949,7 @@ static void placeExpression(
 			Trace_ins_def(
 				trace,
 				id,
-				Prototype_getVariableOffset(varrDest, length),
+				0,
 				signedSize,
 				castable_cast(
 					Expression_getSignedSize(sourceExprType),
@@ -1951,6 +1960,56 @@ static void placeExpression(
 		} else {
 			raiseError("[Intern] No prototype to place expression");
 		}
+
+
+	} else if (sourceExprType == EXPRESSION_ADDR_OF) {
+		Expression* operand = sourceExpr->data.operand;
+		if (operand->type != EXPRESSION_PATH) {
+			raiseError("[Syntax] Can only get the address of a variable");
+			return;
+		}
+		
+		Expression* reference = operand->data.target;
+		if (reference->type != EXPRESSION_PROPERTY || reference->data.property.next) {
+			raiseError("[Syntax] Can only get the address of a variable (property was expected)");
+			return;
+		}
+		
+		int refArrLength = reference->data.property.length;
+		Variable** refVarArr = reference->data.property.variableArr;
+		int srcOffset = Prototype_getVariableOffset(
+			&refVarArr[1], refArrLength-1);
+
+		int srcVar = refVarArr[0]->id;
+
+		int targetSubLength = targetExpr->data.property.length - 1;
+		Variable** varrDest = targetExpr->data.property.variableArr;
+		int destVar = varrDest[0]->id;
+		int destOffset;
+		if (destVar < 0) {
+			destVar = Trace_ins_create(trace, varrDest[0], 8, 0, true);
+			varrDest[0]->id = destVar;
+			destOffset = -1;
+		} else {
+			destOffset = Prototype_getVariableOffset(&varrDest[1], targetSubLength);
+
+		}
+
+
+		if (varrDest[targetSubLength]->proto == NULL) {
+			if (targetSubLength != 0) {
+				raiseError("[Intern] No prototype to place expression");
+			}
+			
+			varrDest[targetSubLength]->proto = Prototype_generateStackPointer(refVarArr, refArrLength);
+			reference->data.property.freeVariableArr = false;
+		}
+		
+
+		Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
+		
+		
+
 
 
 	} else {

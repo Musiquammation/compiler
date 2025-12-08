@@ -65,5 +65,8 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 
 
+Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable);
+Type* ScopeFunction_globalSearchType(Scope* scope, Variable* variable);
+
 #endif
 

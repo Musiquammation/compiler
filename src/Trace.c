@@ -179,6 +179,7 @@ typedef struct {
 	int deep;
 	int usageCapacity;
 	int globalFirstRead;
+	trline_t* creationLinePtr;
 } VariableTrace;
 
 
@@ -585,7 +586,15 @@ void TracePack_print(const TracePack* pack, int position) {
 						break;
 				}
 
-
+				case TRACECODE_STACK_PTR:
+				{
+					uint32_t variable = (n >> 16) & 0xfff;
+					uint32_t offset = pack->line[i+1];
+					
+					printf("[%04d] STACK_PTR of=v%d offset=+%02d\n", i, variable, offset);
+					i++;
+					break;
+				}
 
 				default:
 					printf("[%04d] UNKNOWN INSTRUCTION code=%d\n", i+position, next);
@@ -1599,6 +1608,7 @@ uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, cha
 	vt->scopeId = trace->scopeId;
 	vt->deep = trace->deep;
 	vt->globalFirstRead = FIRSTREAD_WAITING;
+	vt->creationLinePtr = ptr;
 	return id;
 }
 
@@ -1683,6 +1693,18 @@ void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize) 
 		(packedSize << 10) |
 		(1 << 12) |
 		(reg << 16);
+}
+
+
+void Trace_ins_getStackPtr(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset) {
+	Trace_addUsage(trace, destVar, destOffset, false);
+
+	trline_t* arr = Trace_push(trace, 2);
+	arr[0] = TRACECODE_STACK_PTR | (srcVar<<16);
+	arr[1] = srcOffset;
+
+	trline_t* ptr = Array_get(VariableTrace, trace->variables, destVar)->creationLinePtr;
+	*ptr = (*ptr) | (1<<12);
 }
 
 
@@ -2485,6 +2507,17 @@ void Trace_placeRegisters(Trace* trace) {
 
 		case TRACECODE_CAST:
 		{
+			break;
+		}
+
+		case TRACECODE_STACK_PTR:
+		{
+			trline_t variable = (line >> 16) & 0xfff;
+			trline_t offset = *linePtr;
+
+			linePtr++;
+			ip++;
+
 			break;
 		}
 
@@ -3958,6 +3991,32 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			break;
 		}
 
+
+		case TRACECODE_STACK_PTR:
+		{
+			int variable = (line >> 16) & 0xfff;
+			int offset = (*linePtr);
+			linePtr++;
+			ip++;
+			break;
+
+			int store = varInfos[variable].store;
+			if (store < 0) {
+				raiseError("[Trace] Cannot get the address of a variable stored in a register");
+				return;
+			}
+
+			offset = trace->stackHandler.rsp - varInfos[variable].size;
+
+
+			fprintf(output, "\tmov ");
+			Trace_printUsage(trace, output, 3, useAt(0));
+			fprintf(output, ", rsp\n\tadd ");
+			Trace_printUsage(trace, output, 3, useAt(0));
+			fprintf(output, ", %d\n", offset);
+
+			break;
+		}
 
 
 

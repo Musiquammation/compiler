@@ -6,7 +6,7 @@
 #include <tools/Array.h>
 
 enum {
-	PROTO_MODE_EXPRESSION,
+	PROTO_MODE_REFERENCE,
 	PROTO_MODE_DIRECT,
 	PROTO_MODE_VARIADIC,
 	PROTO_MODE_PRIMITIVE,
@@ -64,9 +64,10 @@ struct Prototype {
 		} primitive;
 		
 		struct {
-			Expression* ptr;
-			// PrototypeSize sizes;
-		} expr;
+			Prototype* proto;
+			Variable** varr;
+			int varrLength;
+		} ref;
 
 		struct {
 			Variable* ref;
@@ -77,12 +78,12 @@ struct Prototype {
 
 Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, ProtoSetting* settings, int settingLength);
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta);
-Prototype* Prototype_create_expression(Expression* expr);
+Prototype* Prototype_create_reference(Variable** varr, int varrLength);
 Prototype* Prototype_create_variadic(Variable* ref);
 void Prototype_free(Prototype* proto, bool deep);
 
 
-Type* Prototype_generateType(Prototype* proto);
+Type* Prototype_generateType(Prototype* proto, Scope* scope);
 
 bool Prototype_accepts(const Prototype* proto, const Type* type);
 
@@ -113,5 +114,6 @@ Prototype* Prototype_copy(Prototype* src);
 
 bool Prototype_isType(Prototype* proto);
 
+Prototype* Prototype_generateStackPointer(Variable **varr, int varLength);
 
 #endif

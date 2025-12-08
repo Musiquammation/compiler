@@ -48,7 +48,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 		TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
 		Prototype_reachMetaSizes(v->proto, &scope->scope, true);
 
-		Type* type = Prototype_generateType(v->proto);
+		Type* type = Prototype_generateType(v->proto, &scope->scope);
 		def->variable = v;
 		def->type = type;
 	}
@@ -113,8 +113,14 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 
 
 Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
+	if (Prototype_mode(*v->proto) == PROTO_MODE_REFERENCE) {
+		raiseError("[Syntax] Cannot create a variable whose type is a reference of an other type");
+		return NULL;
+	}
+
 	TypeDefinition* td = Array_push(TypeDefinition, &scope->types);
-	Type* type = Prototype_generateType(v->proto);
+	printf("PUSH %s\n", v->name);
+	Type* type = Prototype_generateType(v->proto, &scope->scope);
 	td->type = type;
 	td->variable = v;
 
@@ -129,3 +135,29 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 	return NULL;
 }
+
+
+
+Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
+	Array_loop(TypeDefinition, scope->types, t)
+		if (t->variable == variable)
+			return t->type;
+	
+	return NULL;
+}
+
+Type* ScopeFunction_globalSearchType(Scope* scope, Variable* variable) {
+	while (scope) {
+		if (scope->type == SCOPE_FUNCTION) {
+			Type* t = ScopeFunction_searchType((ScopeFunction*)scope, variable);
+			if (t) {return t;}
+		}
+		
+		scope = scope->parent;
+	}
+	
+	return NULL;
+}
+
+
+

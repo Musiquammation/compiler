@@ -49,6 +49,7 @@ struct Expression {
 			Variable** variableArr;
 			int length;
 			char next; // 0: no, 1: any, 2: scope
+			bool freeVariableArr;
 		} property;
 	} data;
 };
@@ -113,6 +114,9 @@ enum {
 	EXPRESSION_L_DECREMENT,     // --a
 	EXPRESSION_A_INCREMENT,     // a++ or ++a (used temporarily)
 	EXPRESSION_A_DECREMENT,     // a-- or --a (used temporarily)
+	
+	EXPRESSION_ADDR_OF,         // &a
+	EXPRESSION_VALUE_AT,        // *a
 };
 
 

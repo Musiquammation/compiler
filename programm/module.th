@@ -1,7 +1,10 @@
 @!module {
-	class Integer;
-	class Pointer;
 	@langstd class Type;
+	@langstd class Pointer;
+
+	
+	class Integer;
+	class Container;
 
 	function main(): int;
 }

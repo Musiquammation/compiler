@@ -1,4 +1,5 @@
 function {
-	
+	let number: Integer;
+	let ptr = &number;
 }
 
