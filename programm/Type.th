@@ -1,7 +1,3 @@
 class {
-	for {
-		owner: bool;
-	}
-
 	address: size_t;
 }

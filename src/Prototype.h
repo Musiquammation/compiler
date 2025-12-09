@@ -38,6 +38,9 @@ struct ProtoSetting {
 };
 
 #define Prototype_mode(p) ((p).state & 0xff)
+#define Prototype_addUsage(p)\
+{int protoState = (p).state;\
+	(p).state = (((protoState >> 8) + 1) << 8) | (protoState & 0xff);}
 
 struct Prototype {
 	int state;

@@ -1,5 +1,5 @@
 function {
-	let number: Integer;
-	let ptr = &number;
+	let number: Container<K: Integer>;
+	let u = &number.obj;
 }
 

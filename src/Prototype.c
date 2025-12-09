@@ -82,9 +82,7 @@ Prototype* Prototype_create_reference(Variable** varr, int varrLength) {
 	Prototype* rp = varr[varrLength-1]->proto;
 	proto->ref.proto = rp;
 
-	int state = rp->state;
-	rp->state = (((state >> 8) + 1) << 8) | (state & 0xff); // add usage
-
+	Prototype_addUsage(*rp);
 	return proto;
 }
 	
@@ -184,6 +182,7 @@ static char direct_hasMeta(Prototype* proto) {
 
 
 
+
 Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
@@ -193,16 +192,38 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 			return NULL;
 		}
 
-		if (proto->ref.varrLength > 1) {
-			raiseError("[TODO] proto->ref.varrLength > 1");
-		}
-
-		Type* type = ScopeFunction_globalSearchType(scope, proto->ref.varr[0]);
-		if (!type) {
+		Variable** varr = proto->ref.varr;
+		Type* origin = ScopeFunction_globalSearchType(scope, varr[0]);
+		if (!origin) {
 			raiseError("[Architecture] Refered type not found");
 		}
-		
-		return type;
+
+		int varr_len = proto->ref.varrLength;
+		if (varr_len == 1) {
+			origin->refCount++;
+			return origin;
+		}
+
+		// Generate another type with data decaled
+		int varr_sublen = varr_len - 1;
+		Type* newType = malloc(sizeof(Type));
+		Variable* lastVariable = varr[varr_sublen];
+		Type* meta = origin->meta;
+
+		printf("lastwas %p %s\n", newType, lastVariable->name);
+		newType->proto = lastVariable->proto;
+		newType->meta = meta;
+		newType->data = origin->data + Prototype_getVariableOffset(&varr[1], varr_sublen);
+		newType->reference = origin;
+		newType->refCount = 0;
+		newType->primitiveSizeCode = 0;
+
+		origin->refCount++;
+		if (meta) {
+			// meta->refCount++;
+		}
+
+		return newType;
 	}
 	
 	case PROTO_MODE_DIRECT:
@@ -218,7 +239,11 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		printf("NTYPE %p %s\n", type, proto->direct.cl->name);
 		Class* cl = proto->direct.cl;
 		type->proto = proto;
+		type->reference = 0;
+		type->refCount = 0;
 		type->primitiveSizeCode = 0;
+
+		Prototype_addUsage(*proto);
 		
 		if (hasMeta == 0) {
 			type->data = NULL;
@@ -233,6 +258,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 
 		ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
 		if (sizes.size > 0) {
+			printf("newfor %p slen=%d\n", type, proto->direct.settingLength);
 			void* data = calloc(1, sizes.size);
 			memset(data, 0, sizes.size);
 			type->data = data;

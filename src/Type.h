@@ -10,6 +10,8 @@ struct Type {
 	Prototype* proto;
 	Type* meta;
 	mblock_t data;
+	Type* reference;
+	int refCount;
 	char primitiveSizeCode;
 };
 

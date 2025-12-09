@@ -3,6 +3,6 @@ class {
 		K: Type;
 	}
 
-	obj: Pointer<T: Integer>;
+	obj: Pointer<T: K>;
 }
 

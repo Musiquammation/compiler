@@ -2000,8 +2000,8 @@ static void placeExpression(
 			if (targetSubLength != 0) {
 				raiseError("[Intern] No prototype to place expression");
 			}
-			
-			varrDest[targetSubLength]->proto = Prototype_generateStackPointer(refVarArr, refArrLength);
+
+			varrDest[0]->proto = Prototype_generateStackPointer(refVarArr, refArrLength);
 			reference->data.property.freeVariableArr = false;
 		}
 		

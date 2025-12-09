@@ -14,15 +14,36 @@
 void Type_free(Type* type) {
 	if (type->primitiveSizeCode)
 		return;
+
+	int refCount = type->refCount;
+	printf("left: %d\n", refCount);
+	if (refCount > 0) {
+		type->refCount = refCount - 1;
+		return;
+	}
+
+	Type* ref = type->reference;
+	if (ref) {
+		Type_free(ref);
+		if (ref != type) {
+			free(type);
+		}
+
+
+		return;
+	}
 	
-	printf("FTYPE %p %s\n", type, type->proto->direct.cl->name);
-	void* data = type->data;
+	// printf("FTYPE %p %s\n", type, type->proto->direct.cl->name);
+	// printf("FTYPE %p %p\n", type, type->proto->direct.cl);
+	printf("FTYPE %p\n", type);
 	Type* meta = type->meta;
+	void* data = type->data;
 	if (data) {
 		Type_defaultDestructors(data, meta);
 		free(data);
 	}
 
+	Prototype_free(type->proto, true);
 	free(type);
 
 	if (meta) {
@@ -40,32 +61,17 @@ void Type_defaultConstructors(
 	Scope* scope
 ) {
 	typedef Variable* var_t;
-	
+
 	Variable** const metaVariables = meta.proto->direct.cl->variables.data;
 	const int metaVariables_len = meta.proto->direct.cl->variables.length;
 
 	Array_for(ProtoSetting, settings, settingLength, setting) {
 		if (setting->useProto) {
+			Prototype* proto = setting->proto;
 			Variable* variable = setting->variable;
-			bool isOwner = (Prototype_mode(*setting->proto) == PROTO_MODE_DIRECT);
-
-			Type* stype = Prototype_generateType(setting->proto, scope);
+			Type* stype = Prototype_generateType(proto, scope);
 			*((size_t*) data + variable->offset) = (size_t)stype;
-			
-			// Define as owner
-			label_t name = variable->name;
-			Array_for(var_t, metaVariables, metaVariables_len, vptr) {
-				Variable* v = *vptr;
-				if (v->name == name) {
-					// Variable found (owner is at +0)
-					*(bool*)(meta.data + v->offset + 0) = isOwner;
-					goto found;
-				}
-			}
-
-			raiseError("[Langstd] Meta variable not found");
-
-			found:
+			printf("gave at %d\n", variable->offset);
 		}
 	}
 }
@@ -83,25 +89,9 @@ void Type_defaultDestructors(void* data, Type* meta) {
 		Class* vcl = Prototype_getClass(variable->proto);
 
 		if (vcl == _langstd.type) {
-			/// TODO: check owner
-			label_t name = variable->name;
-			Array_for(var_t, metaVariables, metaVariables_len, vptr) {
-				Variable* v = *vptr;
-				if (v->name == name) {
-					printf("should delete: %d\n", *(bool*)(meta->data + v->offset + 0));
-					// Variable found (owner is at +0)
-					if (*(bool*)(meta->data + v->offset + 0)) {
-						Type_free(*(Type**)data);
-					}
-					goto typeOwner_found;
-				}
-			}
-
-			raiseError("[Intern] Cannot find type meta-class");
-
-			typeOwner_found:
-		}
-		
+			printf("typeat %p of %p\n", *(Type**)data, data);
+			Type_free(*(Type**)data);
+		}		
 	}
 }
 

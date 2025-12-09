@@ -1,0 +1,9 @@
+class Vector {
+   	for {
+		U: Type;
+	}
+
+    x: U;
+    y: U;
+
+}
