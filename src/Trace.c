@@ -339,16 +339,19 @@ void TracePack_print(const TracePack* pack, int position) {
 
 				case TRACECODE_CREATE: {
 					uint32_t n2   = pack->line[++i];
+					int flags     = (n >> 10) & 0x3f;
 					int variable  = (n >> 16) & 0xFFF;
 					int size      = n2 >> 16;
 					int regable   = n & (1<<28);
 					int next2     = n2& 0x3FF;
+
 					printf(
-						"[%04d] CREATE v%d size=%d next=+%d %s\n",
+						"[%04d] CREATE v%d size=%d next=+%d {flags=%d} %s\n",
 						i-1+position,
 						variable,
 						size,
 						next2,
+						flags,
 						regable ? "registrable" : "complex"
 					);
 
@@ -857,7 +860,6 @@ void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode) {
 		ptr[1] = (uint)offset;
 
 	}
-
 }
 
 
@@ -1065,9 +1067,9 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	switch (exprType) {
 	case EXPRESSION_PROPERTY:
 	{
-		int subLength = expr->data.property.length - 1;
+		int length = expr->data.property.length;
 		Variable** varr = expr->data.property.variableArr;
-		char primitiveSizeCode = Prototype_getPrimitiveSizeCode(varr[subLength]->proto);
+		char primitiveSizeCode = Prototype_getPrimitiveSizeCode(varr[length-1]->proto);
 		int signedObjSize;
 		if (primitiveSizeCode) {
 			if (primitiveSizeCode == 5) {
@@ -1078,7 +1080,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				signedObjSize = primitiveSizeCode;
 			}
 		} else {
-			signedObjSize = Prototype_getSizes(varr[subLength]->proto).size;
+			signedObjSize = Prototype_getSizes(varr[length-1]->proto).size;
 
 			if (signedObjSize != signedSize) {
 				raiseError("[Type] Sizes do not match on copy");
@@ -1094,7 +1096,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				destVar,
 				varr[0]->id,
 				destOffset,
-				Prototype_getVariableOffset(varr, subLength),
+				Prototype_getVariableOffset(varr, length),
 				size,
 				primitiveSizeCode
 			);
@@ -1703,7 +1705,7 @@ void Trace_ins_getStackPtr(Trace* trace, int destVar, int srcVar, int destOffset
 	arr[0] = TRACECODE_STACK_PTR | (srcVar<<16);
 	arr[1] = srcOffset;
 
-	trline_t* ptr = Array_get(VariableTrace, trace->variables, destVar)->creationLinePtr;
+	trline_t* ptr = Array_get(VariableTrace, trace->variables, srcVar)->creationLinePtr;
 	*ptr = (*ptr) | (1<<12);
 }
 
@@ -1858,6 +1860,7 @@ int Trace_reg_place(
 	replace->variable = variable;
 	replace->destination = -reg;
 	replace->reading = reading;
+	replace->becauseOfStackOnly = false;
 	// replace->source = source;
 	
 	trace->varInfos[variable].nextUse = nextUse;
@@ -2190,7 +2193,6 @@ void Trace_placeRegisters(Trace* trace) {
 			VarInfoTrace* vi = &varInfos[varIdx];
 			int store = vi->store;
 
-			printf("rememb %d\n", vi->store);
 
 			if (code == 0) {
 				// Last usage => destroy variable
@@ -2220,13 +2222,30 @@ void Trace_placeRegisters(Trace* trace) {
 			
 			// Put variable in a register
 			if (movesAllowed && varInfos[varIdx].registrable) {
-				if (store >= 0 || store == -TRACE_REG_NONE) {
-					printf("placedRegisters %d | %d\n", placedRegisters, store);
+				if (varInfos[varIdx].stackOnly) {
+					if (store == -TRACE_REG_NONE) {
+						int dest = trace->stackId;
+						trace->stackId++;
+						varInfos[varIdx].store = dest;
+
+						TraceReplace* replace = Array_push(TraceReplace, &trace->replaces);
+						replace->instruction = ip;
+						replace->variable = varIdx;
+						replace->victim = -TRACE_REG_NONE;
+						replace->destination = dest;
+						replace->victimStore = -TRACE_REG_NONE;
+						replace->reading = readmode;
+						replace->becauseOfStackOnly = true;
+					}
+
+				} else if (store >= 0 || store == -TRACE_REG_NONE) {
+					printf("placedRegisters %d | %d for v%d\n", placedRegisters, store, varIdx);
 					int reg = Trace_reg_chooseFast(regs, -1);
 					vi->store = -Trace_reg_place(trace, regs, ip, varIdx, store, nextUse, reg, readmode);
 				} else {
 					regs[-store].nextUse = nextUse;
 				}
+
 
 			}
 
@@ -2301,6 +2320,7 @@ void Trace_placeRegisters(Trace* trace) {
 		{
 			char registrable = (line >> 28) & 1;
 			char argument = (line >> 11) & 1;
+			bool stackOnly = (!registrable) || ((line >> 12) & 1);
 			trline_t size = line >> 16;
 			trline_t variable = (line >> 16) & 0xFFF;
 
@@ -2315,6 +2335,8 @@ void Trace_placeRegisters(Trace* trace) {
 			varInfos[variable].size = size;
 			varInfos[variable].nextUse = nextUse;
 			varInfos[variable].registrable = registrable;
+			varInfos[variable].stackOnly = stackOnly;
+
 			if (registrable) {
 				if (argument && nextUse > 0) {
 					int reg = ARGUMENT_REGISTERS[argumentPosition];
@@ -2370,12 +2392,18 @@ void Trace_placeRegisters(Trace* trace) {
 				uint srcVar = usageBuffer[0] >> 11;
 				uint destVar = usageBuffer[1] >> 11;
 				int source = varInfos[srcVar].store;
-				printf("plce %d|%d src %d(%d) ; dst %d(%d)\n", regs[TRACE_REG_R11].variable, reg, srcVar, source, destVar, varInfos[destVar].store);
+				printf(
+					"plce %d|%d src %d(%d) ; dst %d(%d)\n",
+					regs[reg].variable, reg,
+					srcVar, source,
+					destVar, varInfos[destVar].store);
+
 				varInfos[srcVar].nextUse = -1;
 				varInfos[srcVar].store = -TRACE_REG_NONE;
 
 				if (source >= 0) {
-					raiseError("[TODO]: free stack");
+					/// TODO: handle this case ?
+					// raiseError("[TODO]: free stack");
 
 				} else if (source != -TRACE_REG_NONE) {
 					regs[-source].nextUse = -1;
@@ -3088,7 +3116,13 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 	TraceStackHandler_create(&trace->stackHandler, trace->stackId);
 
-	fprintf(output, "fn_%p: ; %s\n", fnAsm->fn, fnAsm->fn->name);
+	if (fnAsm->fn->returnType) {
+		fprintf(output, "fn_%p: ; %s(...) -> %s;\n",
+			fnAsm->fn, fnAsm->fn->name, 
+			fnAsm->fn->returnType->direct.cl->name);
+	} else {
+		fprintf(output, "fn_%p: ; %s(...);\n", fnAsm->fn, fnAsm->fn->name);
+	}
 
 
 	Stack placementSaves; // type: int*
@@ -3186,6 +3220,13 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		// Apply replaces
 		while (replace < finalReplace && replace->instruction == ip) {
 			uint variable = replace->variable;
+
+			if (replace->becauseOfStackOnly) {
+				varInfos[variable].store = replace->destination;
+				replace++;
+
+				continue;
+			}
 			
 			// Move victim
 			#define adapt(p, move, sstore) if (sstore < 0) {p = sstore; move=0;} else {\
@@ -3241,7 +3282,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 			// Free stack area
 			int destination = replace->destination;
-			if (varInfos[variable].store >= 0 && replace->reading){
+			if (varInfos[variable].store >= 0 && replace->reading) {
 				int size = varInfos[variable].size;
 				int psize = Trace_packSize(size);
 				int p1, move1;
@@ -3338,19 +3379,24 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 					}
 
 					store = rspAdapter.address;
+				
 				} else if (code == 0) {
 					regs[-store].nextUse = -1;
 					varInfos[varIdx].nextUse = -1;
-				} else {
+				} else if (store != -TRACE_REG_NONE) {
 					int nextUse = getNextUse();
 					regs[-store].nextUse = nextUse;
 					varInfos[varIdx].nextUse = nextUse;
+				} else {
+					raiseError("[Trace] A variable must be placed");
+					return;
 				}
 				
 				
 				uses[usageCompletion].store = store;
 				uses[usageCompletion].offset = 0;
 				usageCompletion++;
+
 			} else {
 				line = *linePtr;
 				linePtr++;
@@ -3472,6 +3518,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			int size = (*linePtr) >> 16;
 			char registrable = (line >> 28) & 1;
 			char argument = (line >> 11) & 1;
+			bool stackOnly = (!registrable) || ((line >> 12) & 1);
+
 
 			line = *linePtr;
 			linePtr++;
@@ -3483,6 +3531,8 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			printf("create %d\n", variable);
 			varInfos[variable].size = size;
 			varInfos[variable].nextUse = nextUse;
+			varInfos[variable].stackOnly = stackOnly;
+
 			if (argument) {
 				if (registrable) {
 					int reg = ARGUMENT_REGISTERS[argumentPosition];
@@ -3504,8 +3554,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 		case TRACECODE_DEF:
 		{
 			int type = (line >> 10) & 0x3;
-			fprintf(output, "\tmov ");
 			allowRsp(0);
+			
+			fprintf(output, "\tmov ");
 
 			Trace_printUsage(trace, output, type, useAt(0));
 			fprintf(output, ", ");
@@ -3998,12 +4049,16 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			int offset = (*linePtr);
 			linePtr++;
 			ip++;
-			break;
 
 			int store = varInfos[variable].store;
 			if (store < 0) {
-				raiseError("[Trace] Cannot get the address of a variable stored in a register");
-				return;
+				fprintf(output, "\tmov ");
+				Trace_printUsage(trace, output, 3, useAt(0));
+				fprintf(output, ", rsp\n\tadd rsp, 42; error\n");
+				// raiseError("[Trace] Cannot get the address of a variable stored in a register");
+				// return;
+
+				break;
 			}
 
 			offset = trace->stackHandler.rsp - varInfos[variable].size;
@@ -4046,7 +4101,6 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 	fprintf(output, "\tret\n\n");
 }
-
 
 
 

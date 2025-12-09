@@ -88,6 +88,7 @@ typedef struct {
 	int destination;
 	int victimStore; // for the victim
 	char reading;
+	bool becauseOfStackOnly; // destination will be a stackId
 } TraceReplace;
 
 typedef struct {
@@ -100,7 +101,9 @@ typedef struct {
 	int nextUse;
 	int store; // positive => stackId, negative => register
 	char registrable;
+	bool stackOnly;
 } VarInfoTrace;
+
 
 struct Trace {
 	int instruction;

@@ -1767,9 +1767,9 @@ static void placeExpression(
 			}
 
 			Variable** varrDest = targetExpr->data.property.variableArr;
-			int subLength = targetExpr->data.property.length - 1;
+			int length = targetExpr->data.property.length;
 
-			Variable* last = varrDest[subLength];
+			Variable* last = varrDest[length-1];
 			int id;
 			int signedSize;
 			if (last->proto) {
@@ -1826,7 +1826,7 @@ static void placeExpression(
 				trace,
 				valueExpr,
 				id,
-				Prototype_getVariableOffset(varrDest, subLength),
+				Prototype_getVariableOffset(varrDest, length),
 				signedSize,	
 				EXPRESSION_PROPERTY
 			);
@@ -1839,14 +1839,14 @@ static void placeExpression(
 		{
 			/// TODO: handle null id
 			Variable** varrDest = targetExpr->data.property.variableArr;
-			int subLength = targetExpr->data.property.length - 1;
+			int length = targetExpr->data.property.length;
 
 			Trace_set(
 				trace,
 				valueExpr,
 				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, subLength),
-				Prototype_getSignedSize(varrDest[subLength]->proto),
+				Prototype_getVariableOffset(varrDest, length),
+				Prototype_getSignedSize(varrDest[length-1]->proto),
 				EXPRESSION_FNCALL
 			);
 
@@ -1867,21 +1867,21 @@ static void placeExpression(
 	
 	} else if (sourceExprType >= EXPRESSION_ADDITION && sourceExprType <= EXPRESSION_L_DECREMENT) {
 		Variable** varrDest = targetExpr->data.property.variableArr;
-		int subLength = targetExpr->data.property.length - 1;
+		int length = targetExpr->data.property.length;
 
-		Prototype* vproto = varrDest[subLength]->proto;
+		Prototype* vproto = varrDest[length-1]->proto;
 
 		if (vproto) {
 			Trace_set(
 				trace,
 				valueExpr,
 				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, subLength),
-				Prototype_getSignedSize(varrDest[subLength]->proto),
+				Prototype_getVariableOffset(varrDest, length),
+				Prototype_getSignedSize(varrDest[length-1]->proto),
 				sourceExprType
 			);
 		
-		} else if (subLength == 0) {
+		} else if (length == 1) {
 			Variable* v = varrDest[0];
 			int signedSize = Expression_reachSignedSize(sourceExprType, sourceExpr);
 			Prototype* p = Expression_getPrimitiveProtoFromSize(signedSize);
@@ -1977,12 +1977,11 @@ static void placeExpression(
 		
 		int refArrLength = reference->data.property.length;
 		Variable** refVarArr = reference->data.property.variableArr;
-		int srcOffset = Prototype_getVariableOffset(
-			&refVarArr[1], refArrLength-1);
+		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
 
 		int srcVar = refVarArr[0]->id;
 
-		int targetSubLength = targetExpr->data.property.length - 1;
+		int targetLength = targetExpr->data.property.length;
 		Variable** varrDest = targetExpr->data.property.variableArr;
 		int destVar = varrDest[0]->id;
 		int destOffset;
@@ -1991,13 +1990,13 @@ static void placeExpression(
 			varrDest[0]->id = destVar;
 			destOffset = -1;
 		} else {
-			destOffset = Prototype_getVariableOffset(&varrDest[1], targetSubLength);
+			destOffset = Prototype_getVariableOffset(varrDest, targetLength-1);
 
 		}
 
 
-		if (varrDest[targetSubLength]->proto == NULL) {
-			if (targetSubLength != 0) {
+		if (varrDest[targetLength-1]->proto == NULL) {
+			if (targetLength != 1) {
 				raiseError("[Intern] No prototype to place expression");
 			}
 

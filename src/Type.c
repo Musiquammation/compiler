@@ -22,21 +22,24 @@ void Type_free(Type* type) {
 		return;
 	}
 
+	printf("FTYPE %p\n", type);
+
 	Type* ref = type->reference;
+	Type* meta = type->meta;
 	if (ref) {
 		Type_free(ref);
 		if (ref != type) {
 			free(type);
 		}
 
+		if (meta) {
+			Type_free(meta);
+		}
 
 		return;
 	}
-	
-	// printf("FTYPE %p %s\n", type, type->proto->direct.cl->name);
-	// printf("FTYPE %p %p\n", type, type->proto->direct.cl);
-	printf("FTYPE %p\n", type);
-	Type* meta = type->meta;
+
+
 	void* data = type->data;
 	if (data) {
 		Type_defaultDestructors(data, meta);

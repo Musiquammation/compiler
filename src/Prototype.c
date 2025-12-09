@@ -205,22 +205,21 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		}
 
 		// Generate another type with data decaled
-		int varr_sublen = varr_len - 1;
 		Type* newType = malloc(sizeof(Type));
-		Variable* lastVariable = varr[varr_sublen];
+		Variable* lastVariable = varr[varr_len - 1];
 		Type* meta = origin->meta;
 
 		printf("lastwas %p %s\n", newType, lastVariable->name);
 		newType->proto = lastVariable->proto;
 		newType->meta = meta;
-		newType->data = origin->data + Prototype_getVariableOffset(&varr[1], varr_sublen);
+		newType->data = origin->data + Prototype_getVariableOffset(varr, varr_len);
 		newType->reference = origin;
 		newType->refCount = 0;
 		newType->primitiveSizeCode = 0;
 
 		origin->refCount++;
 		if (meta) {
-			// meta->refCount++;
+			meta->refCount++;
 		}
 
 		return newType;
@@ -595,6 +594,7 @@ char Prototype_getPrimitiveSizeCode(Prototype* proto) {
 
 	case PROTO_MODE_DIRECT:
 	{
+		printf("primitiveSizeCode: %d\n", proto->direct.primitiveSizeCode);
 		return proto->direct.primitiveSizeCode;
 	}
 
@@ -630,9 +630,6 @@ int Prototype_getGlobalVariableOffset(Prototype* proto, Variable* path[], int le
 }
 
 int Prototype_getVariableOffset(Variable* path[], int length) {
-	if (length == 0)
-		return 0;
-
 	/// TODO: handle not registrable issue
 	switch (Prototype_getPrimitiveSizeCode(path[0]->proto)) {
 	case PSC_UNKNOWN:

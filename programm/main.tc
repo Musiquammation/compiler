@@ -1,5 +1,11 @@
-function {
+function test(): size_t {
 	let number: Container<K: Integer>;
-	let u = &number.obj;
+	number.obj.address = 58;
+
+	let ptr: Pointer<T: Integer>;
+	ptr = &number;
+
+	return ptr.address + number.obj.address;
+
 }
 
