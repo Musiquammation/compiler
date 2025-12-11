@@ -16,6 +16,8 @@ void Class_create(Class* cl) {
 	cl->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
 	cl->primitiveSizeCode = PSC_UNKNOWN;
+
+	cl->std_methods.fastAccess = NULL;
 }
 
 

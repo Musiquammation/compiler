@@ -2,6 +2,7 @@
 #define COMPILER_PROTOTYPE_H_
 
 #include "declarations.h"
+#include "label_t.h"
 #include "definitionState_t.h"
 #include <tools/Array.h>
 
@@ -25,11 +26,14 @@ typedef struct {
 } ExtendedPrototypeSize;
 
 
-
 struct ProtoSetting {
 	char useProto;
+	char useVariable;
 
-	Variable* variable;
+	union {
+		Variable* variable;
+		label_t name;
+	};
 
 	union {
 		Prototype* proto;
@@ -118,5 +122,10 @@ Prototype* Prototype_copy(Prototype* src);
 bool Prototype_isType(Prototype* proto);
 
 Prototype* Prototype_generateStackPointer(Variable **varr, int varLength);
+
+
+
+Variable* ProtoSetting_getVariable(ProtoSetting* setting, Class* meta);
+
 
 #endif

@@ -27,15 +27,6 @@ struct CommonLabels {
 	label_t _while;
 	label_t _switch;
 	
-	label_t _module;
-	label_t _main;
-	label_t _control;
-	label_t _langstd;
-	
-	label_t _Pointer;
-	label_t _Type;
-	label_t _Variadic;
-	
 	label_t _i8;
 	label_t _u8;
 	label_t _i16;
@@ -55,6 +46,20 @@ struct CommonLabels {
 	label_t _float;
 	label_t _double;
 	label_t _size_t;
+
+	label_t _Pointer;
+	label_t _Type;
+	label_t _Variadic;
+	label_t _Token;
+
+	label_t _module;
+	label_t _main;
+	label_t _control;
+	label_t _langstd;
+	label_t _token;
+	label_t _fastAccess;
+	label_t _stdFastAccess;
+	
 };
 
 

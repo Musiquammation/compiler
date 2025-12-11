@@ -28,10 +28,14 @@ struct Class {
 	Array functions; // type: Function*
 
 	Class* meta;
+	label_t name;
+
+	struct {
+		Function* fastAccess;
+	} std_methods;
+	
 	definitionState_t definitionState;
 	definitionState_t metaDefinitionState;
-	label_t name;
-	
 	char primitiveSizeCode;
 
 	int size;

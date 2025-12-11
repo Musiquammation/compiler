@@ -71,7 +71,7 @@ void Type_defaultConstructors(
 	Array_for(ProtoSetting, settings, settingLength, setting) {
 		if (setting->useProto) {
 			Prototype* proto = setting->proto;
-			Variable* variable = setting->variable;
+			Variable* variable = ProtoSetting_getVariable(setting, cl);
 			Type* stype = Prototype_generateType(proto, scope);
 			*((size_t*) data + variable->offset) = (size_t)stype;
 			printf("gave at %d\n", variable->offset);

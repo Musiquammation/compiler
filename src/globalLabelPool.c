@@ -1,4 +1,4 @@
 #include "globalLabelPool.h"
 
-LabelPool _labelPool;
-CommonLabels _commonLabels;
+LabelPool _labelPool = {0};
+CommonLabels _commonLabels = {0};

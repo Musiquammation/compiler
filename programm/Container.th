@@ -1,8 +1,5 @@
 class {
-	for {
-		K: Type;
-	}
-
-	obj: Pointer<T: K>;
+	x: int;
+	y: int;
 }
 

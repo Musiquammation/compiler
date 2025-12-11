@@ -22,7 +22,11 @@ void Function_delete(Function* fn) {
 	}
 
 	Array_free(fn->arguments);
+	if (fn->returnType) {
+		Prototype_free(fn->returnType, true);
+	}
 }
+
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf) {
 	ScopeFile* file = Scope_reachFile(&sf->scope);

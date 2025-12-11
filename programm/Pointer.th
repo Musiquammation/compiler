@@ -11,5 +11,7 @@ class {
 	}
 
 	address: size_t;
+
+	copy(): Pointer<T: Type>;
 }
 

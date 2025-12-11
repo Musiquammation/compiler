@@ -54,7 +54,7 @@ void Syntax_thFile(ScopeFile* scope) {
 	free(filepath);
 
 	scope->state_th = DEFINITIONSTATE_READING;
-
+	
 	while (true) {
 		Token token = Parser_readAnnotated(&parser, &_labelPool);
 		
@@ -63,12 +63,13 @@ void Syntax_thFile(ScopeFile* scope) {
 		case 0:
 		{
 			/// TODO: definition required ?
+			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
 				.definedClass = NULL
 			};
 
-			Syntax_functionDeclaration(&scope->scope, &parser, 0, &defaultData);
+			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser, 0, &defaultData);
 
 			break;
 		}
@@ -144,13 +145,14 @@ void Syntax_tcFile(ScopeFile* scope) {
 		// function
 		case 0:
 		{
+			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
 				.definedClass = subDefinedClass
 			};
 
-			Syntax_functionDeclaration(&scope->scope, &parser, 0, &defaultData);
+			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser, 0, &defaultData);
 
 			break;
 		}
@@ -499,10 +501,12 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 					.definedClass = NULL
 				};
 
+				Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 				Syntax_functionDeclaration(
 					scope,
+					&noneScope,
 					parser,
-					SYNTAXDATAFLAG_FN_DCL_REQUIRES_DECLARATION,
+					SYNTAXDATAFLAG_FNDCL_REQUIRES_DECLARATION,
 					&defaultData
 				);
 				break;
@@ -517,7 +521,7 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 				Syntax_classDeclaration(
 					scope,
 					parser,
-					SYNTAXDATAFLAG_CL_DCL_REQUIRES_DECLARATION,
+					SYNTAXDATAFLAG_CLDCL_REQUIRES_DECLARATION,
 					&defaultData
 				);
 				break;
@@ -592,7 +596,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		
 		// Definition
 		case 2:
-			if (flags & SYNTAXDATAFLAG_CL_DCL_REQUIRES_DECLARATION) {
+			if (flags & SYNTAXDATAFLAG_CLDCL_REQUIRES_DECLARATION) {
 				raiseError("[Syntax] A class DECLARATION was expected");
 				break;
 			}
@@ -602,7 +606,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		
 		// End
 		case 3:
-			if (flags & SYNTAXDATAFLAG_CL_DCL_REQUIRES_DEFINITION) {
+			if (flags & SYNTAXDATAFLAG_CLDCL_REQUIRES_DEFINITION) {
 				raiseError("[Syntax] A class DEFINITION was expected");
 				return;
 			}
@@ -618,7 +622,6 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 	}
-
 
 	finishWhile:
 
@@ -661,6 +664,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 			
 			check(pointer, Pointer);
 			check(type, Type);
+			check(token, Token);
 
 			#undef check
 
@@ -715,15 +719,27 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	Class* meta = NULL;
 	MemoryCursor cursor = {0, 0};
 	Array metaControlFunctions;
+
+	int annotationFlags = 0;
+	enum {
+		ANNOTFLAG_FAST_ACCESS = 1,
+		ANNOTFLAG_STD_FAST_ACCESS = 2
+	};
+
 	metaControlFunctions.reserved = 0; // to prevent Array_free
 
 	// Read content
 	while (true) {
-
 		Token token = Parser_readAnnotated(parser, &_labelPool);
 
 		Array_loop(Annotation, parser->annotations, annotation) {
 			int annotType = annotation->type;
+
+
+			#define check(test) {if (annotationFlags & (test)){\
+				raiseError("[Syntax] Invalid combinaison of annotations");\
+				return;}} \
+
 
 			switch (annotType) {
 			case ANNOTATION_CONTROL:
@@ -747,22 +763,93 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				goto nextSequence;
 			}
 
+
+
+			case ANNOTATION_FAST_ACCESS:
+				check(
+					ANNOTFLAG_STD_FAST_ACCESS |
+					ANNOTFLAG_FAST_ACCESS
+				);
+				
+				annotationFlags |= ANNOTFLAG_FAST_ACCESS;
+				break;
+
+			case ANNOTATION_STD_FAST_ACCESS:
+				check(
+					ANNOTFLAG_STD_FAST_ACCESS |
+					ANNOTFLAG_FAST_ACCESS
+				);
+
+				annotationFlags |= ANNOTFLAG_STD_FAST_ACCESS;
+				break;
+
+
+
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
 				return; 
 			}
 			}
+			#undef check
 		}
 
 		parser->annotations.length = 0; // clear annotations
 
-		
 		switch (TokenCompare(SYNTAXLIST_CLASS_DEFINITION, 0)) {
 		// function
 		case 0:
 		{
-			raiseError("[TODO] method of a class definition");
+			if ((annotationFlags & (
+				ANNOTFLAG_FAST_ACCESS|
+				ANNOTFLAG_STD_FAST_ACCESS
+			)) == 0) {
+				raiseError("[Syntax] Illegal usage of function keyword");
+				return;
+			}
+
+			if (cl->std_methods.fastAccess) {
+				raiseError("[Architecture] This class has already a fast access method");
+				return;
+			}
+
+			if (annotationFlags & ANNOTFLAG_FAST_ACCESS) {
+				Syntax_FunctionDeclarationArg declData = {
+					.defaultName = LABEL_NULL,
+					.definedClass = NULL
+				};
+
+
+				Syntax_functionDeclaration(
+					&outsideScope.scope,
+					&variadicScope.scope,
+					parser,
+					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_FAST_ACCESS),
+
+					&declData
+				);
+			
+			} else if (annotationFlags & ANNOTFLAG_STD_FAST_ACCESS) {
+				Syntax_FunctionDeclarationArg declData = {
+					.defaultName = LABEL_NULL,
+					.definedClass = NULL
+				};
+
+
+				Syntax_functionDeclaration(
+					&outsideScope.scope,
+					&variadicScope.scope,
+					parser,
+					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_FORBID_RETURN |
+						SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS),
+
+					&declData
+				);
+			}
+			
+
 			break;
 		}
 
@@ -838,6 +925,12 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			// function
 			case 1:
 			{
+				if (annotationFlags & (ANNOTATION_FAST_ACCESS | ANNOTATION_STD_FAST_ACCESS)) {
+					raiseError("[Syntax] With fastAccess annotation, "
+						"you must use function keyword");
+				}
+
+				/// TODO: pass annotation flag
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = name,
 					.definedClass = NULL
@@ -847,6 +940,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 				Syntax_functionDeclaration(
 					&outsideScope.scope,
+					&variadicScope.scope,
 					parser,
 					SYNTAXDATAFLAG_FNDCL_FORBID_NAME,
 					&declData
@@ -908,10 +1002,10 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array* settings) {
 	label_t label = NULL;
-	enum {NODEFINE = -1, NEEDS_COMMA = -2};
+	enum {NODEFINE = -1, NEEDS_COMMA = -2, DEFINE_LABEL = -3};
 
 	int offsetToDefine = NODEFINE;
-	Variable* variableToDefine;
+	Variable* variableToDefine = NULL;
 	bool typeToDefine = false;
 	Array_create(settings, sizeof(ProtoSetting));
 	
@@ -919,7 +1013,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 		Token token = Parser_read(parser, &_labelPool);
 		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
 
-		printf("at %d: ", offsetToDefine);
+		printf("at %d(%d) %d: ", syntaxResult, typeToDefine, offsetToDefine);
 		Token_println(&token);
 		switch (syntaxResult) {
 		// label
@@ -936,7 +1030,15 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 				Prototype* p = Syntax_proto(parser, scope);
 				ProtoSetting* ps = Array_push(ProtoSetting, settings);
 				ps->useProto = true;
-				ps->variable = variableToDefine;
+				if (variableToDefine) {
+					ps->useVariable = true;
+					ps->variable = variableToDefine;
+					variableToDefine = NULL;
+				} else {
+					ps->useVariable = false;
+					ps->name = label;
+					label = NULL;
+				}
 				ps->proto = p;
 				
 				typeToDefine = false;
@@ -972,6 +1074,12 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 		{
 			if (offsetToDefine == NEEDS_COMMA) {goto raiseComma;}
 
+			if (!meta) {
+				offsetToDefine = DEFINE_LABEL;
+				typeToDefine = true;
+				break;
+			}
+			
 			// Search type to define
 			typedef Variable* v_ptr;
 			Array_loop(v_ptr, meta->variables, vptr) {
@@ -991,7 +1099,8 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 				goto varFound_type;
 			}
 
-			raiseError("[Unknown] Cannot find type to set\n");
+
+			raiseError("[Unknown] Cannot find type to set");
 
 			varFound_type:
 
@@ -1005,7 +1114,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 		{
 			if (label) {
 				// Label is a type that we have to define
-				raiseError("[TODO] define in order in settings\n");
+				raiseError("[TODO] define in order in settings");
 			}
 
 			// Closing angle
@@ -1133,11 +1242,23 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		// Settings
 		case 0:
 			canBePrimitive = false;
-			if (!cl->meta) {
+
+			switch (cl->definitionState) {
+			case DEFINITIONSTATE_UNDEFINED:
+			case DEFINITIONSTATE_READING:
+				Syntax_proto_readSettings(parser, scope, NULL, &settings);
+				break;
+				
+			case DEFINITIONSTATE_DONE:
+				Syntax_proto_readSettings(parser, scope, cl->meta, &settings);
+				break;
+
+			case DEFINITIONSTATE_NOEXIST:
 				raiseError("[Architecture] Cannot append settings to a class within meta-class");
+				break;
+
 			}
 
-			Syntax_proto_readSettings(parser, scope, cl->meta, &settings);
 			break;
 			
 		// Read verified functions
@@ -1166,7 +1287,13 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 
 
 
-void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData) {
+void Syntax_functionDeclaration(
+	Scope* scope,
+	Scope* variadicScope,
+	Parser* parser,
+	int flags,
+	const Syntax_FunctionDeclarationArg* defaultData
+) {
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
 	bool definitionToRead;
@@ -1214,6 +1341,23 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 	parser->annotations.length = 0; // clear annotations
 
 
+	if (flags & SYNTAXDATAFLAG_FNDCL_FAST_ACCESS) {
+		Variable* arg = malloc(sizeof(Variable));
+		Variable_create(arg);
+		arg->name = _commonLabels._token;
+		arg->proto = Prototype_create_direct(_langstd.type, _langstd.type->primitiveSizeCode, NULL, 0);
+		arg->id = -1;
+		
+		Array_createAllowed(&arguments, sizeof(Variable*), 1);
+		*Array_push(Variable*, &arguments) = arg;
+	}
+
+
+	if (flags & SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS) {
+		arguments.length = 0;
+		arguments.reserved = 0;
+	}
+
 	// Read content
 	while (true) {
 		Token token;
@@ -1260,13 +1404,19 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 				raiseError("[Architecture] return type defined");
 				break;
 			}
+
+			if (flags & SYNTAXDATAFLAG_FNDCL_FORBID_RETURN) {
+				raiseError("[Architecture] return type defintion is forbidden");
+				break;
+			}
+
 			returnTypeAlreadyRead = true;
-			returnType = Syntax_proto(parser, scope);
+			returnType = Syntax_proto(parser, variadicScope);
 			break;
 		
 		// Definition
 		case 4:
-			if (flags & SYNTAXDATAFLAG_FN_DCL_REQUIRES_DECLARATION) {
+			if (flags & SYNTAXDATAFLAG_FNDCL_REQUIRES_DECLARATION) {
 				raiseError("[Syntax] A function DECLARATION was expected");
 				break;
 			}
@@ -1276,7 +1426,7 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 			
 		// End
 		case 5:
-			if (flags & SYNTAXDATAFLAG_FN_DCL_REQUIRES_DEFINITION) {
+			if (flags & SYNTAXDATAFLAG_FNDCL_REQUIRES_DEFINITION) {
 				raiseError("[Syntax] A function DEFINITION was expected");
 				return;
 			}
@@ -1294,6 +1444,14 @@ void Syntax_functionDeclaration(Scope* scope, Parser* parser, int flags, const S
 	
 
 	finishWhile:
+
+	// Handle flag tests
+	if (flags & SYNTAXDATAFLAG_FNDCL_FAST_ACCESS) {
+		if (!returnType) {
+			raiseError("[Architecture] Using @fastAccess requires to specify a return type");
+		}
+	}
+
 	
 	// Check name
 	if (name == LABEL_NULL) {
@@ -1789,7 +1947,13 @@ static void placeExpression(
 				case PROTO_MODE_DIRECT:
 				{
 					signedSize = Prototype_getSignedSize(lvp);
-					id = Trace_ins_create(trace, lv, lvp->direct.primitiveSizeCode, 0, true);
+
+					char psc = lvp->direct.primitiveSizeCode;
+					if (psc) {
+						id = Trace_ins_create(trace, lv, psc < 0 ? -psc : psc, 0, psc);
+					} else {
+						id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
+					}
 					last->proto = Prototype_copy(lvp);
 					last->id = id;
 
@@ -2029,10 +2193,10 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		return;
 
 	Variable* variable = malloc(sizeof(Variable));
+	Variable_create(variable);
 	variable->name = token.label;
 	variable->id = -1;
 	variable->proto = NULL;
-	Variable_create(variable);
 	
 	int syntaxIndex = -1;
 	Prototype* proto = NULL;
@@ -2058,7 +2222,8 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		{
 			proto = Syntax_proto(parser, &scope->scope);
 			variable->proto = proto;
-			ExtendedPrototypeSize eps = Prototype_reachSizes(variable->proto, &scope->scope, true);
+
+			ExtendedPrototypeSize eps = Prototype_reachSizes(proto, &scope->scope, true);
 			variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.primitiveSizeCode);
 			break;
 		}
@@ -2594,6 +2759,18 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		annotation->type = ANNOTATION_LANGSTD;
 		return;
 	}
+
+	if (token.label == _commonLabels._fastAccess) {
+		annotation->type = ANNOTATION_FAST_ACCESS;
+		return;
+	}
+
+	if (token.label == _commonLabels._stdFastAccess) {
+		annotation->type = ANNOTATION_STD_FAST_ACCESS;
+		return;
+	}
+
+	
 
 	raiseError("[Syntax] Unkown annotation");
 }

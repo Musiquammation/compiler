@@ -708,6 +708,7 @@ bool Prototype_isType(Prototype* proto) {
 Prototype* Prototype_generateStackPointer(Variable **varr, int varLength) {
 	ProtoSetting* settings = malloc(sizeof(ProtoSetting)*1);
 	settings[0].useProto = true;
+	settings[0].useVariable = true;
 	settings[0].proto = Prototype_create_reference(varr, varLength);
 	settings[0].variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
 
@@ -716,6 +717,30 @@ Prototype* Prototype_generateStackPointer(Variable **varr, int varLength) {
 	return p;
 }
 
+
+
+
+Variable* ProtoSetting_getVariable(ProtoSetting* setting, Class* meta) {
+	if (setting->useVariable)
+		return setting->variable;
+
+	label_t label = setting->name;
+	typedef Variable* v_ptr;
+	Array_loop(v_ptr, meta->variables, vptr) {
+		Variable* v = *vptr;
+		if (v->name != label)
+			continue;
+
+		if (!Prototype_isType(v->proto)) {
+			raiseError("[Type] Variadic type was expected");
+			return NULL;
+		}
+
+		setting->useVariable = true;
+		setting->variable = v;
+		return v;
+	}
+
+}
+
 #undef setMode
-
-

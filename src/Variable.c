@@ -15,3 +15,5 @@ void Variable_delete(Variable* variable) {
 void Variable_destroy(Variable* variable) {
 	Prototype_free(variable->proto, true);
 }
+
+

@@ -1,4 +1,5 @@
 @!module {
+	@langstd class Token;
 	@langstd class Type;
 	@langstd class Pointer;
 

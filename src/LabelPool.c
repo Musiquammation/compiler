@@ -85,15 +85,6 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(while);
 	def(switch);
 
-	def(module);
-	def(main);
-	def(control);
-	def(langstd);
-
-	def(Pointer);
-	def(Type);
-	def(Variadic);
-
 	def(i8);
 	def(u8);
 	def(i16);
@@ -113,6 +104,22 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(float);
 	def(double);
 	def(size_t);
+
+	def(Pointer);
+	def(Type);
+	def(Variadic);
+	def(Token);
+
+	def(module);
+	def(main);
+	def(control);
+	def(langstd);
+	def(token);
+	def(fastAccess);
+	def(stdFastAccess);
+
+
+
 
 	#undef def
 }
