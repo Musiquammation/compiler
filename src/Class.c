@@ -256,6 +256,8 @@ void ScopeClass_delete(ScopeClass* scope) {
 
 
 
+
+
 Variable* ScopeClass_searchVariable(ScopeClass* scope, label_t name, ScopeSearchArgs* args) {
 	if (!scope->cl)
 		return NULL;

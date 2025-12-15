@@ -1,5 +1,7 @@
 class {
 	x: int;
 	y: int;
+	z: int;
+	t: int;
 }
 

@@ -735,6 +735,7 @@ static void addUsageAt(Trace* trace, uint variable, int traceInstruction, bool r
 
 		// Handle multiusages
 		readMulti:
+		printf("vis %d\n", variable);
 		Write* ourWrite = reachWrite(tScopeId, trace->deep, usageCapacity, vt);
 		usageCapacity = vt->usageCapacity;
 
@@ -1061,12 +1062,54 @@ int Trace_packExprTypeToSize(int type) {
 
 
 
+
+static void handleOrigin(Expression* origin, Expression* next) {
+	switch (origin->type) {
+	case EXPRESSION_FAST_ACCESS:
+	{
+		Function* accessor = origin->data.fastAccess.accessor;
+
+		int stdBehavior = accessor->stdBehavior;
+		if (stdBehavior < 0) {
+			raiseError("[TODO] real stdbehavior");
+			return;
+		}
+
+		switch (stdBehavior) {
+		// pointer
+		case 0:
+		{
+			raiseError("[TODO] stdbehavior pointer");
+			break;
+		}
+
+		default:
+			raiseError("[Intern] Invalid stdbehavior code");
+		}
+
+		break;
+	}
+
+
+	default:
+		raiseError("[Trace] Expression type cannot be an origin");
+	}
+}
+
 void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int signedSize, int exprType) {
 	int size = signedSize >= 0 ? signedSize : -signedSize;
 
+	retry:
 	switch (exprType) {
 	case EXPRESSION_PROPERTY:
 	{
+		Expression* origin = expr->data.property.origin;
+		if (origin) {
+			handleOrigin(origin, expr);
+			break;
+		}
+
+
 		int length = expr->data.property.length;
 		Variable** varr = expr->data.property.variableArr;
 		char primitiveSizeCode = Prototype_getPrimitiveSizeCode(varr[length-1]->proto);
@@ -1138,24 +1181,25 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 	case EXPRESSION_FNCALL:
 	{
-		Expression_FnCall fncall = *expr->data.fncall.object;
-		Variable** arguments = fncall.fn->arguments.data;
-		uint* variables = malloc(fncall.argsLength * sizeof(int));
+		int argsLength = expr->data.fncall.argsLength;
+		Function* fn = expr->data.fncall.fn;
+		Variable** arguments = fn->arguments.data;
+		Expression** args = expr->data.fncall.args;
+		uint* variables = malloc(argsLength * sizeof(int));
 
-		for (int i = 0; i < fncall.argsLength; i++) {
+		for (int i = 0; i < argsLength; i++) {
 			/// TODO: check sizes
-			printf("args_are(%d) %p for %s\n", i, arguments, fncall.fn->name);
 			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			int size = Prototype_getSizes(arguments[i]->proto).size;
 			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
 			
 			Trace_set(
 				trace,
-				fncall.args[i],
+				args[i],
 				bufferVar,
 				primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
 				Prototype_getSignedSize(arguments[i]->proto),
-				fncall.args[i]->type
+				args[i]->type
 			);
 
 			uint finalVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
@@ -1183,10 +1227,10 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			*Trace_push(trace, 1) = TRACECODE_STAR | (4 << 10);
 		}
 
-		int fnIndex = Trace_reachFunction(trace, fncall.fn);
+		int fnIndex = Trace_reachFunction(trace, fn);
 
 		// Add usages
-		for (int i = 0; i < fncall.argsLength; i++) {
+		for (int i = 0; i < argsLength; i++) {
 			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			if (psc == PSC_UNKNOWN) {
 				raiseError("[Architecture] Registrable status is unknown");
@@ -1203,13 +1247,13 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		*Trace_push(trace, 1) = TRACECODE_FNCALL | (fnIndex << 10);
 
 		// Remove variables
-		for (int i = fncall.argsLength-1; i >= 0; i--) {
+		for (int i = argsLength-1; i >= 0; i--) {
 			Trace_removeVariable(trace, variables[i]);
 		}
 
 		// Output
 		if (destVar != TRACE_VARIABLE_NONE) {
-			int signedOutputSize = Prototype_getSignedSize(fncall.fn->returnType);
+			int signedOutputSize = Prototype_getSignedSize(fn->returnType);
 			if (signedOutputSize == signedSize) {
 				Trace_ins_placeVar(trace, destVar, TRACE_REG_RAX, Trace_packSize(size));
 	
@@ -1217,7 +1261,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
 				uint temp = Trace_ins_create(
 					trace, NULL, outputSize, 0,
-					Prototype_getPrimitiveSizeCode(fncall.fn->returnType)
+					Prototype_getPrimitiveSizeCode(fn->returnType)
 				);
 	
 				// Put output in temp variable
@@ -1245,37 +1289,6 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		return;
 	}
 
-	case EXPRESSION_PATH:
-	{
-		Expression* const real = expr->data.target;
-		int realType = real->type;
-
-		switch (realType) {
-		case EXPRESSION_PROPERTY:
-		{
-			/// TODO: handle this case
-			if (real->data.property.next) {
-				raiseError("[TODO]: expr such that next==true not handled for Trace");
-				return;
-			}
-
-			/// TODO: check size
-			Trace_set(trace, real, destVar, destOffset, signedSize, EXPRESSION_PROPERTY);
-			return;
-
-		}
-
-		case EXPRESSION_FNCALL:
-		{
-			Trace_set(trace, real, destVar, destOffset, signedSize, EXPRESSION_FNCALL);
-			return;
-		}
-
-		}
-
-		break;
-	}
-
 	case EXPRESSION_GROUP:
 	{
 		Expression* target = expr->data.target;
@@ -1283,6 +1296,10 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		break;
 	}
 
+	case EXPRESSION_LINK:
+		expr = expr->data.linked;
+		exprType = expr->type;
+		goto retry;
 
 
 	case EXPRESSION_ADDITION:
@@ -1659,6 +1676,17 @@ void Trace_ins_move(Trace* trace, int destVar, int srcVar,
 	Trace_addUsage(trace, destVar, destOffset, false);
 
 	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) | (isRegistrable ? 1<<10 : 0);
+}
+
+void Trace_ins_moveWithPtrs(
+	Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size,
+	char isRegistrable, bool srcIsPointer, bool dstIsPointer) {
+	
+	Trace_addUsage(trace, srcVar, srcOffset, true);
+	Trace_addUsage(trace, destVar, destOffset, false);
+
+	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) | (isRegistrable ? 1<<10 : 0) |
+		(srcIsPointer ? (1<<11) : 0) | (dstIsPointer ? (1<<12) : 0);
 }
 
 trline_t* Trace_ins_if(Trace* trace, uint destVar) {

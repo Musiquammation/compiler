@@ -31,7 +31,9 @@ struct Annotation {
 	int type;
 
 	union {
-		
+		struct {
+			int stdBehavior;
+		} stdFastAccess;
 	};
 };
 

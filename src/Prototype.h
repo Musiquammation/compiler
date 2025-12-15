@@ -107,6 +107,7 @@ Prototype* Prototype_reachMeta(Prototype* proto);
 Class* Prototype_getMetaClass(Prototype* proto);
 
 Class* Prototype_getClass(Prototype* proto);
+Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent);
 
 int Prototype_getSignedSize(Prototype* proto);
 

@@ -17,12 +17,16 @@ struct Type {
 
 void Type_free(Type* type);
 
-
 void Type_defaultConstructors(
 	void* data, Class* cl, ProtoSetting* settings,
 	int settingLength, Type meta, Scope* scope);
 
 void Type_defaultDestructors(void* data, Type* meta);
+
+
+
+
+
 
 
 #endif

@@ -208,7 +208,6 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 
 	// Collect expressions
 	while (true) {
-
 		const int syntaxIndex = TokenCompare(SYNTAXLIST_EXPRESSION, 0);
 		switch (syntaxIndex) {
 
@@ -216,9 +215,10 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		case 0:
 		{
 			Expression* path = Syntax_readPath(token.label, parser, scope);
+			printf("pathis %p\n", path);
 			Expression* expr = Array_push(Expression, &lineArr);
-			expr->type = EXPRESSION_PATH;
-			expr->data.target = path;
+			expr->type = EXPRESSION_LINK;
+			expr->data.linked = path;
 			break;
 		}
 
@@ -694,7 +694,6 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 
 
 void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs) {
-
 	cl->definitionState = DEFINITIONSTATE_READING;
 
 	ScopeClass insideScope = {
@@ -721,6 +720,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	Array metaControlFunctions;
 
 	int annotationFlags = 0;
+	int stdBehavior = -1;
 	enum {
 		ANNOTFLAG_FAST_ACCESS = 1,
 		ANNOTFLAG_STD_FAST_ACCESS = 2
@@ -730,6 +730,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 	// Read content
 	while (true) {
+		annotationFlags = 0; // reset
+
 		Token token = Parser_readAnnotated(parser, &_labelPool);
 
 		Array_loop(Annotation, parser->annotations, annotation) {
@@ -775,6 +777,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				break;
 
 			case ANNOTATION_STD_FAST_ACCESS:
+				stdBehavior = annotation->stdFastAccess.stdBehavior;
+
 				check(
 					ANNOTFLAG_STD_FAST_ACCESS |
 					ANNOTFLAG_FAST_ACCESS
@@ -820,33 +824,39 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				};
 
 
-				Syntax_functionDeclaration(
+				Function* fn = Syntax_functionDeclaration(
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_FAST_ACCESS),
 
 					&declData
 				);
+
+				cl->std_methods.fastAccess = fn;
 			
 			} else if (annotationFlags & ANNOTFLAG_STD_FAST_ACCESS) {
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL
+					.definedClass = NULL,
+					.stdBehavior = stdBehavior
 				};
 
 
-				Syntax_functionDeclaration(
+				Function* fn = Syntax_functionDeclaration(
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-						SYNTAXDATAFLAG_FNDCL_FORBID_RETURN |
+						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS),
 
 					&declData
 				);
+			
+				cl->std_methods.fastAccess = fn;
 			}
 			
 
@@ -1169,7 +1179,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		
 		// Expression
 		Expression* expression = Syntax_readPath(token.label, parser, scope);
-		if (expression->type != EXPRESSION_PROPERTY || expression->data.property.next) {
+		if (expression->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] class[var] syntax works only with a variable");
 		}
 
@@ -1287,7 +1297,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 
 
 
-void Syntax_functionDeclaration(
+Function* Syntax_functionDeclaration(
 	Scope* scope,
 	Scope* variadicScope,
 	Parser* parser,
@@ -1333,7 +1343,7 @@ void Syntax_functionDeclaration(
 		default:
 		{
 			raiseError("[Syntax] Illegal annotation\n");
-			return;
+			return NULL;
 		}	
 		}
 	}
@@ -1367,7 +1377,7 @@ void Syntax_functionDeclaration(
 			int next = TokenCompare(SYNTAXLIST_FUNCTION_DECLARATION, 0);
 			if (next <= syntaxIndex) {
 				raiseError("[Syntax] Illegal order in function declaration");
-				return;
+				return NULL;
 			}
 
 			syntaxIndex = next;
@@ -1428,7 +1438,7 @@ void Syntax_functionDeclaration(
 		case 5:
 			if (flags & SYNTAXDATAFLAG_FNDCL_REQUIRES_DEFINITION) {
 				raiseError("[Syntax] A function DEFINITION was expected");
-				return;
+				return NULL;
 			}
 
 			definitionToRead = false;
@@ -1436,7 +1446,7 @@ void Syntax_functionDeclaration(
 
 		default:
 			raiseError("[Syntax] Invalid function syntax");
-			return;
+			return NULL;
 
 		}
 
@@ -1446,9 +1456,10 @@ void Syntax_functionDeclaration(
 	finishWhile:
 
 	// Handle flag tests
-	if (flags & SYNTAXDATAFLAG_FNDCL_FAST_ACCESS) {
+	if (flags & SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN) {
 		if (!returnType) {
-			raiseError("[Architecture] Using @fastAccess requires to specify a return type");
+			raiseError("[Architecture] Return type is required");
+			return NULL;
 		}
 	}
 
@@ -1470,7 +1481,7 @@ void Syntax_functionDeclaration(
 		ScopeClass sc = {
 			.scope = {.type=SCOPE_CLASS, .parent=NULL},
 			.allowThis = false,
-			.cl = definedClass,
+			.cl = definedClass
 		};
 
 		fn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
@@ -1487,22 +1498,22 @@ void Syntax_functionDeclaration(
 		switch (fn->definitionState) {
 		case DEFINITIONSTATE_READING:
 			raiseError("[Architecture] This function is already being defined");
-			return;
+			return NULL;
 
 		case DEFINITIONSTATE_DONE:
 			raiseError("[Architecture] This function has already been defined");
-			return;
+			return NULL;
 		}
 
 		// Check if extra data have not been written
 		if (arguments.length != 0xffff) {
 			raiseError("[Architecture] A definition of arguments already exists for this function");
-			return;
+			return NULL;
 		}
 
 		if (returnType) {
 			raiseError("[Architecture] A definition of return type already exists for this function");
-			return;
+			return NULL;
 		}
 
 		/// TODO: check for settings 
@@ -1511,7 +1522,7 @@ void Syntax_functionDeclaration(
 		// Check if extra data have been given
 		if (arguments.length == 0xffff) {
 			raiseError("[Architecture] Arguments are missing for this function");
-			return;
+			return NULL;
 		}
 
 		
@@ -1536,6 +1547,13 @@ void Syntax_functionDeclaration(
 		Syntax_functionDefinition(scope, parser, fn, definedClass);
 	}
 
+	
+	if (flags & SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS) {
+		fn->stdBehavior = defaultData->stdBehavior;
+	}
+
+
+	return fn;
 	/// TODO: define module.mainFunction
 
 }
@@ -1596,7 +1614,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 	return arguments;
 }
 
-void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* expr) {
+Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* thisExpr) {
 	ScopeSearchArgs searchArg;
 
 	union {
@@ -1608,6 +1626,11 @@ void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn,
 	/// TODO: create a subscope to handle words (of enums)
 	Array args; // type: Expression*
 	Array_create(&args, sizeof(Expression*));
+
+	if (thisExpr) {
+		*Array_push(Expression*, &args) = thisExpr;
+	}
+
 	while (true) {
 		Expression* expr = Syntax_expression(parser, scopePtr, 2);
 		if (expr) {
@@ -1620,273 +1643,280 @@ void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn,
 		}
 	}
 
-	Expression_FnCall* call = malloc(sizeof(Expression_FnCall));
-	call->fn = fn;
+	Expression* expr = malloc(sizeof(Expression));
+
 	if (args.length) {
 		size_t size = sizeof(Expression*) * args.length;
 		Expression** ae = malloc(size);
 		memcpy(ae, args.data, size);
-		call->argsLength = args.length;
-		call->args = ae;
+		expr->data.fncall.argsLength = args.length;
+		expr->data.fncall.args = ae;
 		free(args.data);
 		
 	} else {
-		call->argsLength = 0;
+		expr->data.fncall.argsLength = 0;
 	}
 
 	expr->type = EXPRESSION_FNCALL;
-	expr->data.fncall.object = call;
+	expr->data.fncall.fn = fn;
 }
 
 
 
 
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
-	Array expressions; // type: Expression
-	Array_create(&expressions, sizeof(Expression)); 
+	Expression* last = NULL;
 
 	ScopeBuffer subScope;
-	
-
 	ScopeFunction* baseScope = scope->type == SCOPE_FUNCTION ? (ScopeFunction*)scope : NULL;
 
-	
 	Scope* subScopePtr = scope;
 	Token token;
-	int syntaxIndex;
-	
-	mblock_t metaPtr = NULL;
-	Prototype* metaProto = NULL;
+	ScopeSearchArgs searchArg;
+	void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
 
+	#define enshureObject() if (!object) {\
+		raiseError("[Unknown] Object not defined");\
+		return NULL;\
+	}
+
+	enshureObject();
 
 	while (true) {
-		ScopeSearchArgs searchArg;
-		void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
-
-
-		if (!object) {
-			raiseError("[Unknown] Object not defined");
-			return NULL;
-		}
-
 		if (searchArg.resultType == SCOPESEARCH_VARIABLE) {
-			bool hasNext;
-
 			Array currentVarPath; // type: Variable*
 			Array_createAllowed(&currentVarPath, sizeof(Variable*), 4);
 
 			currentVarPath.length = 1;
 			*(Variable**)currentVarPath.data = (Variable*)object;
+			printf("forvar %s\n", ((Variable*)object)->name);
+
+			Function* accessorFn = NULL;
+			Prototype* accessorProto = NULL;
+
 
 			while (true) {
 				token = Parser_read(parser, &_labelPool);
-				syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
+				int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 
 				if (syntaxIndex < 0) {
-					hasNext = false;
+					object = NULL;
+					Parser_saveToken(parser, &token);
 					goto generatePathExpr;
 				}
 
-				// Search sub scope
-				subScopePtr = Prototype_reachSubScope(((Variable*)object)->proto, &subScope);
+				if (syntaxIndex != 0) {
+					subScopePtr = Prototype_reachSubScope(((Variable*)object)->proto, &subScope);
+				}
 
 				switch (syntaxIndex) {
+				// member
 				case 0:
 				{
+					Prototype* proto = ((Variable*)object)->proto;
+
+					// Count '#' symbols
 					token = Parser_read(parser, &_labelPool);
-					if (TokenCompare(SYNTAXLIST_FREE_LABEL, SYNTAXFLAG_UNFOUND) != 0)
-						return NULL;
+					switch (TokenCompare(SYNTAXLIST_MEMBER, 0)) {
+					// Fast access (free label directly)
+					case 0:
+					{
+						Class* cl = Prototype_getClass(proto);
+						Function* accessor = cl->std_methods.fastAccess;
+						if (!accessor) {
+							goto addRealObject;
+						}
 
-					label = token.label;
-					object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+						accessorFn = accessor;
+						accessorProto = proto;
 
-					if (!object) {
-						raiseError("[Unknown] Property not found");
-						return NULL;
+						do {
+							proto = Prototype_reachProto(accessor->returnType, proto);
+							cl = Prototype_getClass(proto);
+							accessor = cl->std_methods.fastAccess;
+						} while (accessor);
+
+
+
+						subScopePtr = Prototype_reachSubScope(
+							proto,
+							&subScope
+						);
+
+						label = token.label;
+						object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+						enshureObject();
+						goto generatePathExpr;
 					}
+						
 
-					if (searchArg.resultType == SCOPESEARCH_VARIABLE) {
+					// Real access operator
+					case 1:
+					{
+						token = Parser_read(parser, &_labelPool);
+						if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0)) {
+							return NULL;
+						}
+
+						addRealObject:
+						subScopePtr = Prototype_reachSubScope(
+							proto,
+							&subScope
+						);
+						label = token.label;
+						object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+						enshureObject();
+
+						if (searchArg.resultType != SCOPESEARCH_VARIABLE) {
+							goto generatePathExpr;
+						}
+
 						*Array_push(Variable*, &currentVarPath) = (Variable*)object;
+
+
 						break;
 					}
 
-					// Finish current path
-					hasNext = true;
-					goto generatePathExpr;
-				}
-					
-				// fncall
-				case 1: 
-				{
-					raiseError("[TODO] Handle fncall from a variable");
-					hasNext = true;
-					goto generatePathExpr;
-				}
-
-				// scope
-				case 2:
-				{
-					Variable* first = *Array_get(Variable*, currentVarPath, 0);
-
-					char hasMeta = Prototype_hasMeta(first->proto);
-					if (hasMeta == 0) {
-						raiseError("[Unknown] This variable does not have meta class");
-						return NULL;
-					}
-					
-					if (hasMeta == -1) {
-						raiseError("[Unknown] This variable does not have meta class (it is unkown)");
-						return NULL;
-					}
-					
-					if (!baseScope) {
-						raiseError("[Structure] Meta content is not accessible");
-						return NULL;
 					}
 
-					Type* type = ScopeFunction_quickSearchMetaBlock(baseScope, first);
-					if (!type) {
-						raiseError("[Structure] Type of the variable cannot be found");
-						return NULL;
-					}
-					
-					/// TODO: handle multiple :: scope operators
-					metaPtr = type->data;
-					if (!metaPtr) {
-						raiseError("[Structure] Type has not meta content");
-						return NULL;
-					}
-
-					metaPtr += Prototype_getVariableOffset(
-						currentVarPath.data,
-						currentVarPath.length
-					);
-
-					metaProto = first->proto;
-
-					// Read next
-					token = Parser_read(parser, &_labelPool);
-					if (TokenCompare(SYNTAXLIST_FREE_LABEL, SYNTAXFLAG_UNFOUND) != 0)
-						return NULL;
-
-					label = token.label;
 					break;
 				}
+
+				// left paranthesis
+				case 1:
+				{
+					raiseError("[TODO] thiscall");
+					break;
+				}
+				
+				// meta operator
+				case 2:
+				{
+					raiseError("[TODO] meta");
+					break;
 				}
 
+
+				}
 			}
 
 			generatePathExpr:
-			if (metaPtr) {
+			Expression* expr = malloc(sizeof(Expression));
+			expr->type = EXPRESSION_PROPERTY;
+			expr->data.property.variableArr = currentVarPath.data;
+			expr->data.property.length = currentVarPath.length;
+			expr->data.property.origin = last;
+			expr->data.property.freeVariableArr = true;
+			last = expr;
+
+
+			while (accessorFn) {
+				accessorProto = Prototype_reachProto(accessorFn->returnType, accessorProto);
+				Class* cl = Prototype_getClass(accessorProto);
 				
-				Variable* first = *Array_get(Variable*, currentVarPath, 0);
-				// Class* meta = Prototype_getMetaClass(first->proto);
+				// Generate fastAccess expr
+				Expression* fastExpr = malloc(sizeof(Expression));
+				fastExpr->type = EXPRESSION_FAST_ACCESS;
+				fastExpr->data.fastAccess.accessor = accessorFn;
+				fastExpr->data.fastAccess.origin = last;
+				last = fastExpr;
 				
-				/// TODO: test this line
-				int offset = Prototype_getGlobalVariableOffset(
-					first->proto,
-					currentVarPath.data,
-					currentVarPath.length
-				);
-
-				metaPtr += offset;
-				
-				Expression_Value* ev = malloc(sizeof(Expression_Value));
-				ev->value = metaPtr;
-				ev->proto = (*Array_get(Variable*, currentVarPath, currentVarPath.length-1))->proto;
-
-				Array_free(currentVarPath);
-
-				Expression* expr = Array_push(Expression, &expressions);
-				expr->type = EXPRESSION_VALUE;
-				expr->data.value.value = ev;
-				expr->data.value.next = hasNext;
-
-
-				break;
-
-			} else {
-				Expression* expr = Array_push(Expression, &expressions);
-				expr->type = EXPRESSION_PROPERTY;
-				// Array_shrinkToFit(&currentVarPath);
-				expr->data.property.variableArr = currentVarPath.data;
-				expr->data.property.length = currentVarPath.length;
-				expr->data.property.next = hasNext;
-				expr->data.property.freeVariableArr = true;
-	
-				if (!hasNext)
-					break;
+				accessorFn = cl->std_methods.fastAccess;
 			}
 
-			skipPathExpr:
+			if (!object) {
+				goto returnResult;
+			}
+
 			continue;
 		}
 
 		if (searchArg.resultType == SCOPESEARCH_FUNCTION) {
 			token = Parser_read(parser, &_labelPool);
+			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
+				raiseError("[TODO] fn references not handled");
+				continue;
+			}
 
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND) != 0) {
-				raiseError("[TODO] Handle function references");
+
+			// Function call
+			Function* fn = object;
+			last = Syntax_functionArgumentsCall(subScopePtr, parser, fn, last);
+
+			// Check for next
+			token = Parser_read(parser, &_labelPool);
+			int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
+
+			if (syntaxIndex < 0) {
+				goto returnResult;
+			}
+
+			if (!fn->returnType) {
+				raiseError("[Architecture] Cannot get property from void return result");
 				return NULL;
 			}
 
-			// Fn call: let's read args
-			Expression* expr = Array_push(Expression, &expressions);
-			Syntax_functionArgumentsCall(subScopePtr, parser, (Function*)object, expr);
+			/// TODO: handle .# syntax
+			subScopePtr = Prototype_reachSubScope(fn->returnType, &subScope);
 
-			token = Parser_read(parser, &_labelPool);
-
-			syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 			switch (syntaxIndex) {
-			// member
+			// Member
 			case 0:
 			{
 				token = Parser_read(parser, &_labelPool);
-				label = token.label;
-				expr->data.fncall.next = true;
+				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+					return NULL;
+
+				// Give object for next iteration
+				object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+				enshureObject();
 				break;
 			}
 
-			// fncall
+			// Parenthesis
 			case 1:
 			{
-				expr->data.fncall.next = true;
-				raiseError("[TODO] handle an other function call");
-				return NULL;
+				raiseError("[TODO] hanlde multiple fncalls");
 				break;
 			}
 			
-			// scope
+			// Scope
 			case 2:
 			{
-				expr->data.fncall.next = true;
-				raiseError("[TODO] handle scope from a fncall-result");
-				return NULL;
+				raiseError("[TODO] hanlde scope");
 				break;
 			}
-			
-			// finish
-			case -3:
-			{
-				expr->data.fncall.next = false;
-				goto realFinish;
 			}
 
-			}
 
 			continue;
 		}
 
-		raiseError("[Syntax] Invalid object in path");
-		return NULL;
+		raiseError("[Type] Invalid type to read this path");
 	}
 
-	realFinish:
-	// Give last token
-	Parser_saveToken(parser, &token);
+	#undef enshureObject
 
-	// Array_shrinkToFit(&expressions);
-	return expressions.data;
+	returnResult:
+	printf("Path result:\n");
+	for (Expression* e = last; e; ) {
+		printf("\t%d ", e->type);
+		switch (e->type) {
+		case EXPRESSION_PROPERTY:
+			printf("var=%s", e->data.property.variableArr[0]->name);
+			e = e->data.property.origin;
+			break;
+
+		case EXPRESSION_FAST_ACCESS:
+			e = e->data.fastAccess.origin;
+			break;
+
+		}
+
+		printf("\n");
+	}
+
+	return last;
 }
 
 
@@ -1906,127 +1936,102 @@ static void placeExpression(
 	Trace* trace,
 	Expression* valueExpr,
 	Expression* targetExpr,
-	int expressionType
+	int targetExprType
 ) {
 	// Read targetExpr
-	Expression* const sourceExpr = valueExpr;
-	int sourceExprType = valueExpr->type;
+	Expression* sourceExpr = Expression_cross(valueExpr);
+	int sourceExprType = sourceExpr->type;
 
 
-	if (sourceExprType == EXPRESSION_PATH) {
-		valueExpr = valueExpr->data.target;
-		switch (valueExpr->type) {
-		case EXPRESSION_PROPERTY:
-		{
-			/// TODO: handle this case
-			if (valueExpr->data.property.next) {
-				raiseError("[TODO]: valueExpr such that next==true not handled for TypeNode");
+	if (sourceExprType == EXPRESSION_PROPERTY) {
+		Variable** varrDest = targetExpr->data.property.variableArr;
+		int length = targetExpr->data.property.length;
+
+		Variable* last = varrDest[length-1];
+		int id;
+		int signedSize;
+		if (last->proto) {
+			signedSize = Prototype_getSignedSize(last->proto);
+			id = last->id;
+		} else {
+			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.length-1];
+			Prototype* lvp = lv->proto;
+
+			switch (Prototype_mode(*lvp)) {
+			case PROTO_MODE_REFERENCE:
+			{
+
+				break;
+			}
+
+			case PROTO_MODE_DIRECT:
+			{
+				signedSize = Prototype_getSignedSize(lvp);
+
+				char psc = lvp->direct.primitiveSizeCode;
+				if (psc) {
+					id = Trace_ins_create(trace, lv, psc < 0 ? -psc : psc, 0, psc);
+				} else {
+					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
+				}
+				last->proto = Prototype_copy(lvp);
+				last->id = id;
+
+				break;
+			}
+
+			case PROTO_MODE_VARIADIC:
+			{
+
+				break;
+			}
+
+			case PROTO_MODE_PRIMITIVE:
+			{
+				signedSize = lvp->primitive.sizeCode;
+				id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				last->proto = lvp;
+				last->id = id;
+				break;
+			}
+
+			case PROTO_MODE_VOID:
+			{
+				raiseError("[Intern] Cannot set a variable to void");
 				return;
 			}
 
-			Variable** varrDest = targetExpr->data.property.variableArr;
-			int length = targetExpr->data.property.length;
 
-			Variable* last = varrDest[length-1];
-			int id;
-			int signedSize;
-			if (last->proto) {
-				signedSize = Prototype_getSignedSize(last->proto);
-				id = last->id;
-			} else {
-				Variable* lv = valueExpr->data.property.variableArr[valueExpr->data.property.length-1];
-				Prototype* lvp = lv->proto;
-
-				switch (Prototype_mode(*lvp)) {
-				case PROTO_MODE_REFERENCE:
-				{
-
-					break;
-				}
-
-				case PROTO_MODE_DIRECT:
-				{
-					signedSize = Prototype_getSignedSize(lvp);
-
-					char psc = lvp->direct.primitiveSizeCode;
-					if (psc) {
-						id = Trace_ins_create(trace, lv, psc < 0 ? -psc : psc, 0, psc);
-					} else {
-						id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
-					}
-					last->proto = Prototype_copy(lvp);
-					last->id = id;
-
-					break;
-				}
-
-				case PROTO_MODE_VARIADIC:
-				{
-
-					break;
-				}
-
-				case PROTO_MODE_PRIMITIVE:
-				{
-					signedSize = lvp->primitive.sizeCode;
-					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
-					last->proto = lvp;
-					last->id = id;
-					break;
-				}
-
-				case PROTO_MODE_VOID:
-				{
-					raiseError("[Intern] Cannot set a variable to void");
-					return;
-				}
-
-
-				}
 			}
-			// int firstId = giveIdToVariable(varrDest);
-
-			Trace_set(
-				trace,
-				valueExpr,
-				id,
-				Prototype_getVariableOffset(varrDest, length),
-				signedSize,	
-				EXPRESSION_PROPERTY
-			);
-
-			break;
 		}
+		// int firstId = giveIdToVariable(varrDest);
 
-		
-		case EXPRESSION_FNCALL:
-		{
-			/// TODO: handle null id
-			Variable** varrDest = targetExpr->data.property.variableArr;
-			int length = targetExpr->data.property.length;
+		Trace_set(
+			trace,
+			sourceExpr,
+			id,
+			Prototype_getVariableOffset(varrDest, length),
+			signedSize,	
+			EXPRESSION_PROPERTY
+		);
 
-			Trace_set(
-				trace,
-				valueExpr,
-				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, length),
-				Prototype_getSignedSize(varrDest[length-1]->proto),
-				EXPRESSION_FNCALL
-			);
+	} else if (sourceExprType == EXPRESSION_FNCALL) {
+		/// TODO: handle null id
+		Variable** varrDest = targetExpr->data.property.variableArr;
+		int length = targetExpr->data.property.length;
+
+		Trace_set(
+			trace,
+			sourceExpr,
+			varrDest[0]->id,
+			Prototype_getVariableOffset(varrDest, length),
+			Prototype_getSignedSize(varrDest[length-1]->proto),
+			EXPRESSION_FNCALL
+		);
 
 
-			break;
-		}
-
-		case EXPRESSION_VALUE:
-		{
+	} else if (sourceExprType == EXPRESSION_VALUE) {
 			raiseError("[TODO]: handle value read/edits");
-			break;
-		}
-
-
-		}
-
 	
 	
 	} else if (sourceExprType >= EXPRESSION_ADDITION && sourceExprType <= EXPRESSION_L_DECREMENT) {
@@ -2038,7 +2043,7 @@ static void placeExpression(
 		if (vproto) {
 			Trace_set(
 				trace,
-				valueExpr,
+				sourceExpr,
 				varrDest[0]->id,
 				Prototype_getVariableOffset(varrDest, length),
 				Prototype_getSignedSize(varrDest[length-1]->proto),
@@ -2060,7 +2065,7 @@ static void placeExpression(
 
 			Trace_set(
 				trace,
-				valueExpr,
+				sourceExpr,
 				id,
 				0,
 				signedSize,
@@ -2095,7 +2100,7 @@ static void placeExpression(
 				castable_cast(
 					Expression_getSignedSize(sourceExprType),
 					signedSize,
-					valueExpr->data.num
+					sourceExpr->data.num
 				)
 			);
 
@@ -2118,7 +2123,7 @@ static void placeExpression(
 				castable_cast(
 					Expression_getSignedSize(sourceExprType),
 					signedSize,
-					valueExpr->data.num
+					sourceExpr->data.num
 				)
 			);
 		} else {
@@ -2127,15 +2132,9 @@ static void placeExpression(
 
 
 	} else if (sourceExprType == EXPRESSION_ADDR_OF) {
-		Expression* operand = sourceExpr->data.operand;
-		if (operand->type != EXPRESSION_PATH) {
+		Expression* reference = Expression_cross(sourceExpr->data.operand);
+		if (reference->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] Can only get the address of a variable");
-			return;
-		}
-		
-		Expression* reference = operand->data.target;
-		if (reference->type != EXPRESSION_PROPERTY || reference->data.property.next) {
-			raiseError("[Syntax] Can only get the address of a variable (property was expected)");
 			return;
 		}
 		
@@ -2180,8 +2179,8 @@ static void placeExpression(
 	}
 
 	// Free expression
-	Expression_free(sourceExprType, sourceExpr);
-	free(sourceExpr);
+	Expression_free(valueExpr->type, valueExpr);
+	free(valueExpr);
 }
 
 
@@ -2232,6 +2231,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		case 1:
 			/// TODO: handle this expression
 			valueExpr = Syntax_expression(parser, &scope->scope, 1);
+			printf("valueExpr is %p\n", valueExpr);
 			break;
 
 		// end
@@ -2245,13 +2245,13 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 	finish:
 	if (valueExpr) {
 		Expression exprToSet = {
-			.type = EXPRESSION_PATH,
+			.type = EXPRESSION_PROPERTY,
 			.data = {
-				.property = {&variable, 1, 0}
+				.property = {&variable, NULL, 1, false}
 			}
 		};
 
-		placeExpression(parser, trace, valueExpr, &exprToSet, EXPRESSION_PATH);
+		placeExpression(parser, trace, valueExpr, &exprToSet, EXPRESSION_PROPERTY);
 	}
 	
 	
@@ -2286,41 +2286,13 @@ void Syntax_functionScope_freeLabel(
 		}
 	}
 
-	int leftSize = Expression_evalNextLength(expression);
 
-	/// TODO: improve this case
-	if (leftSize == 2) {
-		if (containsEqual) {
-			raiseError("[TODO] handle this case");
-		} else {
-			// Finish token
-			Token token = Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0))
-				return;
-		}
-
-		if (expression[0].type != EXPRESSION_PROPERTY || expression[1].type != EXPRESSION_FNCALL) {
-			raiseError("[TODO] just path.fn(...) handled");
-			return;
-		}
-
-		
-
-		goto freeData;
-
-
-	}
 
 
 	// fill branches
 	switch (expressionType) {
 	case EXPRESSION_PROPERTY:
 	{
-		if (expression->data.property.next) {
-			raiseError("[TODO]: next==true not handled");
-			break;
-		}
-
 		if (!containsEqual) {
 			raiseError("[TODO]: must contain equal");
 		}
@@ -2767,6 +2739,22 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 
 	if (token.label == _commonLabels._stdFastAccess) {
 		annotation->type = ANNOTATION_STD_FAST_ACCESS;
+
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
+			return;
+
+		token = Parser_read(parser, &_labelPool);
+		if (token.type != TOKEN_TYPE_I32) {
+			raiseError("[Syntax] A i32 was expected in @stdFastAccess(x)");
+			return;
+		}
+
+		annotation->stdFastAccess.stdBehavior = token.num.i32;
+
+		token = Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0))
+			return;
 		return;
 	}
 

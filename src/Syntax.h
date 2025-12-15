@@ -18,6 +18,8 @@ enum {
 	SYNTAXDATAFLAG_FNDCL_FORBID_RETURN = 16,
 	SYNTAXDATAFLAG_FNDCL_FAST_ACCESS = 32,
 	SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS = 64,
+	SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN = 128,
+
 
 	// Class declaration
 	SYNTAXDATAFLAG_CLDCL_REQUIRES_DEFINITION = 1,
@@ -28,6 +30,7 @@ enum {
 typedef struct {
 	label_t defaultName;	
 	Class* definedClass;
+	int stdBehavior;
 } Syntax_FunctionDeclarationArg;
 
 typedef struct {
@@ -51,9 +54,9 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 void Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_ClassDefinitionArg* cdefs);
 Prototype* Syntax_proto(Parser* parser, Scope* scope);
 
-void Syntax_functionDeclaration(Scope* scope, Scope* variadicScope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
+Function* Syntax_functionDeclaration(Scope* scope, Scope* variadicScope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
 Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);
-void Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* expr);
+Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* thisExpr);
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
 int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
 

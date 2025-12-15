@@ -11,7 +11,7 @@
 
 
 void Function_create(Function* fn) {
-
+	fn->stdBehavior = -1;
 }
 
 void Function_delete(Function* fn) {

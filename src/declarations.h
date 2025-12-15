@@ -36,6 +36,7 @@ structdef(Annotation);
 structdef(Prototype);
 structdef(ProtoSetting);
 structdef(Type);
+structdef(TypeFollower);
 
 
 

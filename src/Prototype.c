@@ -555,8 +555,8 @@ Class* Prototype_getClass(Prototype* proto) {
 
 	case PROTO_MODE_VARIADIC:
 	{
-		raiseError("[TODO] Prototype_getClass");	
-		break;
+		raiseError("[Architecture] Cannot get class of a variadic prototype");
+		return NULL;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
@@ -568,7 +568,36 @@ Class* Prototype_getClass(Prototype* proto) {
 }
 
 
+Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
+	switch (Prototype_mode(*proto)) {
+	case PROTO_MODE_REFERENCE:
+	{
+		raiseError("[TODO] Prototype_getClass");
+		break;
+	}
 
+	case PROTO_MODE_DIRECT:
+		return proto;
+
+	case PROTO_MODE_VARIADIC:
+	{
+		if (Prototype_mode(*parent) != PROTO_MODE_DIRECT)
+			return NULL;
+
+		Variable* ref = proto->variadic.ref;
+		Array_for(ProtoSetting, parent->direct.settings, parent->direct.settingLength, s)
+			if (s->variable == ref)
+				return s->proto;
+		return NULL;
+	}
+
+	case PROTO_MODE_PRIMITIVE:
+		return proto;
+
+	case PROTO_MODE_VOID:
+		return NULL;
+	}
+}
 
 
 int Prototype_getSignedSize(Prototype* proto) {

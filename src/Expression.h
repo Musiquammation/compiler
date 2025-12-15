@@ -5,16 +5,7 @@
 #include "label_t.h"
 #include "castable_t.h"
 
-typedef struct  {
-	Expression** args;
-	Function* fn;
-	int argsLength;
-} Expression_FnCall;
 
-typedef struct {
-	void* value;
-	Prototype* proto;
-} Expression_Value;
 
 struct Expression {
 	int type;
@@ -35,22 +26,29 @@ struct Expression {
 		Expression* target;
 
 		struct {
-			Expression_Value* value;
-			bool next;
+			void* value;
+			Prototype* proto;
 		} value;
 
 		struct {
-			Expression_FnCall* object;
-			/// TODO: add some fast access data (8 bytes)
-			bool next;
+			Expression** args;
+			Function* fn;
+			int argsLength;
 		} fncall;
 
 		struct {
 			Variable** variableArr;
+			Expression* origin;
 			int length;
-			char next; // 0: no, 1: any, 2: scope
 			bool freeVariableArr;
 		} property;
+
+		struct {
+			Function* accessor;
+			Expression* origin;
+		} fastAccess;
+
+		Expression* linked;
 	} data;
 };
 
@@ -64,7 +62,9 @@ enum {
 	EXPRESSION_VALUE,
 	EXPRESSION_PROPERTY,
 	EXPRESSION_FNCALL,
-	EXPRESSION_PATH,
+	EXPRESSION_FAST_ACCESS,
+	EXPRESSION_LINK,
+
 
 	EXPRESSION_U8,
 	EXPRESSION_I8,
@@ -149,8 +149,10 @@ castable_t Expression_cast(int srcType, int destType, castable_t value);
 int Expression_getSignedSize(int exprType);
 int Expression_reachSignedSize(int type, const Expression* expr);
 
-int Expression_evalNextLength(const Expression* arr);
 
+
+Expression* Expression_crossTyped(int type, Expression* expr);
+Expression* Expression_cross(Expression* expr);
 
 Prototype* Expression_getPrimitiveProtoFromType(int type);
 Prototype* Expression_getPrimitiveProtoFromSize(int type);

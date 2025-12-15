@@ -17,6 +17,8 @@ struct Function {
 
 	Array arguments; // type: Variable*
 	Prototype* returnType;
+
+	int stdBehavior;
 };
 
 /// TODO: init defnodes

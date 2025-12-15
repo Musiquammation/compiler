@@ -13,7 +13,6 @@
 #include <string.h>
 
 void Expression_free(int type, Expression* e) {
-	restartFree:
 	switch (type) {
 	case EXPRESSION_NONE:
 	case EXPRESSION_INVALID:
@@ -22,12 +21,6 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_VALUE:
 	{
 		free(e->data.value.value);
-
-		if (e->data.value.next) {
-			e++;
-			type = e->type;
-			goto restartFree; // avoid recursion
-		}
 		break;
 	}
 
@@ -37,10 +30,10 @@ void Expression_free(int type, Expression* e) {
 			free(e->data.property.variableArr);
 		}
 		
-		if (e->data.property.next) {
-			e++;
-			type = e->type;
-			goto restartFree; // avoid recursion
+		Expression* o = e->data.property.origin;
+		if (o) {
+			Expression_free(o->type, o);
+			free(o);
 		}
 
 		break;
@@ -48,36 +41,43 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_FNCALL:
 	{
-		Expression_FnCall* call = e->data.fncall.object;
-		int argLength = call->argsLength;
+		int argLength = e->data.fncall.argsLength;
 		if (argLength) {
 			typedef Expression* ptr_t;
-			Array_for(ptr_t, call->args, argLength, ptr) {
+			Array_for(ptr_t, e->data.fncall.args, argLength, ptr) {
 				Expression* i = *ptr;
 				Expression_free(i->type, i);
 				free(i);
 			}
 
-			free(call->args);
+			free(e->data.fncall.args);
 		}
 
-		free(call);
 
-		if (e->data.fncall.next) {
-			e++;
-			type = e->type;
-			goto restartFree; // avoid recursion
+		break;
+	}
+
+	case EXPRESSION_FAST_ACCESS:
+	{
+		Expression* o = e->data.fastAccess.origin;
+		if (o) {
+			Expression_free(o->type, o);
+			free(o);
 		}
 
 		break;
 	}
 
-	case EXPRESSION_PATH:
+	case EXPRESSION_LINK:
 	{
-		Expression* target = e->data.target;
-		Expression_free(target->type, target);
-		free(target);
+		Expression* l = e->data.linked;
+		printf("free linked %p\n", l);
+		Expression_free(l->type, l);
+		free(l);
+		break;
 	}
+
+
 
 	case EXPRESSION_I8:
 	case EXPRESSION_I16:
@@ -187,7 +187,6 @@ void Expression_exchangeReferences(
 	
 
 		case EXPRESSION_PROPERTY:
-		case EXPRESSION_PATH:
 			break;
 
 		
@@ -687,14 +686,13 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	case EXPRESSION_I64: return -8;
 	case EXPRESSION_F64: return 9;
 
-	case EXPRESSION_PATH:
 	case EXPRESSION_GROUP:
 		expr = expr->data.target;
 		type = expr->type;
 		goto restart;
 
 	case EXPRESSION_FNCALL:
-		return Prototype_getSignedSize(expr->data.fncall.object->fn->returnType);
+		return Prototype_getSignedSize(expr->data.fncall.fn->returnType);
 
 	case EXPRESSION_PROPERTY:
 	{
@@ -741,34 +739,28 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 
 
 
-int Expression_evalNextLength(const Expression* arr) {
-	int length = 1;
-	for (const Expression* e = arr; true; e++) {
-		switch (e->type) {
-		case EXPRESSION_VALUE:
-			if (!e->data.value.next) {goto stop;}
-			break;
-			
-		case EXPRESSION_PROPERTY:
-			if (!e->data.property.next) {goto stop;}
-			break;
-			
-		case EXPRESSION_FNCALL:
-			if (!e->data.fncall.next) {goto stop;}
-			break;
 
-		default:
-			goto stop;
-		}
-		
-		length++;
-		continue;
 
-		stop:
-		return length;
+
+
+Expression* Expression_crossTyped(int type, Expression* expr) {
+	if (type == EXPRESSION_GROUP) {
+		raiseError("[TODO] Expression_cross");
+		return NULL;
 	}
+
+	if (type == EXPRESSION_LINK) {
+		printf("cross\n");
+		return expr->data.linked;
+	}
+
+	return expr;
 }
 
+
+Expression* Expression_cross(Expression* expr) {
+	return Expression_crossTyped(expr->type, expr);
+}
 
 
 Prototype* Expression_getPrimitiveProtoFromType(int type) {

@@ -12,6 +12,7 @@ class {
 
 	address: size_t;
 
-	copy(): Pointer<T: Type>;
+	@stdFastAccess(0)
+	function: T;
 }
 

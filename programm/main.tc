@@ -1,7 +1,7 @@
 function test(): size_t {
-	let obj: Container;
-    let ptr = &obj;
+	let ptr: Pointer<T: Container>;
+	let res = ptr.t;
 
-    
+	return res;
 }
 
