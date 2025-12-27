@@ -2067,7 +2067,7 @@ static void placeExpression(
 				trace,
 				sourceExpr,
 				id,
-				0,
+				-1,
 				signedSize,
 				sourceExprType
 			);
@@ -2118,7 +2118,7 @@ static void placeExpression(
 			Trace_ins_def(
 				trace,
 				id,
-				0,
+				-1,
 				signedSize,
 				castable_cast(
 					Expression_getSignedSize(sourceExprType),

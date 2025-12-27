@@ -19,7 +19,7 @@ structdef(Function);
 structdef(FunctionAssembly);
 structdef(Trace);
 structdef(TraceStackHandler);
-
+    
 structdef(ScopeClass);
 structdef(ScopeFunction);
 

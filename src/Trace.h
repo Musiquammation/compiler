@@ -165,9 +165,8 @@ void Trace_addUsage(Trace* trace, uint variable, int offset, bool readMode);
 uint Trace_ins_create(Trace* trace, Variable* variable, int size, int flags, char registrable);
 void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, castable_t value);
 void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
-void Trace_ins_moveWithPtrs(
-	Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size,
-	char isRegistrable, bool srcIsPointer, bool dstIsPointer);
+void Trace_ins_loadSrc(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
+void Trace_ins_loadDst(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
 trline_t* Trace_ins_if(Trace* trace, uint destVar);
 void Trace_ins_jmp(Trace* trace, uint instruction);
 void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize);
@@ -331,8 +330,8 @@ enum {
 	/**
 	 * +00: CODE
 	 * +10: REGISTRABLE
-	 * +11: SRC_POINTER
-	 * +12: DST_POINTER
+	 * +11: load src?
+	 * +12: load dst?
 	 * +13: [blank]
 	 * +16: SIZE
 	 */
@@ -449,6 +448,16 @@ enum {
 	 * +32
 	 */
 	TRACECODE_STACK_PTR,
+
+	/**
+	 * +00: CODE
+	 * +10: 1 => src is loaded ; 0 => dst is edited
+	 * +16: DECALAGE
+	 * 
+	 * +00: SIZE
+	 * +32
+	 */
+	TRACECODE_LOAD,
 };
 
 

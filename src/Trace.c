@@ -398,7 +398,17 @@ void TracePack_print(const TracePack* pack, int position) {
 
 				case TRACECODE_MOVE:
 				{
+					trline_t loadSrc = (n >> 11) & 1;
+					trline_t loadDst = (n >> 12) & 1;
 					printf("[%04d] MOVE size=%d", i+position, n >> 16);
+
+					if (loadSrc) {
+						printf(" loadSrc");
+					}
+
+					if (loadDst) {
+						printf(" loadDst");
+					}
 
 					if (n & (1<<10)) {
 						printf("\n"); // registrable
@@ -1063,7 +1073,13 @@ int Trace_packExprTypeToSize(int type) {
 
 
 
-static void handleOrigin(Expression* origin, Expression* next) {
+typedef struct {
+	bool normalBehavior;
+	uint variable;
+} HandleOriginResult;
+
+static void handleOrigin(Trace* trace, Expression* origin,
+	Expression* next, int nextType, uint destVar, int destOffset) {
 	switch (origin->type) {
 	case EXPRESSION_FAST_ACCESS:
 	{
@@ -1079,7 +1095,37 @@ static void handleOrigin(Expression* origin, Expression* next) {
 		// pointer
 		case 0:
 		{
-			raiseError("[TODO] stdbehavior pointer");
+			Expression* base = origin->data.fastAccess.origin;
+			uint ptrVariable = Trace_ins_create(trace, NULL, 8, 0, true);
+			Trace_set(trace, base, ptrVariable, -1, 8, base->type); // base should be a pointer
+
+			switch (nextType) {
+			case EXPRESSION_PROPERTY:
+			{
+				Variable** varr = next->data.property.variableArr;
+				int length = next->data.property.length;
+				int offset = Prototype_getGlobalVariableOffset(NULL, varr, length);
+				trline_t* arr = Trace_push(trace, 3);
+				arr[0] = TRACECODE_ARITHMETIC_IMM |
+					(0 << 10) | // addition
+					(3 << 13) | // size = 8 bytes
+					(1 << 15); // value is the right operand
+				arr[1] = offset;
+				arr[2] = 0;
+
+
+				ExtendedPrototypeSize eps = Prototype_getSizes(varr[length-1]->proto);
+				Trace_ins_loadSrc(
+					trace, destVar, ptrVariable,
+					destOffset, -1, eps.size, eps.primitiveSizeCode);
+				
+				break;
+			}
+
+			default:
+				raiseError("[Intern] Unfound type in handleOrigin");
+			}
+
 			break;
 		}
 
@@ -1105,7 +1151,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	{
 		Expression* origin = expr->data.property.origin;
 		if (origin) {
-			handleOrigin(origin, expr);
+			handleOrigin(trace, origin, expr, EXPRESSION_PROPERTY, destVar, destOffset	);
 			break;
 		}
 
@@ -1491,8 +1537,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			if (exprType <= EXPRESSION_MODULO) {
 				decPos = 13;
 				first = TRACECODE_ARITHMETIC_IMM |
-				((exprType - (EXPRESSION_ADDITION - TRACEOP_ADDITION)) << 10) |
-				(rightValueGiven<<15);
+					((exprType - (EXPRESSION_ADDITION - TRACEOP_ADDITION)) << 10) |
+					(rightValueGiven<<15);
 				
 			} else {
 				decPos = 14;
@@ -1675,19 +1721,30 @@ void Trace_ins_move(Trace* trace, int destVar, int srcVar,
 	Trace_addUsage(trace, srcVar, srcOffset, true);
 	Trace_addUsage(trace, destVar, destOffset, false);
 
-	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) | (isRegistrable ? 1<<10 : 0);
+	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) |
+		(isRegistrable ? 1<<10 : 0);
 }
 
-void Trace_ins_moveWithPtrs(
-	Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size,
-	char isRegistrable, bool srcIsPointer, bool dstIsPointer) {
-	
+void Trace_ins_loadSrc(Trace* trace, int destVar, int srcVar,
+	int destOffset, int srcOffset, int size, char isRegistrable) {
+
 	Trace_addUsage(trace, srcVar, srcOffset, true);
 	Trace_addUsage(trace, destVar, destOffset, false);
 
-	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) | (isRegistrable ? 1<<10 : 0) |
-		(srcIsPointer ? (1<<11) : 0) | (dstIsPointer ? (1<<12) : 0);
+	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) |
+		(isRegistrable ? 1<<10 : 0) | (1<<11);
 }
+
+void Trace_ins_loadDst(Trace* trace, int destVar, int srcVar,
+	int destOffset, int srcOffset, int size, char isRegistrable) {
+
+	Trace_addUsage(trace, srcVar, srcOffset, true);
+	Trace_addUsage(trace, destVar, destOffset, true);
+
+	*Trace_push(trace, 1) = TRACECODE_MOVE | (size << 16) |
+		(isRegistrable ? 1<<10 : 0) | (1<<12);
+}
+
 
 trline_t* Trace_ins_if(Trace* trace, uint destVar) {
 	Trace_addUsage(trace, destVar, TRACE_OFFSET_NONE, true);
@@ -1736,7 +1793,6 @@ void Trace_ins_getStackPtr(Trace* trace, int destVar, int srcVar, int destOffset
 	trline_t* ptr = Array_get(VariableTrace, trace->variables, srcVar)->creationLinePtr;
 	*ptr = (*ptr) | (1<<12);
 }
-
 
 
 
@@ -3615,8 +3671,61 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_MOVE:
 		{
-			if (line & (1<<10)) {
-				// Registrable operation
+			trline_t registrableOp = line & (1<<10);
+			trline_t loadSrc = line & (1<<11);
+			trline_t loadDst = line & (1<<12);
+
+			if (loadSrc && loadDst) {
+				raiseError("[Intern] Cannot load src and dst at once");
+				return;
+			}
+
+			if (loadSrc) {
+				if (registrableOp) {
+					allowRsp(1);
+
+					TempReg tmp;
+					int size = (line >> 16);
+					int srcStore = uses[0].store;
+					int psize = Trace_packSize(size);
+					bool useTmpReg = (srcStore >= 0);
+
+					if (useTmpReg) {
+						tmp = pushTempReg(TRACE_REG_RAX, regs, varInfos, &trace->stackHandler, output);
+						fprintf(
+							output,
+							"\tmov %s, %s[rsp+%d]; restore@8\n",
+							REGISTER_NAMES[psize][tmp.reg],
+							REGISTER_SIZENAMES[psize],
+							toRsp(TraceStackHandler_reach(&trace->stackHandler, srcStore), size)
+						);
+
+						srcStore = -tmp.reg;
+					}
+
+					fprintf(output, "\tmov ");
+					Trace_printUsage(trace, output, psize, useAt(1));
+					fprintf(output, ", %s[", REGISTER_SIZENAMES[psize]);
+					Trace_printUsage(trace, output, 3, ((Use){srcStore, -1}));
+					fprintf(output, "]\n");
+
+					if (useTmpReg)
+						popTempReg(tmp, regs, &trace->stackHandler, output);
+
+					desallowRsp(0);
+					break;
+				}
+
+				raiseError("[TODO] loadSrc not registrableOp");
+
+			}
+
+			if (loadDst) {
+				raiseError("[TODO] loadDst");
+				break;
+			}
+
+			if (registrableOp) {
 				allowRsp(1);
 	
 				int size = (line >> 16);
