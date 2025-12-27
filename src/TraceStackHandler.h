@@ -4,7 +4,7 @@
 #include <stdio.h> // for FILE
 
 #include "declarations.h"
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 typedef struct TraceStackHandlerHole {
 	int position;

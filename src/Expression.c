@@ -8,7 +8,7 @@
 #include "primitives.h"
 
 #include <stddef.h>
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 #include <string.h>
 

@@ -7,7 +7,7 @@
 
 #include "util/Stack.h"
 
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 
 structdef(TracePack);

@@ -7,7 +7,7 @@
 #include "Scope.h"
 #include "MemoryCursor.h"
 
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 enum {
 	CLASSFLAGS_META = 1,

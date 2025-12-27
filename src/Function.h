@@ -9,7 +9,7 @@
 #include "Type.h"
 
 #include <stdio.h>
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 struct Function {
 	label_t name;

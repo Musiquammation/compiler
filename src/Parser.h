@@ -5,7 +5,7 @@
 #include "declarations.h"
 
 #include <stdio.h>
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 #include "castable_t.h"
 

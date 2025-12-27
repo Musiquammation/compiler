@@ -2,7 +2,7 @@
 
 #include "Class.h"
 
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 void Variable_create(Variable* variable) {
 	variable->meta = NULL;

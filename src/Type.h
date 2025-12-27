@@ -2,7 +2,7 @@
 #define COMPILER_TYPE_H_
 
 #include "declarations.h"
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 typedef void* mblock_t;
 

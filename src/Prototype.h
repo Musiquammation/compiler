@@ -4,7 +4,7 @@
 #include "declarations.h"
 #include "label_t.h"
 #include "definitionState_t.h"
-#include <tools/Array.h>
+#include "tools/Array.h"
 
 enum {
 	PROTO_MODE_REFERENCE,
