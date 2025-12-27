@@ -3,7 +3,8 @@
 	@langstd class Type;
 	@langstd class Pointer;
 
-	
+
+	class DoublePointer;	
 	class Integer;
 	class Container;
 

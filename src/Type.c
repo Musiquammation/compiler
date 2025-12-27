@@ -65,6 +65,9 @@ void Type_defaultConstructors(
 ) {
 	typedef Variable* var_t;
 
+	Type* backup = malloc(sizeof(Type));
+	*backup = meta;
+
 	Variable** const metaVariables = meta.proto->direct.cl->variables.data;
 	const int metaVariables_len = meta.proto->direct.cl->variables.length;
 

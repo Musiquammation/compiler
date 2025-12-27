@@ -1,7 +1,12 @@
 function test(): size_t {
-	let ptr: Pointer<T: Container>;
-	let res = ptr.t;
+	let dp: DoublePointer<K: Container>;
 
-	return res;
+	let final = dp.ptr;
+
+	if (0) {
+		final = dp.#ptr.#address;
+	}
+
+	return final;
 }
 
