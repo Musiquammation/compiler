@@ -82,6 +82,19 @@ struct Prototype {
 	};
 };
 
+typedef struct {
+	int mode; // 0: default constructor, 1: copy
+
+	union {
+		struct {
+
+		} defaultConstructor;
+
+		struct {
+
+		} copy;
+	};
+} Prototype_generateType_t;
 
 Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, ProtoSetting* settings, int settingLength);
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta);

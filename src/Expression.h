@@ -155,6 +155,8 @@ Expression* Expression_crossTyped(int type, Expression* expr);
 Expression* Expression_cross(Expression* expr);
 
 Prototype* Expression_getPrimitiveProtoFromType(int type);
+Type* Expression_getPrimitiveTypeFromType(int type);
 Prototype* Expression_getPrimitiveProtoFromSize(int type);
+
 
 #endif

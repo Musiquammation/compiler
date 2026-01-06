@@ -1,6 +1,7 @@
 #ifndef COMPILER_TYPE_H_
 #define COMPILER_TYPE_H_
 
+#include "Scope.h"
 #include "declarations.h"
 #include "tools/Array.h"
 
@@ -15,18 +16,33 @@ struct Type {
 	char primitiveSizeCode;
 };
 
+struct ScopeType {
+	Scope scope;
+	mblock_t data;
+};
+
+
 void Type_free(Type* type);
 
 void Type_defaultConstructors(
-	void* data, Class* cl, ProtoSetting* settings,
-	int settingLength, Type meta, Scope* scope);
+	mblock_t data, Class* meta, ProtoSetting* settings,
+	int settingLength, Scope* scope);
 
-void Type_defaultDestructors(void* data, Type* meta);
+void Type_defaultDestructors(mblock_t data, Class* cl);
 
-
-
-
+Type* Type_newCopy(Type* source, Prototype* proto, int offset);
 
 
+
+Variable* ScopeType_searchVariable(ScopeType* scope, label_t name, ScopeSearchArgs* args);
+Class* ScopeType_searchClass(ScopeType* scope, label_t name, ScopeSearchArgs* args);
+Function* ScopeType_searchFunction(ScopeType* scope, label_t name, ScopeSearchArgs* args);
+
+void ScopeType_addVariable(ScopeType* scope, Variable* v);
+void ScopeType_addClass(ScopeType* scope, Class* cl);
+void ScopeType_addFunction(ScopeType* scope, Function* fn);
+
+Type* ScopeType_searchType(ScopeType* scope, Variable* variable);
 
 #endif
+

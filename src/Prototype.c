@@ -24,7 +24,6 @@ static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype* proto, Class
 		return (ExtendedPrototypeSize){CLASSSIZE_LATER, CLASSSIZE_LATER, PSC_UNKNOWN};
 	}
 
-	printf("direct %s %d\n", cl->name, cl->size);
 
 	if (cl->size >= 0) {
 		ExtendedPrototypeSize sizes = {cl->size, cl->maxMinimalSize, cl->primitiveSizeCode};
@@ -45,7 +44,6 @@ Prototype* Prototype_create_direct(
 ) {
 	Prototype* proto = malloc(sizeof(Prototype));
 	setMode(PROTO_MODE_DIRECT);
-	printf("new %p to %s\n", proto, cl->name);
 	proto->direct.cl = cl;
 	proto->direct.primitiveSizeCode = cl->primitiveSizeCode;
 	if (settingLength) {
@@ -98,7 +96,6 @@ Prototype* Prototype_create_variadic(Variable* ref) {
 
 void Prototype_free(Prototype* proto, bool deep) {
 	int state = proto->state;
-	printf("fre %p / %d, %d\n", proto, state >> 8, state & 0xff);
 
 	if (state >> 8) {
 		proto->state = (((state >> 8) - 1) << 8) | (state & 0xff);
@@ -107,7 +104,6 @@ void Prototype_free(Prototype* proto, bool deep) {
 	
 	switch (state & 0xff) {
 	case PROTO_MODE_REFERENCE:
-		printf("from %p\n", proto);
 		Prototype_free(proto->ref.proto, deep);
 		free(proto->ref.varr);
 		free(proto);
@@ -193,7 +189,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		}
 
 		Variable** varr = proto->ref.varr;
-		Type* origin = ScopeFunction_globalSearchType(scope, varr[0]);
+		Type* origin = Scope_searchType(scope, varr[0]);
 		if (!origin) {
 			raiseError("[Architecture] Refered type not found");
 		}
@@ -209,7 +205,6 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		Variable* lastVariable = varr[varr_len - 1];
 		Type* meta = origin->meta;
 
-		printf("lastwas %p %s\n", newType, lastVariable->name);
 		newType->proto = lastVariable->proto;
 		newType->meta = meta;
 		newType->data = origin->data + Prototype_getVariableOffset(varr, varr_len);
@@ -235,10 +230,9 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		}
 
 		Type* type = malloc(sizeof(Type));
-		printf("NTYPE %p %s\n", type, proto->direct.cl->name);
 		Class* cl = proto->direct.cl;
 		type->proto = proto;
-		type->reference = 0;
+		type->reference = NULL;
 		type->refCount = 0;
 		type->primitiveSizeCode = 0;
 
@@ -257,8 +251,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 
 		ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
 		if (sizes.size > 0) {
-			printf("newfor %p slen=%d\n", type, proto->direct.settingLength);
-			void* data = calloc(1, sizes.size);
+			void* data = malloc(sizes.size);
 			memset(data, 0, sizes.size);
 			type->data = data;
 
@@ -268,7 +261,6 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 				meta->direct.cl,
 				proto->direct.settings,
 				proto->direct.settingLength,
-				*metaType,
 				scope
 			);
 
@@ -281,8 +273,9 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 
 	case PROTO_MODE_VARIADIC:
 	{
-		raiseError("[TODO] Prototype_generateType");
-		return NULL;
+		Type* type = Scope_searchType(scope, proto->variadic.ref);
+		type->refCount++;
+		return type;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
@@ -623,7 +616,6 @@ char Prototype_getPrimitiveSizeCode(Prototype* proto) {
 
 	case PROTO_MODE_DIRECT:
 	{
-		printf("primitiveSizeCode: %d\n", proto->direct.primitiveSizeCode);
 		return proto->direct.primitiveSizeCode;
 	}
 
@@ -707,7 +699,7 @@ Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer) {
 Prototype* Prototype_copy(Prototype* src) {
 	/// TODO: complete the copy
 	int state = src->state;
-	src->state = (((state >> 8) + 1) << 8) | (state & 0xff);
+	src->state = (((state >> 8) + 1) << 8) | (state & 0xff); // add one usage
 
 	switch (state & 0xff) {
 	case PROTO_MODE_REFERENCE:
@@ -742,9 +734,19 @@ Prototype* Prototype_generateStackPointer(Variable **varr, int varLength) {
 	settings[0].variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
 
 	Prototype* p = Prototype_create_direct(_langstd.pointer, 8, settings, 1);
-	printf("gosr %p\n", p);
 	return p;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

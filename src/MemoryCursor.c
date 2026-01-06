@@ -16,20 +16,20 @@ int MemoryCursor_align(MemoryCursor cursor) {
 	return cursor.offset;
 }
 
-int MemoryCursor_give(MemoryCursor* cursor, int size, int maxMinimalSize) {
+int MemoryCursor_give(MemoryCursor* cursor, int size, int alignment) {
 	if (size == 0)
 		return cursor->offset;
 
-	int mms = maxMinimalSize;
-	if (mms > cursor->maxMinimalSize)
-		cursor->maxMinimalSize = mms;
+	if (alignment > cursor->maxMinimalSize)
+		cursor->maxMinimalSize = alignment;
 
-	int d = cursor->offset % mms;
-	if (d) {
-		cursor->offset += mms - d;
+	int misalignment = cursor->offset % alignment;
+	if (misalignment != 0) {
+		cursor->offset += alignment - misalignment;
 	}
 
 	int offset = cursor->offset;
-	cursor->offset += maxMinimalSize;
+	cursor->offset += size;
 	return offset;
 }
+

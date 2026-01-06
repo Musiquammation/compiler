@@ -74,7 +74,6 @@ TraceStackHandlerRspAdapter TraceStackHandler_add(TraceStackHandler* handler, in
 
 	handler->totalSize = addr + size;
 
-	printf("addmove %d %d\n", label, move);
 	return (TraceStackHandlerRspAdapter){addr, -move};
 }
 
@@ -155,7 +154,6 @@ int TraceStackHandler_remove(TraceStackHandler* handler, int label, int size) {
 		handler->positions[label].position = -1;
 	}
 
-	printf("adjust %d %d\n", rspAdjust, handler->rsp);
 	return rspAdjust;
 }
 
@@ -166,15 +164,12 @@ static void TraceStackHandler_realAdaptAllocation(TraceStackHandler* handler, in
 	if (move == 0)
 		return;
 
-	printf("adaptrsp %d\n", move);
 	if (move <= 0) {
 		// Allow data
 		handler->rsp -= move;
-		fprintf(output, "\tsub rsp, %d%s", -move, suffix);
 	} else {
 		// Free data
 		handler->rsp -= move;
-		fprintf(output, "\tadd rsp, %d%s", move, suffix);
 	}
 }
 

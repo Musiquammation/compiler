@@ -217,6 +217,30 @@ Function* Scope_searchFunction(Scope* scope, int scopeType, label_t name, ScopeS
 	return NULL;
 }
 
+Type* Scope_searchType(Scope* scope, Variable* variable) {
+	while (scope) {
+		Type* t;
+		switch (scope->type) {
+		case SCOPE_FUNCTION:
+			t = ScopeFunction_searchType((ScopeFunction*)scope, variable);
+			if (t) {return t;}
+			break;
+
+		case SCOPE_TYPE:
+			t = ScopeType_searchType((ScopeType*)scope, variable);
+			if (t) {return t;}
+			break;
+		}
+		
+		scope = scope->parent;
+	}
+	
+	return NULL;
+}
+
+
+
+
 
 void Scope_addVariable(Scope* scope, int scopeType, Variable* v) {
 	switch (scopeType) {

@@ -51,3 +51,5 @@ run: all
 print: all
 	clear
 	./$(TARGET) $(ARGS)
+
+build: all

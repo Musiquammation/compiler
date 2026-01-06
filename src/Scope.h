@@ -63,6 +63,7 @@ enum {
 	SCOPE_POOL,
 	SCOPE_CLASS,
 	SCOPE_FUNCTION,
+	SCOPE_TYPE,
 };
 
 
@@ -97,6 +98,8 @@ bool Scope_defineOnFly(Scope* scope, label_t name);
 Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
 Class* Scope_searchClass(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
 Function* Scope_searchFunction(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
+Type* Scope_searchType(Scope* scope, Variable* variable);
+
 
 void Scope_addVariable(Scope* scope, int scopeType, Variable* v);
 void Scope_addClass(Scope* scope, int scopeType, Class* cl);
@@ -128,6 +131,7 @@ Function* ScopePool_searchFunction(ScopePool* file, label_t namen, ScopeSearchAr
 void ScopePool_addVariable(ScopePool* file, Variable* v);
 void ScopePool_addClass(ScopePool* file, Class* cl);
 void ScopePool_addFunction(ScopePool* file, Function* fn);
+
 
 
 

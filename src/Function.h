@@ -61,14 +61,13 @@ void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v);
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl);
 void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn);
 
-Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value);
+void ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Prototype* proto, Type* type);
 
 Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variable);
 
 
 
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable);
-Type* ScopeFunction_globalSearchType(Scope* scope, Variable* variable);
 
 #endif
 

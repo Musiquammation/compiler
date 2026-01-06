@@ -1,6 +1,7 @@
 #include "primitives.h"
 #include "globalLabelPool.h"
 #include "Prototype.h"
+#include "Expression.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -112,6 +113,8 @@ Class* primitives_getClass(label_t name) {
 	}
 	return NULL;
 }
+
+
 
 Type* primitives_getType(Class* cl) {
 	int low = 0, high = 17 - 1;

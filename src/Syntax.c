@@ -28,6 +28,11 @@
 
 
 
+typedef struct {
+	Prototype* proto;
+	Type* type;
+} protoAndType_t;
+
 
 #define TokenCompare(list, flags) (Token_compare(token, list, sizeof(list)/sizeof(Token), flags))
 
@@ -215,7 +220,6 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		case 0:
 		{
 			Expression* path = Syntax_readPath(token.label, parser, scope);
-			printf("pathis %p\n", path);
 			Expression* expr = Array_push(Expression, &lineArr);
 			expr->type = EXPRESSION_LINK;
 			expr->data.linked = path;
@@ -679,7 +683,6 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 	// Read definition
 	if (definitionToRead) {
 		Syntax_ClassDefinitionArg arg = {.controlFunctions.size = 0};
-		printf("DEFINE %s\n", cl->name);
 		Syntax_classDefinition(scope, parser, cl, &arg);
 		
 		// Define metas
@@ -903,10 +906,10 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			case 0:
 			{
 				Variable* variable = malloc(sizeof(Variable));
+				Variable_create(variable);
 				*Array_push(Variable*, &cl->variables) = variable;
 				
 				variable->name = name;
-
 				variable->proto = Syntax_proto(parser, &variadicScope.scope);
 
 				// Finish by end operation
@@ -1023,8 +1026,6 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 		Token token = Parser_read(parser, &_labelPool);
 		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
 
-		printf("at %d(%d) %d: ", syntaxResult, typeToDefine, offsetToDefine);
-		Token_println(&token);
 		switch (syntaxResult) {
 		// label
 		case 0:
@@ -1689,7 +1690,6 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 			currentVarPath.length = 1;
 			*(Variable**)currentVarPath.data = (Variable*)object;
-			printf("forvar %s\n", ((Variable*)object)->name);
 
 			Function* accessorFn = NULL;
 			Prototype* accessorProto = NULL;
@@ -1898,12 +1898,9 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 	#undef enshureObject
 
 	returnResult:
-	printf("Path result:\n");
 	for (Expression* e = last; e; ) {
-		printf("\t%d ", e->type);
 		switch (e->type) {
 		case EXPRESSION_PROPERTY:
-			printf("var=%s", e->data.property.variableArr[0]->name);
 			e = e->data.property.origin;
 			break;
 
@@ -1913,7 +1910,6 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 		}
 
-		printf("\n");
 	}
 
 	return last;
@@ -1931,28 +1927,108 @@ static int giveIdToVariable(Variable* variable, Trace* trace, int size, bool isR
 	variable->id = (int)Trace_ins_create(trace, variable, size, 0, isRegistrable);
 }
 
+
+
+
+static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope) {
+	valueExpr = Expression_cross(valueExpr);
+	int exprType = valueExpr->type;
+
+	if (exprType == EXPRESSION_PROPERTY) {
+		Variable** varr = valueExpr->data.property.variableArr;
+		int varr_len = valueExpr->data.property.length;
+
+		Type* firstType = Scope_searchType(scope, varr[0]);
+		if (!firstType) {
+			raiseError("[Intern] Cannot find type of variable");
+		}
+
+		// Get meta offset
+		typedef Variable* var_ptr_t;
+		int offset = 0;
+		Array_for(var_ptr_t, &varr[1], varr_len - 1, vptr) {
+			Variable* variable = *vptr;
+			Variable* meta = variable->meta;
+			if (!meta) {
+				offset = -1;
+				break;
+			}
+
+			offset += meta->offset;
+		}
+
+		Prototype* proto = varr[varr_len - 1]->proto;
+		Type* type = Type_newCopy(firstType, proto, offset);
+
+		return (protoAndType_t){proto, type};
+	}
+	
+	if (exprType == EXPRESSION_FNCALL) {
+		protoAndType_t pat = {.proto = valueExpr->data.fncall.fn->returnType};
+		pat.type = Prototype_generateType(pat.proto, scope);
+		return pat;
+	}
+	
+	if (exprType == EXPRESSION_VALUE) {
+		raiseError("[TODO]: handle value read/edits");
+	}
+	
+	if (exprType >= EXPRESSION_ADDITION && exprType <= EXPRESSION_L_DECREMENT) {
+		int signedSize = Expression_reachSignedSize(exprType, valueExpr);
+		protoAndType_t pat;
+		pat.proto = Expression_getPrimitiveProtoFromSize(signedSize);
+		pat.type = primitives_getType(pat.proto->primitive.cl);
+		return pat;
+	}
+	
+	if (exprType >= EXPRESSION_U8 && exprType <= EXPRESSION_F64) {
+		protoAndType_t pat;
+		pat.proto = Expression_getPrimitiveProtoFromType(exprType);
+		pat.type = Expression_getPrimitiveTypeFromType(exprType);
+		return pat;
+	}
+	
+	if (exprType == EXPRESSION_ADDR_OF) {
+		Expression* reference = Expression_cross(valueExpr->data.operand);
+		if (reference->type != EXPRESSION_PROPERTY) {
+			raiseError("[Syntax] Can only get the address of a variable");
+			return (protoAndType_t){};
+		}
+
+		Variable** refVarArr = reference->data.property.variableArr;
+		reference->data.property.freeVariableArr = false;
+
+		protoAndType_t pat;
+		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.length);
+		pat.type = Prototype_generateType(pat.proto, scope);
+		return pat;
+
+	}
+	
+	raiseError("[TODO]: this expression is not handled");
+}
+
+/**
+ * @warning The prototypes of varrDest must be defined
+ */
 static void placeExpression(
-	Parser* parser,
 	Trace* trace,
 	Expression* valueExpr,
-	Expression* targetExpr,
-	int targetExprType
+	Variable** varrDest,
+	int varrDest_len
 ) {
 	// Read targetExpr
 	Expression* sourceExpr = Expression_cross(valueExpr);
 	int sourceExprType = sourceExpr->type;
 
-
 	if (sourceExprType == EXPRESSION_PROPERTY) {
-		Variable** varrDest = targetExpr->data.property.variableArr;
-		int length = targetExpr->data.property.length;
-
-		Variable* last = varrDest[length-1];
+		Variable* last = varrDest[varrDest_len-1];
 		int id;
 		int signedSize;
-		if (last->proto) {
+		id = last->id;
+		if (id > 0) {
 			signedSize = Prototype_getSignedSize(last->proto);
-			id = last->id;
+
 		} else {
 			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.length-1];
 			Prototype* lvp = lv->proto;
@@ -1974,9 +2050,7 @@ static void placeExpression(
 				} else {
 					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
 				}
-				last->proto = Prototype_copy(lvp);
 				last->id = id;
-
 				break;
 			}
 
@@ -1990,7 +2064,6 @@ static void placeExpression(
 			{
 				signedSize = lvp->primitive.sizeCode;
 				id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
-				last->proto = lvp;
 				last->id = id;
 				break;
 			}
@@ -2010,54 +2083,47 @@ static void placeExpression(
 			trace,
 			sourceExpr,
 			id,
-			Prototype_getVariableOffset(varrDest, length),
+			Prototype_getVariableOffset(varrDest, varrDest_len),
 			signedSize,	
 			EXPRESSION_PROPERTY
 		);
 
 	} else if (sourceExprType == EXPRESSION_FNCALL) {
 		/// TODO: handle null id
-		Variable** varrDest = targetExpr->data.property.variableArr;
-		int length = targetExpr->data.property.length;
-
 		Trace_set(
 			trace,
 			sourceExpr,
 			varrDest[0]->id,
-			Prototype_getVariableOffset(varrDest, length),
-			Prototype_getSignedSize(varrDest[length-1]->proto),
+			Prototype_getVariableOffset(varrDest, varrDest_len),
+			Prototype_getSignedSize(varrDest[varrDest_len-1]->proto),
 			EXPRESSION_FNCALL
 		);
 
 
 	} else if (sourceExprType == EXPRESSION_VALUE) {
-			raiseError("[TODO]: handle value read/edits");
+		raiseError("[TODO]: handle value read/edits");
 	
 	
 	} else if (sourceExprType >= EXPRESSION_ADDITION && sourceExprType <= EXPRESSION_L_DECREMENT) {
-		Variable** varrDest = targetExpr->data.property.variableArr;
-		int length = targetExpr->data.property.length;
-
-		Prototype* vproto = varrDest[length-1]->proto;
+		Prototype* vproto = varrDest[varrDest_len-1]->proto;
 
 		if (vproto) {
 			Trace_set(
 				trace,
 				sourceExpr,
 				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, length),
-				Prototype_getSignedSize(varrDest[length-1]->proto),
+				Prototype_getVariableOffset(varrDest, varrDest_len),
+				Prototype_getSignedSize(varrDest[varrDest_len-1]->proto),
 				sourceExprType
 			);
 		
-		} else if (length == 1) {
+		} else if (varrDest_len == 1) {
 			Variable* v = varrDest[0];
 			int signedSize = Expression_reachSignedSize(sourceExprType, sourceExpr);
 			Prototype* p = Expression_getPrimitiveProtoFromSize(signedSize);
-			v->proto = p;
 
 			int id = v->id;
-			if (v->id < 0) {
+			if (id < 0) {
 				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
 				v->id = id;
 			}
@@ -2080,11 +2146,7 @@ static void placeExpression(
 
 
 	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_F64) {
-		Variable** variableArr = targetExpr->data.property.variableArr;
-		int length = targetExpr->data.property.length;
-		int subLength = length - 1;
-		
-		Variable** varrDest = targetExpr->data.property.variableArr;
+		int subLength = varrDest_len - 1;
 		/// TODO: check sizes
 
 		Prototype* vproto = varrDest[subLength]->proto;
@@ -2095,7 +2157,7 @@ static void placeExpression(
 			Trace_ins_def(
 				trace,
 				varrDest[0]->id,
-				Prototype_getVariableOffset(varrDest, length),
+				Prototype_getVariableOffset(varrDest, varrDest_len),
 				signedSize,
 				castable_cast(
 					Expression_getSignedSize(sourceExprType),
@@ -2107,10 +2169,9 @@ static void placeExpression(
 		} else if (subLength == 0) {
 			Variable* v = varrDest[0];
 			int signedSize = Expression_getSignedSize(sourceExprType);
-			v->proto = Expression_getPrimitiveProtoFromType(sourceExprType);
 
 			int id = v->id;
-			if (v->id < 0) {
+			if (id < 0) {
 				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
 				v->id = id;
 			}
@@ -2144,8 +2205,6 @@ static void placeExpression(
 
 		int srcVar = refVarArr[0]->id;
 
-		int targetLength = targetExpr->data.property.length;
-		Variable** varrDest = targetExpr->data.property.variableArr;
 		int destVar = varrDest[0]->id;
 		int destOffset;
 		if (destVar < 0) {
@@ -2153,17 +2212,15 @@ static void placeExpression(
 			varrDest[0]->id = destVar;
 			destOffset = -1;
 		} else {
-			destOffset = Prototype_getVariableOffset(varrDest, targetLength-1);
-
+			destOffset = Prototype_getVariableOffset(varrDest, varrDest_len-1);
 		}
 
 
-		if (varrDest[targetLength-1]->proto == NULL) {
-			if (targetLength != 1) {
+		if (varrDest[varrDest_len-1]->proto == NULL) {
+			if (varrDest_len != 1) {
 				raiseError("[Intern] No prototype to place expression");
 			}
 
-			varrDest[0]->proto = Prototype_generateStackPointer(refVarArr, refArrLength);
 			reference->data.property.freeVariableArr = false;
 		}
 		
@@ -2177,10 +2234,6 @@ static void placeExpression(
 	} else {
 		raiseError("[TODO]: this expression is not handled");
 	}
-
-	// Free expression
-	Expression_free(valueExpr->type, valueExpr);
-	free(valueExpr);
 }
 
 
@@ -2231,7 +2284,6 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		case 1:
 			/// TODO: handle this expression
 			valueExpr = Syntax_expression(parser, &scope->scope, 1);
-			printf("valueExpr is %p\n", valueExpr);
 			break;
 
 		// end
@@ -2241,21 +2293,31 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		}
 	}
 
+	
 	// Add variable
 	finish:
+	Type* type;
 	if (valueExpr) {
-		Expression exprToSet = {
-			.type = EXPRESSION_PROPERTY,
-			.data = {
-				.property = {&variable, NULL, 1, false}
-			}
-		};
+		// Generate type and prototype
+		protoAndType_t result = generateExpressionType(valueExpr, &scope->scope);
+		proto = result.proto;
+		type = result.type;
+		variable->proto = proto;
 
-		placeExpression(parser, trace, valueExpr, &exprToSet, EXPRESSION_PROPERTY);
+		// Place the expression in Trace
+		Variable* varrDest[] = {variable};
+		placeExpression(trace, valueExpr, varrDest, 1);
+
+		// Free expression
+		Expression_free(valueExpr->type, valueExpr);
+		free(valueExpr);
+
+
+	} else {
+		type = Prototype_generateType(proto, &scope->scope);
 	}
 	
-	
-	Type* type = ScopeFunction_pushVariable(scope, variable, valueExpr);
+	ScopeFunction_pushVariable(scope, variable, proto, type);
 }
 
 
@@ -2297,6 +2359,8 @@ void Syntax_functionScope_freeLabel(
 			raiseError("[TODO]: must contain equal");
 		}
 
+		raiseError("[TODO]: update the type (using a copy method)");
+
 		
 		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
 
@@ -2305,8 +2369,13 @@ void Syntax_functionScope_freeLabel(
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
 
-		placeExpression(parser, trace, valueExpr, expression, expressionType);
+		placeExpression(trace, valueExpr, expression->data.property.variableArr,
+			expression->data.property.length);
 
+
+		// Free expression
+		Expression_free(valueExpr->type, valueExpr);
+		free(valueExpr);
 
 
 		break;
@@ -2618,7 +2687,6 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	// Remove variable traces
 	finishScope:
 	Array_loop(TypeDefinition, scope->types, td) {
-		printf("id[%d]{%s}\n", td->variable->id, td->variable->name);
 		Trace_removeVariable(trace, td->variable->id);
 	}
 

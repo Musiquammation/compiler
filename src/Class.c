@@ -22,23 +22,19 @@ void Class_create(Class* cl) {
 
 
 void Class_delete(Class* cl) {
-	printf("rem %s %d %d %d\n", cl->name, cl->metaDefinitionState, cl->size, cl->variables.length);
 	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Class_delete(cl->meta);
 		free(cl->meta);
 	}
-	printf("dne %p\n", cl);
 
 	// Delete variables
 	Array_loopPtr(Variable, cl->variables, ptr) {
 		Variable* i = *ptr;
-		printf("var %s:\n", i->name);
 		Variable_delete(i);
 		free(i);
 	}
 
 
-	printf("kll %p\n", cl);
 
 	Array_free(cl->variables);
 
@@ -120,21 +116,18 @@ void Class_appendMetas(Class* cl) {
 	switch (cl->metaDefinitionState) {
 	case DEFINITIONSTATE_DONE:
 	{
-		printf("append %s %d\n", cl->name, cl->meta->size);
 		raiseError("[Architecture] Cannot append meta to a DONE class");
 		break;
 	}
 
 	case DEFINITIONSTATE_NOEXIST:
 	{
-		printf("append %s %d\n", cl->name, cl->meta->size);
 		raiseError("[Architecture] Cannot append meta to a NOEXIST class");
 		break;
 	}
 	
 	case DEFINITIONSTATE_READING:
 	{
-		printf("appendR %s %d\n", cl->name, cl->meta->size);
 		meta = cl->meta;
 		cursor.offset = meta->size;
 		cursor.maxMinimalSize = meta->maxMinimalSize;
@@ -143,7 +136,6 @@ void Class_appendMetas(Class* cl) {
 	
 	case DEFINITIONSTATE_UNDEFINED:
 	{
-		printf("appendU %s no\n", cl->name);
 		// Search for meta arguments
 		Array_loop(var_ptr_t, cl->variables, vptr) {
 			Variable* source = *vptr;
@@ -163,7 +155,6 @@ void Class_appendMetas(Class* cl) {
 
 		
 		// Here, no meta argument to append found
-		printf("\trefused\n");
 		return;
 
 
@@ -184,7 +175,6 @@ void Class_appendMetas(Class* cl) {
 	}
 
 
-
 	Array_loop(var_ptr_t, cl->variables, vptr) {
 		Variable* source = *vptr;
 
@@ -194,7 +184,6 @@ void Class_appendMetas(Class* cl) {
 			continue;
 
 		if (hasMeta == -1) {
-			printf("While appending to %s:\n", source->name);
 			raiseError("[TODO] handle unknown meta");
 			continue;
 		}
@@ -211,8 +200,10 @@ void Class_appendMetas(Class* cl) {
 		variable->name = source->name;
 		variable->proto = mp;
 		variable->offset = offset;
-		printf("push %s\n", variable->name);
+
+		source->meta = variable;
 	}
+
 
 	meta->maxMinimalSize = cursor.maxMinimalSize;
 	meta->size = MemoryCursor_align(cursor);
@@ -225,7 +216,6 @@ void Class_appendMetas(Class* cl) {
 
 
 void Class_acheiveDefinition(Class* cl) {
-	printf("acheive %s %d\n", cl->name, cl->metaDefinitionState);
 	switch (cl->metaDefinitionState) {
 	case DEFINITIONSTATE_UNDEFINED:
 		// raiseError("[Architecture] Cannot acheive a class with unknown meta");

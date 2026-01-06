@@ -102,8 +102,9 @@ Function* ScopeFunction_searchFunction(ScopeFunction* scope, label_t name, Scope
 
 
 void ScopeFunction_addVariable(ScopeFunction* scope, Variable* v) {
+	raiseError("[TODO]: addVariable");
 	/// TODO: let this code ?
-	ScopeFunction_pushVariable(scope, v, NULL);
+	// ScopeFunction_pushVariable(scope, v, v->proto, NULL);
 }
 
 void ScopeFunction_addClass(ScopeFunction* scope, Class* cl) {
@@ -116,19 +117,14 @@ void ScopeFunction_addFunction(ScopeFunction* scope, Function* fn) {
 }
 
 
-Type* ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Expression* value) {
-	if (Prototype_mode(*v->proto) == PROTO_MODE_REFERENCE) {
+void ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Prototype* proto, Type* type) {
+	if (Prototype_mode(*proto) == PROTO_MODE_REFERENCE) {
 		raiseError("[Syntax] Cannot create a variable whose type is a reference of an other type");
-		return NULL;
 	}
 
 	TypeDefinition* td = Array_push(TypeDefinition, &scope->types);
-	printf("PUSH %s\n", v->name);
-	Type* type = Prototype_generateType(v->proto, &scope->scope);
 	td->type = type;
 	td->variable = v;
-
-	return type;
 }
 
 
@@ -149,19 +145,4 @@ Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
 	
 	return NULL;
 }
-
-Type* ScopeFunction_globalSearchType(Scope* scope, Variable* variable) {
-	while (scope) {
-		if (scope->type == SCOPE_FUNCTION) {
-			Type* t = ScopeFunction_searchType((ScopeFunction*)scope, variable);
-			if (t) {return t;}
-		}
-		
-		scope = scope->parent;
-	}
-	
-	return NULL;
-}
-
-
 

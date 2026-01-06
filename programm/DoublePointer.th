@@ -1,7 +1,12 @@
 class {
 	for {
+		padding0: int;
+		padding1: int;
+		padding2: int;
+		
 		K: Type;
 	}
 
 	ptr: Pointer<T: K>;
 }
+

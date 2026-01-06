@@ -71,7 +71,6 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_LINK:
 	{
 		Expression* l = e->data.linked;
-		printf("free linked %p\n", l);
 		Expression_free(l->type, l);
 		free(l);
 		break;
@@ -750,7 +749,6 @@ Expression* Expression_crossTyped(int type, Expression* expr) {
 	}
 
 	if (type == EXPRESSION_LINK) {
-		printf("cross\n");
 		return expr->data.linked;
 	}
 
@@ -793,6 +791,48 @@ Prototype* Expression_getPrimitiveProtoFromType(int type) {
 	default:
 		return NULL;
 	}
+}
+
+Type* Expression_getPrimitiveTypeFromType(int type) {
+	switch (type) {
+	case EXPRESSION_U8:
+		return &_primitives.type_u8;
+
+	case EXPRESSION_I8:
+		return &_primitives.type_i8;
+
+
+	case EXPRESSION_U16:
+		return &_primitives.type_u16;
+
+	case EXPRESSION_I16:
+		return &_primitives.type_i16;
+
+
+	case EXPRESSION_U32:
+		return &_primitives.type_u32;
+
+	case EXPRESSION_I32:
+		return &_primitives.type_i32;
+
+	case EXPRESSION_F32:
+		return &_primitives.type_f32;
+
+
+	case EXPRESSION_U64:
+		return &_primitives.type_u64;
+
+	case EXPRESSION_I64:
+		return &_primitives.type_i64;
+
+	case EXPRESSION_F64:
+		return &_primitives.type_f64;
+
+
+	}
+
+	return NULL;
+
 }
 
 Prototype* Expression_getPrimitiveProtoFromSize(int signedSize) {
