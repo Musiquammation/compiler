@@ -37,6 +37,7 @@ struct Class {
 	definitionState_t definitionState;
 	definitionState_t metaDefinitionState;
 	char primitiveSizeCode;
+	bool isPrimitive;
 
 	int size;
 	int maxMinimalSize;

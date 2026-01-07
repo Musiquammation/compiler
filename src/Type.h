@@ -30,7 +30,9 @@ void Type_defaultConstructors(
 
 void Type_defaultDestructors(mblock_t data, Class* cl);
 
-Type* Type_newCopy(Type* source, Prototype* proto, int offset);
+void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl);
+
+Type* Type_deepCopy(Type* root, Variable** varr, int varr_len);
 
 
 

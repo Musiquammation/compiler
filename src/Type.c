@@ -4,6 +4,7 @@
 #include "Prototype.h"
 #include "Function.h"
 #include "Variable.h"
+#include "primitives.h"
 #include "langstd.h"
 
 #include "helper.h"
@@ -17,13 +18,11 @@ void Type_free(Type* type) {
 		return;
 
 	int refCount = type->refCount;
-	printf("left: %d\n", refCount);
 	if (refCount > 0) {
 		type->refCount = refCount - 1;
 		return;
 	}
 
-	printf("FTYPE %p\n", type);
 
 	Type* ref = type->reference;
 	Type* meta = type->meta;
@@ -123,7 +122,7 @@ void Type_defaultDestructors(mblock_t data, Class* cl) {
 
 		mblock_t dataPtr = data+variable->offset;
 		if (vcl == _langstd.type) {
-			printf("typeat %p of %p [var: %s]\n", *(Type**)dataPtr, data, variable->name);
+			printf("typeat %p inside %p [var=%s]\n", *(Type**)dataPtr, data, variable->name);
 			Type_free(*(Type**)dataPtr);
 			continue;
 		}
@@ -132,33 +131,123 @@ void Type_defaultDestructors(mblock_t data, Class* cl) {
 	}
 }
 
-Type* Type_newCopy(Type* source, Prototype* proto, int offset) {
-	raiseError("[TODO] fix Type_newCopy => choisir la meta");
-
-	if (!source)
-		return NULL;
-
-	Type* type = malloc(sizeof(Type));
-	int size = Prototype_getMetaSizes(proto).size;
-
-	if (offset > 0) {
-		mblock_t* data = malloc(size);
-		memcpy(data, source->data + offset, size);
-		type->data = data;
-	} else {
-		type->data = NULL;
+void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl) {
+	if (cl->isPrimitive) {
+		memcpy(dst, src, cl->size);
+		return;
 	}
 
-	Type* srcMeta = source->meta;
-	// type->meta = Type_newCopy(srcMeta, srcMeta->proto)
-	type->meta = NULL;	
-	type->proto = proto;
-	type->reference = NULL;
-	type->refCount = 0;
-	type->primitiveSizeCode = 0;
+	typedef Variable* var_t;
+	Array_loop(var_t, cl->variables, vptr) {
+		Variable* variable = *vptr;
+		int offset = variable->offset;
+		Class* cl = Prototype_getClass(variable->proto);
+		if (cl == _langstd.type) {
+			Type* newType = Type_deepCopy(*(Type**)src, vptr, 1);
+			*(Type**)dst = newType;
+			continue;
+		}
+
+		// default behavior
+		Type_defaultCopy(dst + offset, src + offset, cl);
+	}
+}
 
 
-	return type;
+Type* Type_deepCopy(Type* root, Variable** varr, int varr_len) {
+	typedef Variable* var_ptr_t;
+
+	Prototype* proto = varr[varr_len - 1]->proto;
+	switch (Prototype_mode(*proto)) {
+	case PROTO_MODE_REFERENCE:
+	{
+		raiseError("[TODO] Type_newCopy");
+	}
+	
+	case PROTO_MODE_DIRECT:
+	{
+		// Get meta
+		char hasMeta = Prototype_directHasMeta(proto);
+		if (hasMeta == -1) {
+			raiseError("[Architecture] Cannot create a type with unknown meta");
+			return NULL;
+		}
+
+		// Create type
+		Type* type = malloc(sizeof(Type));
+		Class* cl = proto->direct.cl;
+		
+		type->proto = proto;
+		type->reference = NULL;
+		type->refCount = 0;
+		type->primitiveSizeCode = 0;
+
+		Prototype_addUsage(*proto);
+		
+		// No meta
+		if (hasMeta == 0) {
+			type->data = NULL;
+			type->meta = NULL;
+			return type;
+		}
+
+		// Get meta offset
+		int offset = 0;
+		Type* rootMetaType = root->meta;
+		if (!rootMetaType)
+			return NULL;
+
+		Array_for(var_ptr_t, &varr[1], varr_len - 1, vptr) {
+			Variable* variable = *vptr;
+			Variable* meta = variable->meta;
+			if (!meta) {
+				offset = -1;
+				break;
+			}
+
+			*vptr = meta;
+			offset += meta->offset;
+		}
+
+		if (offset < 0)
+			return NULL;
+
+
+		Prototype* meta = proto->direct.meta;
+		Type* metaType = offset >= 0 ? Type_deepCopy(rootMetaType, varr, varr_len) : 0;
+		type->meta = metaType;
+
+		ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
+		if (sizes.size > 0) {
+			void* data = malloc(sizes.size);
+			memset(data, 0, sizes.size);
+			type->data = data;
+
+			// Append data if necessary
+			Type_defaultCopy(
+				data,
+				root->data + offset,
+				cl->meta
+			);
+
+		} else {
+			type->data = NULL;
+		}
+
+		return type;
+	}
+
+	case PROTO_MODE_VARIADIC:
+	{
+		/// TODO: search definition (but WHERE?)
+		raiseError("[TODO] Type_newCopy");
+	}
+
+	case PROTO_MODE_PRIMITIVE:
+	{
+		return primitives_getType(proto->primitive.cl);
+	}
+	}
 }
 
 

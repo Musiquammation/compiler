@@ -24,6 +24,7 @@ void primitives_init(void) {
 		_primitives.class_##id##s.meta = NULL; \
 		_primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
 		_primitives.class_##id##s.primitiveSizeCode = k; \
+		_primitives.class_##id##s.isPrimitive = true; \
 		_primitives.class_##id##s.size = s/8; \
 		_primitives.class_##id##s.maxMinimalSize = s/8; \
 		_primitives.proto_##id##s.state = PROTO_MODE_PRIMITIVE; \

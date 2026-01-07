@@ -116,6 +116,7 @@ ExtendedPrototypeSize Prototype_getMetaSizes(Prototype* proto);
 ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype* proto, Scope* scope, bool throwError);
 
 char Prototype_hasMeta(Prototype* proto);
+char Prototype_directHasMeta(Prototype* proto);
 Prototype* Prototype_reachMeta(Prototype* proto);
 Class* Prototype_getMetaClass(Prototype* proto);
 

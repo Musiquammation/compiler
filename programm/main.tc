@@ -1,6 +1,6 @@
 function test(): size_t {
 	let dp: DoublePointer<K: Container>;
 
-
+	let copy = dp.ptr;
 }
 

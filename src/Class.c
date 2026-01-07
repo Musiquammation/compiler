@@ -16,25 +16,19 @@ void Class_create(Class* cl) {
 	cl->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
 	cl->primitiveSizeCode = PSC_UNKNOWN;
+	cl->isPrimitive = false;
 
 	cl->std_methods.fastAccess = NULL;
 }
 
 
 void Class_delete(Class* cl) {
-	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
-		Class_delete(cl->meta);
-		free(cl->meta);
-	}
-
 	// Delete variables
 	Array_loopPtr(Variable, cl->variables, ptr) {
 		Variable* i = *ptr;
 		Variable_delete(i);
 		free(i);
 	}
-
-
 
 	Array_free(cl->variables);
 
@@ -46,6 +40,13 @@ void Class_delete(Class* cl) {
 	}
 
 	Array_free(cl->functions);
+
+	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
+		Class_delete(cl->meta);
+		free(cl->meta);
+	}
+
+
 }
 
 

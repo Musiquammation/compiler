@@ -1938,28 +1938,18 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 		Variable** varr = valueExpr->data.property.variableArr;
 		int varr_len = valueExpr->data.property.length;
 
-		Type* firstType = Scope_searchType(scope, varr[0]);
-		if (!firstType) {
+		Type* rootType = Scope_searchType(scope, varr[0]);
+		if (!rootType) {
 			raiseError("[Intern] Cannot find type of variable");
 		}
 
-		// Get meta offset
-		typedef Variable* var_ptr_t;
-		int offset = 0;
-		Array_for(var_ptr_t, &varr[1], varr_len - 1, vptr) {
-			Variable* variable = *vptr;
-			Variable* meta = variable->meta;
-			if (!meta) {
-				offset = -1;
-				break;
-			}
-
-			offset += meta->offset;
-		}
+		Variable* subVarr[varr_len];
+		memcpy(subVarr, varr, sizeof(subVarr));
+		Type* type = Type_deepCopy(rootType, subVarr, varr_len);
+		
 
 		Prototype* proto = varr[varr_len - 1]->proto;
-		Type* type = Type_newCopy(firstType, proto, offset);
-
+		Prototype_addUsage(*proto);
 		return (protoAndType_t){proto, type};
 	}
 	
