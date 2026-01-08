@@ -1935,19 +1935,31 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	int exprType = valueExpr->type;
 
 	if (exprType == EXPRESSION_PROPERTY) {
+		Expression* origin = valueExpr->data.property.origin;
 		Variable** varr = valueExpr->data.property.variableArr;
 		int varr_len = valueExpr->data.property.length;
 
-		Type* rootType = Scope_searchType(scope, varr[0]);
-		if (!rootType) {
-			raiseError("[Intern] Cannot find type of variable");
+		Type* rootType;
+		if (origin) {
+			protoAndType_t pat = generateExpressionType(origin, scope);
+			rootType = pat.type;
+			Prototype_free(pat.proto, false);
+		} else {
+			rootType = Scope_searchType(scope, varr[0]);
+			if (!rootType) {
+				raiseError("[Intern] Cannot find type of variable");
+			}
 		}
+
 
 		Variable* subVarr[varr_len];
 		memcpy(subVarr, varr, sizeof(subVarr));
-		Type* type = Type_deepCopy(rootType, subVarr, varr_len);
-		
+		Type* type = Type_deepCopy(rootType, subVarr[varr_len-1]->proto, subVarr, varr_len);
 
+		if (origin) {
+			Type_free(rootType);
+		}
+		
 		Prototype* proto = varr[varr_len - 1]->proto;
 		Prototype_addUsage(*proto);
 		return (protoAndType_t){proto, type};
@@ -1962,6 +1974,26 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	if (exprType == EXPRESSION_VALUE) {
 		raiseError("[TODO]: handle value read/edits");
 	}
+
+	if (exprType == EXPRESSION_FAST_ACCESS) {
+		protoAndType_t origin = generateExpressionType(valueExpr->data.fastAccess.origin, scope);
+		int stdBehavior = valueExpr->data.fastAccess.accessor->stdBehavior;
+		if (stdBehavior < 0) {
+			raiseError("[TODO]: perform real std behavior");
+		}
+
+		switch (stdBehavior) {
+		// pointer
+		case 0:
+		{
+			return origin;
+		}
+
+		default:
+			raiseError("[BadId]: Invalid id for standard fast access");
+		}
+	}
+
 	
 	if (exprType >= EXPRESSION_ADDITION && exprType <= EXPRESSION_L_DECREMENT) {
 		int signedSize = Expression_reachSignedSize(exprType, valueExpr);
@@ -2290,6 +2322,11 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 	if (valueExpr) {
 		// Generate type and prototype
 		protoAndType_t result = generateExpressionType(valueExpr, &scope->scope);
+
+		if (proto) {
+			raiseError("[TODO]: compare prototypes");
+		}
+
 		proto = result.proto;
 		type = result.type;
 		variable->proto = proto;

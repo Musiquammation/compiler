@@ -32,8 +32,7 @@ void Type_defaultDestructors(mblock_t data, Class* cl);
 
 void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl);
 
-Type* Type_deepCopy(Type* root, Variable** varr, int varr_len);
-
+Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len);
 
 
 Variable* ScopeType_searchVariable(ScopeType* scope, label_t name, ScopeSearchArgs* args);

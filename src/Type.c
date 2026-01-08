@@ -42,6 +42,7 @@ void Type_free(Type* type) {
 
 	void* data = type->data;
 	if (data) {
+		if (!meta) {free(type);free(type);}
 		Type_defaultDestructors(data, Prototype_getClass(meta->proto));
 		free(data);
 	}
@@ -126,7 +127,7 @@ void Type_defaultDestructors(mblock_t data, Class* cl) {
 			Type_free(*(Type**)dataPtr);
 			continue;
 		}
-
+		
 		Type_defaultDestructors(dataPtr, vcl);
 	}
 }
@@ -141,9 +142,10 @@ void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl) {
 	Array_loop(var_t, cl->variables, vptr) {
 		Variable* variable = *vptr;
 		int offset = variable->offset;
-		Class* cl = Prototype_getClass(variable->proto);
+		Prototype* proto = variable->proto;
+		Class* cl = Prototype_getClass(proto);
 		if (cl == _langstd.type) {
-			Type* newType = Type_deepCopy(*(Type**)src, vptr, 1);
+			Type* newType = Type_deepCopy(*(Type**)src, proto, vptr, 1);
 			*(Type**)dst = newType;
 			continue;
 		}
@@ -154,10 +156,9 @@ void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl) {
 }
 
 
-Type* Type_deepCopy(Type* root, Variable** varr, int varr_len) {
+Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len) {
 	typedef Variable* var_ptr_t;
 
-	Prototype* proto = varr[varr_len - 1]->proto;
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
 	{
@@ -213,11 +214,11 @@ Type* Type_deepCopy(Type* root, Variable** varr, int varr_len) {
 			return NULL;
 
 
-		Prototype* meta = proto->direct.meta;
-		Type* metaType = offset >= 0 ? Type_deepCopy(rootMetaType, varr, varr_len) : 0;
+		Prototype* metaProto = proto->direct.meta;
+		Type* metaType = Type_deepCopy(rootMetaType, metaProto, varr, varr_len);
 		type->meta = metaType;
 
-		ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
+		ExtendedPrototypeSize sizes = Prototype_getSizes(metaProto);
 		if (sizes.size > 0) {
 			void* data = malloc(sizes.size);
 			memset(data, 0, sizes.size);

@@ -1,9 +1,5 @@
 class Vector {
-   	for {
-		U: Type;
-	}
-
-    x: U;
-    y: U;
+    x: int;
+    y: int;
 
 }

@@ -4,9 +4,10 @@
 	@langstd class Pointer;
 
 
-	class DoublePointer;	
-	class Integer;
+	class Vector;
 	class Container;
+	class Integer;
+	class DoublePointer;	
 
 	function main(): int;
 }

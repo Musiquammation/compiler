@@ -1,6 +1,5 @@
 function test(): size_t {
-	let dp: DoublePointer<K: Container>;
-
-	let copy = dp.ptr;
+	let ptr: Pointer<T: Vector>;
+	let x = ptr.x;
 }
 
