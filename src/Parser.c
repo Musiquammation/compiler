@@ -130,23 +130,26 @@ static char moveCursor(int cursor, int lineLength, Parser* parser) {
 
 
 
-static Token handleNegativeChar(Parser* parser, char c) {
+static void handleNegativeChar(Parser* parser, Token* token, char c) {
 	if (c == -2) {
 		raiseError("[Parser] Error from parser");
-		return (Token){.type = TOKEN_TYPE_ERROR};
+		token->type = TOKEN_TYPE_ERROR;
+		return;
 	}
 	
 	if (c == -1) {
 		if (parser->scopeLevel != 0) {
 			raiseError("[Parser] Scope level error");
-			return (Token){.type = TOKEN_TYPE_ERROR};
+			token->type = TOKEN_TYPE_ERROR;
+			return;
 		}
 		
-		return (Token){.type = TOKEN_TYPE_EOF};
+		token->type = TOKEN_TYPE_EOF;
+		return;
 	}
 	
 	raiseError("[Parser] Invalid char");
-	return (Token){.type = TOKEN_TYPE_ERROR};
+	token->type = TOKEN_TYPE_ERROR;
 }
 
 static bool isOperatorChar(char c) {
@@ -329,10 +332,10 @@ void Parser_close(Parser* parser) {
 
 
 
-Token Parser_read(Parser* parser, LabelPool* labelPool) {
+void Parser_read(Parser* parser, LabelPool* labelPool) {
 	if (parser->hasSavedToken) {
 		parser->hasSavedToken = false;
-		return parser->token;
+		return;
 	}
 
 
@@ -342,7 +345,8 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 
 
 	if (firstChar < 0) {
-		return handleNegativeChar(parser, firstChar);
+		handleNegativeChar(parser, &parser->token, firstChar);
+		return;
 	}
 
 	int cursor = parser->cursor;
@@ -350,10 +354,9 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 
 	// Number
 	if (firstChar >= '0' && firstChar <= '9') {
-		Token token;
-		int length = collectNumber(&parser->buffer[cursor], &token);
+		int length = collectNumber(&parser->buffer[cursor], &parser->token);
 		move(length);
-		return token;
+		return;
 	}
 
 	// Operator
@@ -361,17 +364,41 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 		operator_t operator = getOperator(&parser->buffer[cursor], lineLength - cursor);
 		if (operator < 0) {
 			raiseError("[Parser] Operator not found");
-			return (Token){.type = TOKEN_TYPE_ERROR};
+			parser->token.type = TOKEN_TYPE_ERROR;
+			return;
 		}
 
 		/// TODO: #1 handle strings and comments
 		/// TODO: #2 scopeLevel (with {}, <>, (), [])
 		int length = getOperatorLength(operator);
 		move(length);
-		return (Token){
-			.type = TOKEN_TYPE_OPERATOR,
-			.operator = operator
-		};
+
+		if (operator == TOKEN_OPERATOR_COMMENT_LINE) {
+			while (true) {
+				char c = parser->buffer[cursor];
+				cursor++;
+				parser->file_column++;
+
+				if (c == '\n') {
+					parser->file_line++;
+					parser->file_column = 0;
+					loadNextLine(parser);
+					break;
+				}
+
+				if (c == 0) {
+					loadNextLine(parser);
+				}
+			}
+
+
+			Parser_read(parser, labelPool);
+			return;
+		}
+
+		parser->token.type = TOKEN_TYPE_OPERATOR;
+		parser->token.operator = operator;
+		return;
 	}
 
 	// Label
@@ -387,7 +414,8 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 	
 		int length = ptr - start;
 		if (length == 0) {
-			return (Token){.type = TOKEN_TYPE_ERROR};
+			parser->token.type = TOKEN_TYPE_ERROR;
+			return;
 		}
 		
 		// Push text
@@ -400,39 +428,33 @@ Token Parser_read(Parser* parser, LabelPool* labelPool) {
 		// Move cursor
 		move(length);
 
-
-		return (Token){
-			.type = TOKEN_TYPE_LABEL,
-			.label = label
-		};
+		parser->token.type = TOKEN_TYPE_LABEL;
+		parser->token.label = label;
+		return;
 	}	
 
-	return (Token){.type = TOKEN_TYPE_NONE};
-
+	parser->token.type = TOKEN_TYPE_NONE;
 	#undef move
 }
 
 
-Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool) {
+void Parser_readAnnotated(Parser* parser, LabelPool* labelPool) {
 	parser->annotations.length = 0;
 
-	Token token = Parser_read(parser, labelPool);
-	while (token.type == TOKEN_TYPE_OPERATOR && token.operator == TOKEN_OPERATOR_AT) {
+	Parser_read(parser, labelPool);
+	while (parser->token.type == TOKEN_TYPE_OPERATOR && parser->token.operator == TOKEN_OPERATOR_AT) {
 		Syntax_annotation(Array_push(Annotation, &parser->annotations), parser, labelPool);
-		token = Parser_read(parser, labelPool);
+		Parser_read(parser, labelPool);
 	}
-
-	return token;
 }
 
 
 
-void Parser_saveToken(Parser* parser, const Token* token) {
+void Parser_saveToken(Parser* parser) {
 	if (parser->hasSavedToken) {
 		raiseError("[Parser] A token is already saved");
 	}
 	parser->hasSavedToken = true;
-	parser->token = *token;
 }
 
 
@@ -490,10 +512,10 @@ void Token_println(const Token* token) {
 
 
 
-int Token_compare(Token token, const Token comparators[], int length, char flags) {
+int Token_compare(const Token* token, const Token comparators[], int length, char flags) {
 	#define success() {return comparator - comparators;}
 
-	switch (token.type) {
+	switch (token->type) {
 	case TOKEN_TYPE_ERROR:
 		raiseError("[Parser] Token to compare is has ERROR type");
 		return -1;
@@ -508,26 +530,26 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 	Array_for(const Token, comparators, length, comparator) {
 		switch (comparator->type) {
 		case TOKEN_CTYPE_OPERATOR:
-			if (token.type == TOKEN_TYPE_OPERATOR && token.operator == comparator->operator)
+			if (token->type == TOKEN_TYPE_OPERATOR && token->operator == comparator->operator)
 				success();
 			
 			break;
 		
 		case TOKEN_CTYPE_KEYWORD:
-			if (token.type == TOKEN_TYPE_LABEL && token.label == comparator->label)
+			if (token->type == TOKEN_TYPE_LABEL && token->label == comparator->label)
 				success();
 			
 			break;
 
 
 		case TOKEN_CTYPE_LABEL:
-			if (token.type == TOKEN_TYPE_LABEL) {
+			if (token->type == TOKEN_TYPE_LABEL) {
 				// Forbidden keywords
 				if (
-					token.label == _commonLabels._let ||
-					token.label == _commonLabels._const ||
-					token.label == _commonLabels._class ||
-					token.label == _commonLabels._function
+					token->label == _commonLabels._let ||
+					token->label == _commonLabels._const ||
+					token->label == _commonLabels._class ||
+					token->label == _commonLabels._function
 				) {
 					raiseError("[Parser] Forbidden keyword used");
 				}
@@ -538,7 +560,7 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 			break;
 
 		case TOKEN_CTYPE_INTEGER:
-			switch (token.type) {
+			switch (token->type) {
 			case TOKEN_TYPE_I8:
 			case TOKEN_TYPE_U8:
 			case TOKEN_TYPE_I16:
@@ -554,7 +576,7 @@ int Token_compare(Token token, const Token comparators[], int length, char flags
 		
 		
 		case TOKEN_CTYPE_NUMBER:
-			switch (token.type) {
+			switch (token->type) {
 			case TOKEN_TYPE_I8:
 			case TOKEN_TYPE_U8:
 			case TOKEN_TYPE_I16:

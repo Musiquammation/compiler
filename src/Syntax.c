@@ -34,7 +34,9 @@ typedef struct {
 } protoAndType_t;
 
 
-#define TokenCompare(list, flags) (Token_compare(token, list, sizeof(list)/sizeof(Token), flags))
+#define TokenCompare(list, flags) (Token_compare(&parser->token, list, sizeof(list)/sizeof(Token), flags))
+#define TokenCompareWithRealParser(list, flags)\
+	(Token_compare(&parser.token, list, sizeof(list)/sizeof(Token), flags))
 
 static char* generateExtension(const char* filename, const char* extension) {
 	if (!filename || !extension) return NULL;
@@ -61,9 +63,9 @@ void Syntax_thFile(ScopeFile* scope) {
 	scope->state_th = DEFINITIONSTATE_READING;
 	
 	while (true) {
-		Token token = Parser_readAnnotated(&parser, &_labelPool);
+		Parser_readAnnotated(&parser, &_labelPool);
 		
-		switch (TokenCompare(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
+		switch (TokenCompareWithRealParser(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
 		// function
 		case 0:
 		{
@@ -119,7 +121,7 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 	
 	while (true) {
-		Token token = Parser_readAnnotated(&parser, &_labelPool);
+		Parser_readAnnotated(&parser, &_labelPool);
 		Class* subDefinedClass = definedClass;
 
 		Array_loop(Annotation, parser.annotations, annotation) {
@@ -146,7 +148,7 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 		parser.annotations.length = 0;
 		
-		switch (TokenCompare(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
+		switch (TokenCompareWithRealParser(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
 		// function
 		case 0:
 		{
@@ -196,13 +198,13 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 
 Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoot) {
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (
 		isExpressionRoot &&
 		TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, SYNTAXFLAG_UNFOUND) == 0
 	) {
 		if (isExpressionRoot == 2) {
-			Parser_saveToken(parser, &token);
+			Parser_saveToken(parser);
 		}
 		return NULL;
 	}	
@@ -219,7 +221,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		// variable
 		case 0:
 		{
-			Expression* path = Syntax_readPath(token.label, parser, scope);
+			Expression* path = Syntax_readPath(parser->token.label, parser, scope);
 			Expression* expr = Array_push(Expression, &lineArr);
 			expr->type = EXPRESSION_LINK;
 			expr->data.linked = path;
@@ -230,55 +232,55 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		case 1:
 		{
 			Expression* e = Array_push(Expression, &lineArr);
-			switch (token.type) {
+			switch (parser->token.type) {
 			case TOKEN_TYPE_I8:
 				e->type = EXPRESSION_I8;
-				e->data.num.i8 = token.num.i8;
+				e->data.num.i8 = parser->token.num.i8;
 				break;
 
 			case TOKEN_TYPE_U8:
 				e->type = EXPRESSION_U8;
-				e->data.num.u8 = token.num.u8;
+				e->data.num.u8 = parser->token.num.u8;
 				break;
 
 			case TOKEN_TYPE_I16:
 				e->type = EXPRESSION_I16;
-				e->data.num.i16 = token.num.i16;
+				e->data.num.i16 = parser->token.num.i16;
 				break;
 
 			case TOKEN_TYPE_U16:
 				e->type = EXPRESSION_U16;
-				e->data.num.u16 = token.num.u16;
+				e->data.num.u16 = parser->token.num.u16;
 				break;
 
 			case TOKEN_TYPE_I32:
 				e->type = EXPRESSION_I32;
-				e->data.num.i32 = token.num.i32;
+				e->data.num.i32 = parser->token.num.i32;
 				break;
 
 			case TOKEN_TYPE_U32:
 				e->type = EXPRESSION_U32;
-				e->data.num.u32 = token.num.u32;
+				e->data.num.u32 = parser->token.num.u32;
 				break;
 
 			case TOKEN_TYPE_F32:
 				e->type = EXPRESSION_F32;
-				e->data.num.f32 = token.num.f32;
+				e->data.num.f32 = parser->token.num.f32;
 				break;
 
 			case TOKEN_TYPE_F64:
 				e->type = EXPRESSION_F64;
-				e->data.num.f64 = token.num.f64;
+				e->data.num.f64 = parser->token.num.f64;
 				break;
 
 			case TOKEN_TYPE_I64:
 				e->type = EXPRESSION_I64;
-				e->data.num.i64 = token.num.i64;
+				e->data.num.i64 = parser->token.num.i64;
 				break;
 
 			case TOKEN_TYPE_U64:
 				e->type = EXPRESSION_U64;
-				e->data.num.u64 = token.num.u64;
+				e->data.num.u64 = parser->token.num.u64;
 				break;
 
 			default:
@@ -320,7 +322,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		case 4:
 		{
 			if (isExpressionRoot) {
-				Parser_saveToken(parser, &token);
+				Parser_saveToken(parser);
 			}
 
 			goto processExpressions;
@@ -335,7 +337,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 				raiseError("[Syntax] Expression is not finished (missing closing parenthesis)");
 			}
 			
-			Parser_saveToken(parser, &token);
+			Parser_saveToken(parser);
 			goto processExpressions;
 		}
 
@@ -405,7 +407,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 			break;
 		}
 	
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 	}
 
 	processExpressions:
@@ -432,9 +434,9 @@ void Syntax_module(Module* module, const char* filepath) {
 	bool moduleDefined = false;
 	
 	while (true) {
-		Token token = Parser_read(&parser, &_labelPool);
+		Parser_read(&parser, &_labelPool);
 
-		switch (TokenCompare(SYNTAXLIST_MODULE_FILE, SYNTAXFLAG_EOF)) {
+		switch (TokenCompareWithRealParser(SYNTAXLIST_MODULE_FILE, SYNTAXFLAG_EOF)) {
 		// order
 		case 0:
 		{
@@ -447,15 +449,15 @@ void Syntax_module(Module* module, const char* filepath) {
 
 			// Get type of order
 			while (true) {
-				token = Parser_read(&parser, &_labelPool);
+				Parser_read(&parser, &_labelPool);
 
-				switch (TokenCompare(SYNTAXLIST_MODULE_MODULE, 0)) {
+				switch (TokenCompareWithRealParser(SYNTAXLIST_MODULE_MODULE, 0)) {
 				
 				// module
 				case 0:
 				{
-					token = Parser_read(&parser, &_labelPool);
-					if (TokenCompare(SYNTAXLIST_REQUIRE_BRACE, 0)) {
+					Parser_read(&parser, &_labelPool);
+					if (TokenCompareWithRealParser(SYNTAXLIST_REQUIRE_BRACE, 0)) {
 						goto close;
 					}
 
@@ -491,7 +493,7 @@ void Syntax_module(Module* module, const char* filepath) {
 void Syntax_declarationList(Scope* scope, Parser* parser) {
 	while (true) {
 		Token token;
-		token = Parser_readAnnotated(parser, &_labelPool);
+		Parser_readAnnotated(parser, &_labelPool);
 		switch (TokenCompare(SYNTAXLIST_DECLARATION_LIST, 0)) {
 			// end
 			case 0:
@@ -576,7 +578,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		Token token;
 		// Collect next syntaxIndex
 		{
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			int next = TokenCompare(SYNTAXLIST_CLASS_DECLARATION, 0);
 			if (next <= syntaxIndex) {
 				raiseError("[Syntax] Illegal order in class declaration");
@@ -595,7 +597,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		
 		// Name
 		case 1:
-			name = token.label;
+			name = parser->token.label;
 			break;
 		
 		// Definition
@@ -735,7 +737,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	while (true) {
 		annotationFlags = 0; // reset
 
-		Token token = Parser_readAnnotated(parser, &_labelPool);
+		Parser_readAnnotated(parser, &_labelPool);
 
 		Array_loop(Annotation, parser->annotations, annotation) {
 			int annotType = annotation->type;
@@ -752,9 +754,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0) != 0)
 					return; 
 				
-				label_t name = token.label;
+				label_t name = parser->token.label;
 
-				token = Parser_read(parser, &_labelPool);
+				Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 					return; 
 
@@ -882,7 +884,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			Class_create(meta);
 			meta->name = Class_generateMetaName(cl->name, '^');
 
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
 				return; 
 
@@ -899,8 +901,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		// label
 		case 3:
 		{
-			const label_t name = token.label;
-			token = Parser_read(parser, &_labelPool);
+			const label_t name = parser->token.label;
+			Parser_read(parser, &_labelPool);
 			switch (TokenCompare(SYNTAXLIST_CLASS_ABSTRACT_MEMBER, 0)) {
 			// variable
 			case 0:
@@ -913,7 +915,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				variable->proto = Syntax_proto(parser, &variadicScope.scope);
 
 				// Finish by end operation
-				token = Parser_read(parser, &_labelPool);
+				Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 					return; 
 	
@@ -949,7 +951,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					.definedClass = NULL
 				};
 
-				Parser_saveToken(parser, &token);
+				Parser_saveToken(parser);
 
 				Syntax_functionDeclaration(
 					&outsideScope.scope,
@@ -1023,7 +1025,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 	Array_create(settings, sizeof(ProtoSetting));
 	
 	while (true) {
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
 
 		switch (syntaxResult) {
@@ -1037,7 +1039,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 			}
 
 			if (typeToDefine) {
-				Parser_saveToken(parser, &token);
+				Parser_saveToken(parser);
 				Prototype* p = Syntax_proto(parser, scope);
 				ProtoSetting* ps = Array_push(ProtoSetting, settings);
 				ps->useProto = true;
@@ -1066,7 +1068,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 				return;
 			}
 
-			label = token.label;
+			label = parser->token.label;
 			break;
 		}
 
@@ -1135,7 +1137,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 
 			// Save end character
 			if (syntaxResult == 6) {
-				Parser_saveToken(parser, &token);
+				Parser_saveToken(parser);
 				return;
 			}
 			break;
@@ -1152,12 +1154,12 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 }
 
 Prototype* Syntax_proto(Parser* parser, Scope* scope) {
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 
 	// Start with class keyword
 	if (TokenCompare(SYNTAXLIST_START_TYPE, 0) == 0) {
 		// Opening bracket or something else
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACKET, SYNTAXFLAG_UNFOUND) < 0) {
 			// Variadic prototype
 			raiseError("[TODO] check type existence");
@@ -1166,7 +1168,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 				_langstd.type->primitiveSizeCode,
 				NULL, 0
 			);
-			Parser_saveToken(parser, &token);
+			Parser_saveToken(parser);
 			return proto;
 		}
 			
@@ -1174,12 +1176,12 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		// Here, it's type of a variable
 
 		// Variable
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 			return false;
 		
 		// Expression
-		Expression* expression = Syntax_readPath(token.label, parser, scope);
+		Expression* expression = Syntax_readPath(parser->token.label, parser, scope);
 		if (expression->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] class[var] syntax works only with a variable");
 		}
@@ -1191,7 +1193,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		
 
 		// Closing bracket
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_RBRACKET, 0))
 			return false;
 
@@ -1203,7 +1205,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 	
 	
 	// Search variadic
-	Variable* vdic =  Scope_search(scope, token.label, NULL, SCOPESEARCH_VARIABLE);
+	Variable* vdic =  Scope_search(scope, parser->token.label, NULL, SCOPESEARCH_VARIABLE);
 	if (vdic) {
 		if (!Prototype_isType(vdic->proto)) {
 			raiseError("[Type] Variadic type must be typed as Type");
@@ -1214,7 +1216,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 	}
 	
 	// Default behavior
-	Class* cl = Scope_search(scope, token.label, NULL, SCOPESEARCH_CLASS);
+	Class* cl = Scope_search(scope, parser->token.label, NULL, SCOPESEARCH_CLASS);
 	if (cl) {
 		Prototype* proto = primitives_getPrototype(cl);
 		if (proto)
@@ -1233,10 +1235,10 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 	while (true) {
 		// Collect next syntaxIndex
 		{
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			int next = TokenCompare(SYNTAXLIST_TYPE, SYNTAXFLAG_UNFOUND);
 			if (next < 0) {
-				Parser_saveToken(parser, &token);
+				Parser_saveToken(parser);
 				goto generate;
 			}
 
@@ -1374,7 +1376,7 @@ Function* Syntax_functionDeclaration(
 		Token token;
 		// Collect next syntaxIndex
 		{
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			int next = TokenCompare(SYNTAXLIST_FUNCTION_DECLARATION, 0);
 			if (next <= syntaxIndex) {
 				raiseError("[Syntax] Illegal order in function declaration");
@@ -1397,7 +1399,7 @@ Function* Syntax_functionDeclaration(
 				raiseError("[Syntax] Name already given");
 				break;
 			}
-			name = token.label;
+			name = parser->token.label;
 			break;
 		
 		// Arguments
@@ -1564,7 +1566,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 	Array arguments;
 	Array_create(&arguments, sizeof(Variable*));
 
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	bool cannotFinish = false;
 	while (true) {
 		switch (TokenCompare(SYNTAXLIST_ARGS, 0)) {
@@ -1573,10 +1575,10 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 		{
 			cannotFinish = true;
 
-			const label_t name = token.label;
+			const label_t name = parser->token.label;
 
 			// Get COLON operator for type
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_COLON, 0))
 				goto finish;
 
@@ -1589,10 +1591,10 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 
 			variable->proto = Syntax_proto(parser, scope);
 
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			switch (TokenCompare(SYNTAXLIST_ARGS_ENDING, 0)) {
 			case 0:
-				token = Parser_read(parser, &_labelPool);
+				Parser_read(parser, &_labelPool);
 				break;
 
 			case 1: // end
@@ -1638,7 +1640,7 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 			*Array_push(Expression*, &args) = expr;
 		}
 
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_EXPRESSION_SEPARATOR, 0) == 1) {
 			break;
 		}
@@ -1666,6 +1668,7 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 
 
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
+	printf("READPATH\n");
 	Expression* last = NULL;
 
 	ScopeBuffer subScope;
@@ -1696,12 +1699,12 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 
 			while (true) {
-				token = Parser_read(parser, &_labelPool);
+				Parser_read(parser, &_labelPool);
 				int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 
 				if (syntaxIndex < 0) {
 					object = NULL;
-					Parser_saveToken(parser, &token);
+					Parser_saveToken(parser);
 					goto generatePathExpr;
 				}
 
@@ -1716,7 +1719,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 					Prototype* proto = ((Variable*)object)->proto;
 
 					// Count '#' symbols
-					token = Parser_read(parser, &_labelPool);
+					Parser_read(parser, &_labelPool);
 					switch (TokenCompare(SYNTAXLIST_MEMBER, 0)) {
 					// Fast access (free label directly)
 					case 0:
@@ -1730,20 +1733,16 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						accessorFn = accessor;
 						accessorProto = proto;
 
-						do {
-							proto = Prototype_reachProto(accessor->returnType, proto);
-							cl = Prototype_getClass(proto);
-							accessor = cl->std_methods.fastAccess;
-						} while (accessor);
 
+            			Prototype* nextProto = Prototype_reachProto(accessor->returnType, proto);
 
 
 						subScopePtr = Prototype_reachSubScope(
-							proto,
+							nextProto,
 							&subScope
 						);
 
-						label = token.label;
+						label = parser->token.label;
 						object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
 						enshureObject();
 						goto generatePathExpr;
@@ -1753,7 +1752,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 					// Real access operator
 					case 1:
 					{
-						token = Parser_read(parser, &_labelPool);
+						Parser_read(parser, &_labelPool);
 						if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0)) {
 							return NULL;
 						}
@@ -1763,7 +1762,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 							proto,
 							&subScope
 						);
-						label = token.label;
+						label = parser->token.label;
 						object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
 						enshureObject();
 
@@ -1832,7 +1831,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 		}
 
 		if (searchArg.resultType == SCOPESEARCH_FUNCTION) {
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
 				raiseError("[TODO] fn references not handled");
 				continue;
@@ -1844,7 +1843,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			last = Syntax_functionArgumentsCall(subScopePtr, parser, fn, last);
 
 			// Check for next
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 
 			if (syntaxIndex < 0) {
@@ -1863,7 +1862,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			// Member
 			case 0:
 			{
-				token = Parser_read(parser, &_labelPool);
+				Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 					return NULL;
 
@@ -1960,7 +1959,8 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 			Type_free(rootType);
 		}
 		
-		Prototype* proto = varr[varr_len - 1]->proto;
+		// Prototype* proto = varr[varr_len - 1]->proto;
+		Prototype* proto = type->proto;
 		Prototype_addUsage(*proto);
 		return (protoAndType_t){proto, type};
 	}
@@ -2262,13 +2262,13 @@ static void placeExpression(
 
 
 void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* parser) {
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 		return;
 
 	Variable* variable = malloc(sizeof(Variable));
 	Variable_create(variable);
-	variable->name = token.label;
+	variable->name = parser->token.label;
 	variable->id = -1;
 	variable->proto = NULL;
 	
@@ -2279,7 +2279,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 	
 	// Type
 	while (true) {
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		int nextSyntaxIndex = TokenCompare(SYNTAXLIST_FUNCTION_VARDECL, 0);
 
 		
@@ -2366,12 +2366,12 @@ void Syntax_functionScope_freeLabel(
 	// Analyze 
 	bool containsEqual;
 	{
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_ASSIGN, SYNTAXFLAG_UNFOUND) == 0) {
 			containsEqual = true;
 		} else {
 			containsEqual = false;
-			Parser_saveToken(parser, &token);
+			Parser_saveToken(parser);
 		}
 	}
 
@@ -2392,7 +2392,7 @@ void Syntax_functionScope_freeLabel(
 		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
 
 		// End operand
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
 
@@ -2420,7 +2420,7 @@ void Syntax_functionScope_freeLabel(
 		);
 
 
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0))
 			return;
 			
@@ -2454,18 +2454,18 @@ static void Syntax_functionScope_if(
 	Trace* trace
 ) {
 	// Require left parethesis
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
 		return;
 
 	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
 	// Require right parenthesis
-	token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
 		return;
 
 	// Require left brace
-	token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
 		return;
 
@@ -2503,11 +2503,11 @@ static void Syntax_functionScope_if(
 
 	
 	// No else
-	token = Parser_read(parser, &_labelPool);
-	if (token.type != TOKEN_TYPE_LABEL|| token.label != _commonLabels._else) {
+	Parser_read(parser, &_labelPool);
+	if (parser->token.type != TOKEN_TYPE_LABEL|| parser->token.label != _commonLabels._else) {
 		// Mark position
 		*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
-		Parser_saveToken(parser, &token);
+		Parser_saveToken(parser);
 		*ifLine |= (trace->instruction << 10);
 		return;
 	}
@@ -2516,7 +2516,7 @@ static void Syntax_functionScope_if(
 	raiseError("[TODO] else");
 
 	// Require left brace
-	token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
 		return;
 
@@ -2541,18 +2541,18 @@ static void Syntax_functionScope_while(
 	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
 
 	// Require left parethesis
-	Token token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
 		return;
 
 	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
 	// Require right parenthesis
-	token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
 		return;
 
 	// Require left brace
-	token = Parser_read(parser, &_labelPool);
+	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
 		return;
 
@@ -2611,7 +2611,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	*Stack_push(int, &trace->scopeIdStack) = currentScopeId;
 
 	while (true) {
-		Token token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		
 		// Search
 		switch (TokenCompare(SYNTAXLIST_FUNCTION, 0)) {
@@ -2681,7 +2681,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			Trace_removeVariable(trace, regVar);
 
 
-			token = Parser_read(parser, &_labelPool);
+			Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 				return -1;
 
@@ -2698,7 +2698,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// free label
 		case 7:
 		{
-			Syntax_functionScope_freeLabel(scope, parser, token.label, trace);
+			Syntax_functionScope_freeLabel(scope, parser, parser->token.label, trace);
 			break;
 		}
 
@@ -2807,47 +2807,47 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 
 void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool) {
-	Token token = Parser_read(parser, labelPool);
+	Parser_read(parser, labelPool);
 
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 		return;
 
-	if (token.label == _commonLabels._main) {
+	if (parser->token.label == _commonLabels._main) {
 		annotation->type = ANNOTATION_MAIN;
 		return;
 	}
 
-	if (token.label == _commonLabels._control) {
+	if (parser->token.label == _commonLabels._control) {
 		annotation->type = ANNOTATION_CONTROL;
 		return;
 	}
 
-	if (token.label == _commonLabels._langstd) {
+	if (parser->token.label == _commonLabels._langstd) {
 		annotation->type = ANNOTATION_LANGSTD;
 		return;
 	}
 
-	if (token.label == _commonLabels._fastAccess) {
+	if (parser->token.label == _commonLabels._fastAccess) {
 		annotation->type = ANNOTATION_FAST_ACCESS;
 		return;
 	}
 
-	if (token.label == _commonLabels._stdFastAccess) {
+	if (parser->token.label == _commonLabels._stdFastAccess) {
 		annotation->type = ANNOTATION_STD_FAST_ACCESS;
 
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
 			return;
 
-		token = Parser_read(parser, &_labelPool);
-		if (token.type != TOKEN_TYPE_I32) {
+		Parser_read(parser, &_labelPool);
+		if (parser->token.type != TOKEN_TYPE_I32) {
 			raiseError("[Syntax] A i32 was expected in @stdFastAccess(x)");
 			return;
 		}
 
-		annotation->stdFastAccess.stdBehavior = token.num.i32;
+		annotation->stdFastAccess.stdBehavior = parser->token.num.i32;
 
-		token = Parser_read(parser, &_labelPool);
+		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0))
 			return;
 		return;

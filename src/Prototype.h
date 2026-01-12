@@ -27,8 +27,8 @@ typedef struct {
 
 
 struct ProtoSetting {
-	char useProto;
 	char useVariable;
+	char useProto;
 
 	union {
 		Variable* variable;
@@ -133,6 +133,7 @@ int Prototype_getVariableOffset(Variable* path[], int length);
 Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer);
 
 Prototype* Prototype_copy(Prototype* src);
+Prototype* Prototype_copyWithoutSettings(Prototype* src);
 
 bool Prototype_isType(Prototype* proto);
 

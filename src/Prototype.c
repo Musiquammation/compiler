@@ -17,7 +17,7 @@
 		proto->state = m; \
 	}
 
-static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype *proto, Class *cl) {
+static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype* proto, Class *cl) {
 	if (cl->definitionState == DEFINITIONSTATE_UNDEFINED || cl->definitionState == DEFINITIONSTATE_READING) {
 		proto->direct.sizes.size = CLASSSIZE_LATER;
 		proto->direct.sizes.maxMinimalSize = CLASSSIZE_LATER;
@@ -36,13 +36,13 @@ static ExtendedPrototypeSize Prototype_defineSize_direct(Prototype *proto, Class
 	raiseError("[TODO] do here right now!");
 }
 
-Prototype *Prototype_create_direct(
+Prototype* Prototype_create_direct(
 	Class *cl,
 	char primitiveSizeCode,
 	ProtoSetting *settings,
 	int settingLength)
 {
-	Prototype *proto = malloc(sizeof(Prototype));
+	Prototype* proto = malloc(sizeof(Prototype));
 	setMode(PROTO_MODE_DIRECT);
 	proto->direct.cl = cl;
 	proto->direct.primitiveSizeCode = cl->primitiveSizeCode;
@@ -61,36 +61,36 @@ Prototype *Prototype_create_direct(
 	return proto;
 }
 
-Prototype *Prototype_create_meta(Prototype *origin, Class *meta) {
-	Prototype *mp = Prototype_create_direct(
+Prototype* Prototype_create_meta(Prototype* origin, Class *meta) {
+	Prototype* mp = Prototype_create_direct(
 		meta, meta->primitiveSizeCode, NULL, -1);
 	mp->direct.origin = origin;
 
 	return mp;
 }
 
-Prototype *Prototype_create_reference(Variable **varr, int varrLength) {
-	Prototype *proto = malloc(sizeof(Prototype));
+Prototype* Prototype_create_reference(Variable* *varr, int varrLength) {
+	Prototype* proto = malloc(sizeof(Prototype));
 	setMode(PROTO_MODE_REFERENCE);
 	proto->ref.varr = varr;
 	proto->ref.varrLength = varrLength;
 
-	Prototype *rp = varr[varrLength - 1]->proto;
+	Prototype* rp = varr[varrLength - 1]->proto;
 	proto->ref.proto = rp;
 
 	Prototype_addUsage(*rp);
 	return proto;
 }
 
-Prototype *Prototype_create_variadic(Variable *ref) {
-	Prototype *proto = malloc(sizeof(Prototype));
+Prototype* Prototype_create_variadic(Variable* ref) {
+	Prototype* proto = malloc(sizeof(Prototype));
 	setMode(PROTO_MODE_VARIADIC);
 	proto->variadic.ref = ref;
 
 	return proto;
 }
 
-void Prototype_free(Prototype *proto, bool deep) {
+void Prototype_free(Prototype* proto, bool deep) {
 	int state = proto->state;
 
 	if (state >> 8) {
@@ -142,7 +142,7 @@ void Prototype_free(Prototype *proto, bool deep) {
 	}
 }
 
-char Prototype_directHasMeta(Prototype *proto) {
+char Prototype_directHasMeta(Prototype* proto) {
 	char hasMeta = proto->direct.hasMeta;
 	if (hasMeta == -1) {
 		switch (proto->direct.cl->metaDefinitionState) {
@@ -169,16 +169,16 @@ char Prototype_directHasMeta(Prototype *proto) {
 	return hasMeta;
 }
 
-Type* Prototype_generateType(Prototype *proto, Scope *scope) {
+Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		if (!scope) {
 			raiseError("[Architecture] Prototype reference requires a scope");
 			return NULL;
 		}
 
-		Variable **varr = proto->ref.varr;
+		Variable* *varr = proto->ref.varr;
 		Type *origin = Scope_searchType(scope, varr[0]);
 		if (!origin) {
 			raiseError("[Architecture] Refered type not found");
@@ -192,7 +192,7 @@ Type* Prototype_generateType(Prototype *proto, Scope *scope) {
 
 		// Generate another type with data decaled
 		Type *newType = malloc(sizeof(Type));
-		Variable *lastVariable = varr[varr_len - 1];
+		Variable* lastVariable = varr[varr_len - 1];
 		Type *meta = origin->meta;
 
 		newType->proto = lastVariable->proto;
@@ -211,7 +211,7 @@ Type* Prototype_generateType(Prototype *proto, Scope *scope) {
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		// Handle meta
 		char hasMeta = Prototype_directHasMeta(proto);
 		if (hasMeta == -1) {
@@ -234,7 +234,7 @@ Type* Prototype_generateType(Prototype *proto, Scope *scope) {
 			return type;
 		}
 
-		Prototype *meta = proto->direct.meta;
+		Prototype* meta = proto->direct.meta;
 		Type *metaType = Prototype_generateType(meta, scope);
 		type->meta = metaType;
 
@@ -259,14 +259,14 @@ Type* Prototype_generateType(Prototype *proto, Scope *scope) {
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		Type *type = Scope_searchType(scope, proto->variadic.ref);
 		type->refCount++;
 		return type;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
-{
+	{
 		return primitives_getType(proto->primitive.cl);
 	}
 	}
@@ -274,21 +274,21 @@ Type* Prototype_generateType(Prototype *proto, Scope *scope) {
 	raiseError("[Intern] Invalid proto mode");
 }
 
-bool Prototype_accepts(const Prototype *proto, const Type *type) {
+bool Prototype_accepts(const Prototype* proto, const Type *type) {
 	/// TODO: Improve this test
 	// return proto->cl == type->proto->cl;
 	return true;
 }
 
-ExtendedPrototypeSize Prototype_getSizes(Prototype *proto) {
+ExtendedPrototypeSize Prototype_getSizes(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] get direct size");
 		break;
 	}
 	case PROTO_MODE_DIRECT:
-{
+	{
 		int size = proto->direct.sizes.size;
 		if (size >= 0) {
 			return (ExtendedPrototypeSize){
@@ -310,11 +310,11 @@ ExtendedPrototypeSize Prototype_getSizes(Prototype *proto) {
 		break;
 	}
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		return (ExtendedPrototypeSize){0, 0, true};
 	}
 	case PROTO_MODE_PRIMITIVE:
-{
+	{
 		int size = proto->primitive.size;
 		return (ExtendedPrototypeSize){size, size, true};
 	}
@@ -323,18 +323,18 @@ ExtendedPrototypeSize Prototype_getSizes(Prototype *proto) {
 	}
 }
 
-ExtendedPrototypeSize Prototype_reachSizes(Prototype *proto, Scope *scope, bool throwError) {
+ExtendedPrototypeSize Prototype_reachSizes(Prototype* proto, Scope* scope, bool throwError) {
 	if (!proto)
 		goto returnEmptySize;
 
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		return Prototype_reachSizes(proto->ref.proto, scope, throwError);
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 
 		int size = proto->direct.sizes.size;
 		if (size >= 0) {
@@ -360,18 +360,18 @@ ExtendedPrototypeSize Prototype_reachSizes(Prototype *proto, Scope *scope, bool 
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		return (ExtendedPrototypeSize){0, 0, true};
 	}
 
 	case PROTO_MODE_PRIMITIVE:
-{
+	{
 		int size = proto->primitive.size;
 		return (ExtendedPrototypeSize){size, size, true};
 	}
 
 	case PROTO_MODE_VOID:
-{
+	{
 		return (ExtendedPrototypeSize){0, 0, true};
 	}
 	}
@@ -384,7 +384,7 @@ returnEmptySize:
 	return (ExtendedPrototypeSize){CLASSSIZE_NOEXIST, CLASSSIZE_NOEXIST, PSC_UNKNOWN};
 }
 
-ExtendedPrototypeSize Prototype_getMetaSizes(Prototype *proto) {
+ExtendedPrototypeSize Prototype_getMetaSizes(Prototype* proto) {
 	char hasMeta = Prototype_hasMeta(proto);
 	if (hasMeta == 0)
 		return (ExtendedPrototypeSize){.size = -1};
@@ -396,58 +396,58 @@ ExtendedPrototypeSize Prototype_getMetaSizes(Prototype *proto) {
 
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] Prototype_getMetaSizes");
 		break;
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		return Prototype_getSizes(proto->direct.meta);
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		raiseError("[TODO] Prototype_getMetaSizes");
 		break;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
-{
+	{
 		return (ExtendedPrototypeSize){CLASSSIZE_NOEXIST, CLASSSIZE_NOEXIST, PSC_UNKNOWN};
 	}
 	}
 }
 
-ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype *proto, Scope *scope, bool throwError) {
+ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype* proto, Scope* scope, bool throwError) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] Prototype_reachMetaSizes");
 		break;
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		return Prototype_reachSizes(proto->direct.meta, scope, throwError);
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		raiseError("[TODO] Prototype_reachMetaSizes");
 		break;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
-{
+	{
 		return (ExtendedPrototypeSize){CLASSSIZE_NOEXIST, CLASSSIZE_NOEXIST, PSC_UNKNOWN};
 	}
 	}
 }
 
-char Prototype_hasMeta(Prototype *proto) {
+char Prototype_hasMeta(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
 		raiseError("[TODO] Prototype_reachMeta");
@@ -465,16 +465,16 @@ char Prototype_hasMeta(Prototype *proto) {
 	}
 }
 
-Prototype *Prototype_reachMeta(Prototype *proto) {
+Prototype* Prototype_reachMeta(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] Prototype_reachMeta");
 		break;
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		char hasMeta = Prototype_directHasMeta(proto);
 		if (hasMeta == -1) {
 			raiseError("[Architecture] Meta cannot be reach");
@@ -484,28 +484,28 @@ Prototype *Prototype_reachMeta(Prototype *proto) {
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		raiseError("[TODO] Prototype_reachMeta");
 		break;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
-{
+	{
 		return NULL;
 	}
 	}
 }
 
-Class *Prototype_getMetaClass(Prototype *proto) {
-	Prototype *p = Prototype_reachMeta(proto);
+Class *Prototype_getMetaClass(Prototype* proto) {
+	Prototype* p = Prototype_reachMeta(proto);
 	return p ? p->direct.cl : NULL;
 }
 
-Class* Prototype_getClass(Prototype *proto) {
+Class* Prototype_getClass(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] Prototype_getClass");
 		break;
 	}
@@ -514,7 +514,7 @@ Class* Prototype_getClass(Prototype *proto) {
 		return proto->direct.cl;
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		raiseError("[Architecture] Cannot get class of a variadic prototype");
 		return NULL;
 	}
@@ -527,11 +527,9 @@ Class* Prototype_getClass(Prototype *proto) {
 	}
 }
 
-Prototype *Prototype_reachProto(Prototype *proto, Prototype *parent)
-{
+Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
 	switch (Prototype_mode(*proto)) {
-	case PROTO_MODE_REFERENCE:
-{
+	case PROTO_MODE_REFERENCE: {
 		raiseError("[TODO] Prototype_getClass");
 		break;
 	}
@@ -539,13 +537,15 @@ Prototype *Prototype_reachProto(Prototype *proto, Prototype *parent)
 	case PROTO_MODE_DIRECT:
 		return proto;
 
-	case PROTO_MODE_VARIADIC:
-{
+	case PROTO_MODE_VARIADIC: {
 		if (Prototype_mode(*parent) != PROTO_MODE_DIRECT)
 			return NULL;
 
-		Variable *ref = proto->variadic.ref;
-		Array_for(ProtoSetting, parent->direct.settings, parent->direct.settingLength, s) if (s->variable == ref) return s->proto;
+		Variable* ref = proto->variadic.ref;
+		Array_for(ProtoSetting, parent->direct.settings, parent->direct.settingLength, s)
+			if (s->variable == ref)
+				return s->proto;
+				
 		return NULL;
 	}
 
@@ -557,7 +557,7 @@ Prototype *Prototype_reachProto(Prototype *proto, Prototype *parent)
 	}
 }
 
-int Prototype_getSignedSize(Prototype *proto) {
+int Prototype_getSignedSize(Prototype* proto) {
 	if (Prototype_mode(*proto) == PROTO_MODE_PRIMITIVE) {
 		return (int)proto->primitive.sizeCode;
 	}
@@ -569,48 +569,48 @@ int Prototype_getSignedSize(Prototype *proto) {
 	return Prototype_getSizes(proto).size;
 }
 
-char Prototype_getPrimitiveSizeCode(Prototype *proto) {
+char Prototype_getPrimitiveSizeCode(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-{
+	{
 		raiseError("[TODO] Prototype_getPrimitiveSizeCOde");
 		break;
 	}
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		return proto->direct.primitiveSizeCode;
 	}
 
 	case PROTO_MODE_VARIADIC:
-{
+	{
 		return PSC_UNKNOWN;
 	}
 
 	case PROTO_MODE_PRIMITIVE:
-{
+	{
 		return proto->primitive.sizeCode;
 	}
 
 	case PROTO_MODE_VOID:
-{
+	{
 		return 0;
 	}
 	}
 }
 
-int Prototype_getGlobalVariableOffset(Prototype *proto, Variable *path[], int length) {
-	typedef Variable *var_ptr_t;
+int Prototype_getGlobalVariableOffset(Prototype* proto, Variable* path[], int length) {
+	typedef Variable* var_ptr_t;
 	int offset = 0;
 	Array_for(var_ptr_t, path, length, vptr) {
-		Variable *v = *vptr;
+		Variable* v = *vptr;
 		offset += v->offset;
 	}
 
 	return offset;
 }
 
-int Prototype_getVariableOffset(Variable *path[], int length) {
+int Prototype_getVariableOffset(Variable* path[], int length) {
 	/// TODO: handle not registrable issue
 	switch (Prototype_getPrimitiveSizeCode(path[0]->proto)) {
 	case PSC_UNKNOWN:
@@ -625,7 +625,7 @@ int Prototype_getVariableOffset(Variable *path[], int length) {
 	}
 }
 
-Scope *Prototype_reachSubScope(Prototype *proto, ScopeBuffer *buffer) {
+Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer *buffer) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
 		raiseError("[TODO] subscoppe of an expression");
@@ -651,7 +651,7 @@ Scope *Prototype_reachSubScope(Prototype *proto, ScopeBuffer *buffer) {
 	}
 }
 
-Prototype *Prototype_copy(Prototype *src) {
+Prototype* Prototype_copy(Prototype* src) {
 	/// TODO: complete the copy
 	int state = src->state;
 	src->state = (((state >> 8) + 1) << 8) | (state & 0xff); // add one usage
@@ -661,7 +661,7 @@ Prototype *Prototype_copy(Prototype *src) {
 		return NULL;
 
 	case PROTO_MODE_DIRECT:
-{
+	{
 		return src;
 	}
 
@@ -674,29 +674,68 @@ Prototype *Prototype_copy(Prototype *src) {
 	}
 }
 
-bool Prototype_isType(Prototype *proto) {
+Prototype* Prototype_copyWithoutSettings(Prototype* src) {
+	if (!src)
+		return NULL;
+
+	/// TODO: complete the copy
+	int state = src->state & 0xff;
+	Prototype* copy;
+	switch (state) {
+	case PROTO_MODE_REFERENCE:
+		return NULL;
+
+	case PROTO_MODE_DIRECT:
+		if (src->direct.settingLength == -1) {
+			Prototype_addUsage(*src);
+			return src;
+		}
+
+		copy = malloc(sizeof(Prototype));
+		copy->state = state;
+		copy->direct.cl = src->direct.cl;
+		copy->direct.primitiveSizeCode = src->direct.primitiveSizeCode;
+		if (src->direct.hasMeta == 1) {
+			copy->direct.meta = Prototype_copyWithoutSettings(src->direct.meta);
+			copy->direct.hasMeta = 1;
+		} else {
+			copy->direct.hasMeta = src->direct.hasMeta;
+		}
+		return copy;
+
+
+	case PROTO_MODE_VARIADIC:
+		return NULL;
+		
+	case PROTO_MODE_PRIMITIVE:
+	case PROTO_MODE_VOID:
+		return src;
+	}
+}
+
+bool Prototype_isType(Prototype* proto) {
 	return Prototype_mode(*proto) == PROTO_MODE_DIRECT && proto->direct.cl == _langstd.type;
 }
 
-Prototype *Prototype_generateStackPointer(Variable **varr, int varLength) {
+Prototype* Prototype_generateStackPointer(Variable* *varr, int varLength) {
 	ProtoSetting *settings = malloc(sizeof(ProtoSetting) * 1);
 	settings[0].useProto = true;
 	settings[0].useVariable = true;
 	settings[0].proto = Prototype_create_reference(varr, varLength);
-	settings[0].variable = *Array_get(Variable *, _langstd.pointer->meta->variables, 0);
+	settings[0].variable = *Array_get(Variable* , _langstd.pointer->meta->variables, 0);
 
-	Prototype *p = Prototype_create_direct(_langstd.pointer, 8, settings, 1);
+	Prototype* p = Prototype_create_direct(_langstd.pointer, 8, settings, 1);
 	return p;
 }
 
-Variable *ProtoSetting_getVariable(ProtoSetting *setting, Class *meta) {
+Variable* ProtoSetting_getVariable(ProtoSetting *setting, Class *meta) {
 	if (setting->useVariable)
 		return setting->variable;
 
 	label_t label = setting->name;
-	typedef Variable *v_ptr;
+	typedef Variable* v_ptr;
 	Array_loop(v_ptr, meta->variables, vptr) {
-		Variable *v = *vptr;
+		Variable* v = *vptr;
 		if (v->name != label)
 			continue;
 

@@ -178,12 +178,83 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 		Type* type = malloc(sizeof(Type));
 		Class* cl = proto->direct.cl;
 		
-		type->proto = proto;
+		Prototype* newProto = Prototype_copyWithoutSettings(proto);
+		type->proto = newProto;
 		type->reference = NULL;
 		type->refCount = 0;
 		type->primitiveSizeCode = 0;
 
-		Prototype_addUsage(*proto);
+		// Define the prototype
+		if (proto->direct.settingLength > 0) {
+			ProtoSetting* srcSettings = proto->direct.settings;
+			int settingLength = proto->direct.settingLength;
+			int settingsToDefineCount = settingLength;
+
+			ProtoSetting* settings = malloc(settingLength * sizeof(ProtoSetting));
+			char okFlag[settingLength];
+			memset(okFlag, 0, sizeof(okFlag));
+
+			// Copy settings
+			for (int i = 0; i < settingLength; i++) {
+				if (srcSettings[i].useVariable) {
+					settings[i].useVariable = true;
+					settings[i].variable = srcSettings[i].variable;
+				} else {
+					settings[i].useVariable = false;
+					settings[i].name = srcSettings[i].name;
+				}
+
+				if (srcSettings[i].useProto) {
+					Prototype* p = srcSettings[i].proto;
+					Prototype_addUsage(*p);
+					settings[i].useProto = true;
+					settings[i].proto = p;
+				} else {
+					settings[i].useProto = false;
+					// settings[i].expr = srcSettings[i].expr;
+					raiseError("[TODO] copy expressions");
+				}
+			}
+
+			ProtoSetting* settings_end = settings + settingLength;
+			Array_for(var_ptr_t, &varr[1], varr_len - 1, vptr) {
+				for (ProtoSetting* s = settings; s < settings_end; s++) {
+					if (s->useVariable && s->useProto) {
+						Prototype* origin = s->proto;
+						Prototype* p = origin;
+						printf("def %p\n", p);
+						while (true) {
+							Prototype* res = Prototype_reachProto(p, (*(vptr-1))->proto);
+							if (res == NULL || p == res) {
+								break;
+							}
+
+							p = res;
+						}
+
+						if (p != origin) {
+							Prototype_addUsage(*p);
+							Prototype_free(origin, false);
+						}
+
+						s->proto = p;
+						
+					} else {
+						raiseError("[TODO] different protoSetting case");
+					}
+				}
+			}
+			
+			
+			newProto->direct.settings = settings;
+			newProto->direct.settingLength = settingLength;
+			newProto->direct.settingsMustBeFreed = true;
+		} else {
+			newProto->direct.settings = NULL;
+			newProto->direct.settingLength = 0;
+			newProto->direct.settingsMustBeFreed = false;
+		}
+
 		
 		// No meta
 		if (hasMeta == 0) {

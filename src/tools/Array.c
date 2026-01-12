@@ -201,6 +201,7 @@ void Array_shrinkToFit(Array* array) {
 	void* const oldData = array->data;
 	memcpy(newData, oldData, total);
 	free(oldData);
+	array->data = newData;
 }
 
 void* Array_reach(Array* array, ushort index, const void* emptyValue) {

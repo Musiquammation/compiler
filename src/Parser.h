@@ -13,7 +13,7 @@ typedef char token_t;
 typedef char operator_t;
 
 
-enum {PARSER_LINE_BUFFER_LENGTH = 256};
+enum {PARSER_LINE_BUFFER_LENGTH = 2048};
 
 typedef struct {
 	token_t type;
@@ -188,14 +188,14 @@ extern const char PARSER_OPERATORS[][TOKEN_OPERATORMAXLENGTH];
 void Parser_open(Parser* parser, const char* filepath);
 void Parser_close(Parser* parser);
 
-Token Parser_read(Parser* parser, LabelPool* labelPool);
-Token Parser_readAnnotated(Parser* parser, LabelPool* labelPool);
+void Parser_read(Parser* parser, LabelPool* labelPool);
+void Parser_readAnnotated(Parser* parser, LabelPool* labelPool);
 
-void Parser_saveToken(Parser* parser, const Token* token);
+void Parser_saveToken(Parser* parser);
 
 void Token_println(const Token* token);
 
-int Token_compare(Token token, const Token comparators[], int length, char raise);
+int Token_compare(const Token* token, const Token comparators[], int length, char raise);
 
 
 
