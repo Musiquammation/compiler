@@ -1624,14 +1624,16 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 		ScopeClass cl;
 	} subScope;
 
-
-
+	
 	/// TODO: create a subscope to handle words (of enums)
 	Array args; // type: Expression*
 	Array_create(&args, sizeof(Expression*));
-
+	
 	if (thisExpr) {
-		*Array_push(Expression*, &args) = thisExpr;
+		Expression* thisPtr = malloc(sizeof(Expression));
+		thisPtr->type = EXPRESSION_ADDR_OF;
+		thisPtr->data.operand = thisExpr;
+		*Array_push(Expression*, &args) = thisPtr;
 	}
 
 	while (true) {
@@ -1662,6 +1664,7 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 
 	expr->type = EXPRESSION_FNCALL;
 	expr->data.fncall.fn = fn;
+	return expr;
 }
 
 
@@ -1734,11 +1737,10 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						accessorProto = proto;
 
 
-            			Prototype* nextProto = Prototype_reachProto(accessor->returnType, proto);
-
+            			proto = Prototype_reachProto(accessor->returnType, proto);
 
 						subScopePtr = Prototype_reachSubScope(
-							nextProto,
+							proto,
 							&subScope
 						);
 
@@ -1847,6 +1849,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
 
 			if (syntaxIndex < 0) {
+				Parser_saveToken(parser);
 				goto returnResult;
 			}
 
@@ -1897,20 +1900,6 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 	#undef enshureObject
 
 	returnResult:
-	for (Expression* e = last; e; ) {
-		switch (e->type) {
-		case EXPRESSION_PROPERTY:
-			e = e->data.property.origin;
-			break;
-
-		case EXPRESSION_FAST_ACCESS:
-			e = e->data.fastAccess.origin;
-			break;
-
-		}
-
-	}
-
 	return last;
 }
 
@@ -2044,11 +2033,12 @@ static void placeExpression(
 	int sourceExprType = sourceExpr->type;
 
 	if (sourceExprType == EXPRESSION_PROPERTY) {
+		Variable* first = varrDest[0];
 		Variable* last = varrDest[varrDest_len-1];
 		int id;
 		int signedSize;
-		id = last->id;
-		if (id > 0) {
+		id = first->id;
+		if (id >= 0) {
 			signedSize = Prototype_getSignedSize(last->proto);
 
 		} else {
@@ -2072,7 +2062,7 @@ static void placeExpression(
 				} else {
 					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
 				}
-				last->id = id;
+				first->id = id;
 				break;
 			}
 
@@ -2086,7 +2076,7 @@ static void placeExpression(
 			{
 				signedSize = lvp->primitive.sizeCode;
 				id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
-				last->id = id;
+				first->id = id;
 				break;
 			}
 
@@ -2234,7 +2224,7 @@ static void placeExpression(
 			varrDest[0]->id = destVar;
 			destOffset = -1;
 		} else {
-			destOffset = Prototype_getVariableOffset(varrDest, varrDest_len-1);
+			destOffset = Prototype_getVariableOffset(varrDest, varrDest_len);
 		}
 
 
@@ -2328,8 +2318,12 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		}
 
 		proto = result.proto;
+
+		ExtendedPrototypeSize eps = Prototype_reachSizes(proto, &scope->scope, true);
+
 		type = result.type;
 		variable->proto = proto;
+		variable->id = (int)Trace_ins_create(trace, variable, eps.size, 0, eps.primitiveSizeCode);
 
 		// Place the expression in Trace
 		Variable* varrDest[] = {variable};
@@ -2386,7 +2380,8 @@ void Syntax_functionScope_freeLabel(
 			raiseError("[TODO]: must contain equal");
 		}
 
-		raiseError("[TODO]: update the type (using a copy method)");
+		/// TODO: update the type (using a copy method)
+		// raiseError("[TODO]: update the type (using a copy method)");
 
 		
 		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
@@ -2781,20 +2776,27 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	}
 
 
-	Trace_placeRegisters(&trace);
+	if (Scope_reachModule(scope)->compile) {
+		Trace_placeRegisters(&trace);
+		
+		FunctionAssembly fnAsm;
+		FunctionAssembly_create(&fnAsm, &fnScope);
+		
+		/// TODO: enable this line
+		Trace_generateAssembly(&trace, &fnAsm);
+		FunctionAssembly_delete(&fnAsm);
+		Trace_delete(&trace, true);		
 
+	} else {
+		FunctionAssembly fnAsm;
+		FunctionAssembly_create(&fnAsm, &fnScope);
+		Trace_generateTranspiled(&trace, &fnAsm);
+		FunctionAssembly_delete(&fnAsm);
+		Trace_delete(&trace, false);
+	}
 	
 	
-	FunctionAssembly fnAsm;
-	FunctionAssembly_create(&fnAsm, &fnScope);
-	
-	/// TODO: enable this line
-	Trace_generateAssembly(&trace, &fnAsm);
-	FunctionAssembly_delete(&fnAsm);
 
-	
-
-	Trace_delete(&trace);
 
 	if (fnScope.thisvar) {
 		Variable_delete(&thisvar);

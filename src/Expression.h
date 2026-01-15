@@ -144,7 +144,6 @@ int Expression_simplify(
 	const Expression* right
 );
 
-castable_t Expression_cast(int srcType, int destType, castable_t value);
 
 int Expression_getSignedSize(int exprType);
 int Expression_reachSignedSize(int type, const Expression* expr);

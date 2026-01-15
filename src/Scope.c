@@ -413,7 +413,8 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 		ScopeFile_requireId(file, generationState);
 
 		// generate filename
-		char* binFolder = Scope_reachModule(&file->scope)->binFolder;
+		Module* module = Scope_reachModule(&file->scope);
+		char* binFolder = module->binFolder;
 		char* filepath = file->filepath;
 
 		size_t len = strlen(binFolder) + strlen(filepath) + 6;
@@ -433,7 +434,12 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 		
 
 		// Write text section
-		fprintf(f, "section .text\n\n\n");
+		/// TODO: check if transpile ?
+		if (module->compile) {
+			fprintf(f, "section .text\n\n\n");
+		} else {
+			fprintf(f, "#include <stdint.h>\n\n");
+		}
 		
 		file->output = f;
 		file->generationState = SCOPEFILE_GENERATION_ASM;

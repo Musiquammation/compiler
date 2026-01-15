@@ -1,5 +1,5 @@
 class Vector {
     x: int;
     y: int;
-
+    z: int;
 }

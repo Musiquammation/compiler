@@ -1,5 +1,6 @@
 #include "Trace.h"
 
+
 #include "TraceStackHandler.h"
 
 #include "Variable.h"
@@ -24,7 +25,7 @@
 
 
 // print trace
-#if 0
+#if 1
 #include <stdarg.h>
 void trprintf(const char *format, ...)
 {
@@ -235,7 +236,7 @@ void Trace_create(Trace* trace) {
 }
 
 
-void Trace_delete(Trace* trace) {
+void Trace_delete(Trace* trace, bool hasGeneratedAssembly) {
 	TracePack* p = trace->first;
 
 	while (p) {
@@ -244,9 +245,15 @@ void Trace_delete(Trace* trace) {
 		p = next;
 	}
 
-	Array_free(trace->replaces);
-	free(trace->varInfos);
-	free(trace->regs);
+	if (hasGeneratedAssembly) {
+		Array_free(trace->replaces);
+		free(trace->varInfos);
+		free(trace->regs);
+	} else {
+		Array_free(trace->variables);
+		Stack_free(trace->varPlacements);
+		Stack_free(trace->scopeIdStack);
+	}
 
 	TraceFunctionMap_free(&trace->calledFunctions);
 }
@@ -272,7 +279,7 @@ uint Trace_pushVariable(Trace* trace) {
 void Trace_removeVariable(Trace* trace, uint index) {
 	*Stack_push(uint, &trace->varPlacements) = index;
 	VariableTrace* vt = Array_get(VariableTrace, trace->variables, index);
-	
+
 	vt->scopeId = -1;
 	if (vt->usageCapacity) {
 		free(vt->writes);
@@ -619,7 +626,11 @@ void TracePack_print(const TracePack* pack, int position) {
 					uint32_t variable = (n >> 16) & 0xfff;
 					uint32_t offset = pack->line[i+1];
 					
-					trprintf("[%04d] STACK_PTR of=v%d offset=+%02d\n", i, variable, offset);
+					if (offset == -1) {
+						trprintf("[%04d] STACK_PTR of=v%d offset=no\n", i, variable);
+					} else {
+						trprintf("[%04d] STACK_PTR of=v%d offset=+%02d\n", i, variable, offset);
+					}
 					i++;
 					break;
 				}
@@ -1647,7 +1658,27 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		return;		
 	}
 
-	
+	case EXPRESSION_ADDR_OF:
+	{
+		Expression* reference = Expression_cross(expr->data.operand);
+		if (reference->type != EXPRESSION_PROPERTY) {
+			raiseError("[Syntax] Can only get the address of a variable");
+			return;
+		}
+		
+		if (reference->data.property.origin) {
+			raiseError("[TODO] Handle origin in addrOf (this)");
+		}
+		
+		int refArrLength = reference->data.property.length;
+		Variable** refVarArr = reference->data.property.variableArr;
+		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
+		int srcVar = refVarArr[0]->id;
+		
+		printf("ds %d %d\n", destVar, srcVar);
+		Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
+		return;
+	}	
 
 
 
@@ -1806,7 +1837,7 @@ void Trace_ins_getStackPtr(Trace* trace, int destVar, int srcVar, int destOffset
 	arr[1] = srcOffset;
 
 	trline_t* ptr = Array_get(VariableTrace, trace->variables, srcVar)->creationLinePtr;
-	*ptr = (*ptr) | (1<<12);
+	*ptr = (*ptr) | (1<<12); // append stack-only attribute
 }
 
 
@@ -2720,6 +2751,38 @@ static const char* LOGIC_NAMES[] = {
 	"setg",
 	"setge",
 };
+
+
+static const char* ARITHMETIC_SYMBOLS[] = {
+	"+",
+	"-",
+	"*",
+	"/",
+	"%",
+	"++",
+	"--",
+	"-"
+};
+
+static const char* LOGIC_SYMBOLS[] = {
+	"&",
+	"|",
+	"^",
+	"<<",
+	">>",
+	"&&",
+	"||",
+	"==",
+	"!=",
+	"<",
+	"<=",
+	">",
+	">=",
+};
+
+
+
+
 
 typedef struct {
 	int store;
@@ -4257,4 +4320,577 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
+	typedef struct {
+		int index;
+		int size;
+	} VarData;
+
+	typedef struct {
+		int variable;
+		int offset;
+	} Usage;
+
+	enum {
+		FLAG_REGISTRABLE = 1
+	};
+
+	
+	enum {
+		JMPIDX_IF,
+		JMPIDX_ELSE
+	};
+	Stack jmpStack;
+	Stack closingBraceStack;
+	Stack_create(char, &jmpStack);
+	Stack_create(int, &closingBraceStack);
+
+	int variableLength = trace->variables.length;
+	VarData variables[variableLength];
+	char varFlags[variableLength];
+	memset(variables, 0, sizeof(variables));
+	memset(varFlags, 0, sizeof(varFlags));
+
+	int instruction = 0;
+	FILE* output = fnAsm->output;
+	TracePack* pack = trace->first;
+	Usage* usedVariables = malloc(sizeof(Usage) * 4);
+	int usedVariablesCapacity = 4;
+	int usedVariablesCount = 0;
+
+
+
+	if (fnAsm->fn->returnType) {
+		fprintf(output, "// %s()\n%s fn_%p() {\n",
+			fnAsm->fn->name,
+			fnAsm->fn->returnType->direct.cl->name,
+			fnAsm->fn
+		);
+	} else {
+		fprintf(output, "// %s()\nvoid fn_%p() {\n",
+			fnAsm->fn->name,
+			fnAsm->fn
+		);
+	}
+
+	#define move() {line = pack->line[instruction]; instruction++;}
+
+	#define writePrimitive(u, size)\
+		if (u.offset < 0) {\
+			fprintf(output, "v%03d_%02d", u.variable,\
+				variables[u.variable].index);\
+		} else {\
+			switch (size) {\
+			case 1:\
+				fprintf(output, "*(tuint8_t *)(&v%03d_%02d[%d])",\
+					u.variable, variables[u.variable].index, u.offset);\
+				break;\
+			case 2:\
+				fprintf(output, "*(tuint16_t*)(&v%03d_%02d[%d])",\
+					u.variable, variables[u.variable].index, u.offset);\
+				break;\
+			case 4:\
+				fprintf(output, "*(tuint32_t*)(&v%03d_%02d[%d])",\
+					u.variable, variables[u.variable].index, u.offset);\
+				break;\
+			case 8:\
+				fprintf(output, "*(tuint64_t*)(&v%03d_%02d[%d])",\
+					u.variable, variables[u.variable].index, u.offset);\
+				break;\
+			}\
+		}
+
+
+	while (true) {
+		if (
+			!Stack_isEmpty(closingBraceStack) &&
+			instruction == *Stack_seek(int, &closingBraceStack)
+		) {
+			Stack_pop(int, &closingBraceStack);
+			fprintf(output, "\t}\n");
+		}
+
+		trline_t line;
+		move();
+
+		int code = line & 0x3ff;
+
+		// Append usages
+		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
+			if (usedVariablesCount == usedVariablesCapacity) {
+				usedVariablesCapacity *= 2;
+				usedVariables = realloc(usedVariables, usedVariablesCapacity * sizeof(Usage));
+			}
+
+			int variable = line >> 11;
+			usedVariables[usedVariablesCount].variable = variable;
+			if (varFlags[variable] & FLAG_REGISTRABLE) {
+				usedVariables[usedVariablesCount].offset = -1;
+			} else {
+				move();
+				usedVariables[usedVariablesCount].offset = line;
+			}
+
+			usedVariablesCount++;
+			continue;
+		}
+
+		// Append instructions
+		switch (code) {
+		case TRACECODE_STAR:
+		{
+			int action = (line >> 10) & 0xf;
+			switch (action) {
+				case 0:
+				// change pack
+				pack = pack->next;
+				if (!pack)
+					goto finishMainWhile;
+
+				instruction = 0;
+				break;
+
+			case 1: // quick skip
+				break;
+			
+			case 2: // return
+				break;
+
+			case 3: // forbid moves
+				break;
+
+			case 4: // protect RAX for fncall
+				break;
+
+			case 5: // protect RAX and RDX for fncall
+				break;
+
+			case 6: // mark label
+				fprintf(output, "\tl%d:\n", instruction);
+				break;
+
+			case 7: // save placements
+				break;
+
+			case 8: // open placements
+				break;
+				
+			case 9: // save shadow placements
+				break;
+
+			case 10: // open shadow placements
+				break;
+
+			case 11: // trival usages
+				break;
+				
+			}
+
+			break;
+		}
+
+		case TRACECODE_CREATE:
+		{
+			trline_t variable = (line >> 16) & 0xfff;
+			trline_t registrable = line & (1<<28);
+			move();
+			trline_t size = line >> 16;
+
+			variables[variable].index++;
+			variables[variable].size = size;
+			varFlags[variable] = (registrable ? FLAG_REGISTRABLE : 0);
+
+			if (!registrable)
+				goto appendNotRegistrable;
+
+			switch (size) {
+			case 1:
+				fprintf(output, "\tuint8_t  v%03d_%02d;\n", variable, variables[variable].index);
+				break;
+
+			case 2:
+				fprintf(output, "\tuint16_t v%03d_%02d;\n", variable, variables[variable].index);
+				break;
+
+			case 4:
+				fprintf(output, "\tuint32_t v%03d_%02d;\n", variable, variables[variable].index);
+				break;
+
+			case 8:
+				fprintf(output, "\tuint64_t v%03d_%02d;\n", variable, variables[variable].index);
+				break;
+
+			default:
+				appendNotRegistrable:
+				fprintf(output, "\tuint8_t  v%03d_%02d[%d];\n", variable, variables[variable].index, size);
+				
+			}
+
+			break;
+		}
+
+		case TRACECODE_DEF:
+		{
+			int type = (line >> 10) & 0x3;
+			Usage usage = usedVariables[0];
+
+			// Operand
+			if (usage.offset < 0) {
+				fprintf(output, "\tv%03d_%02d = ", usage.variable, variables[usage.variable].index);
+
+			} else {
+				uint8_t * prefix;
+				switch (type) {
+					case TRACETYPE_S8:  prefix = "(uint8_t *)"; break;
+					case TRACETYPE_S16: prefix = "(uint16_t*)"; break;
+					case TRACETYPE_S32: prefix = "(uint32_t*)"; break;
+					case TRACETYPE_S64: prefix = "(uint64_t*)"; break;
+					default:            prefix = "(void    *)"; break;
+				}
+				fprintf(output, "\t*(%s(v%03d_%02d + %d)) = ", prefix, usage.variable,
+					variables[usage.variable].index, usage.offset);
+
+			}
+
+			// Value
+			if (type == TRACETYPE_S8) {
+				int value = (line >> 16) & 0xFF;
+				fprintf(output, "%u;\n", value);
+			} else if (type == TRACETYPE_S16) {
+				int value = (line>>16) & 0xFFFF;
+				fprintf(output, "%u;\n", value);
+			} else if (type == TRACETYPE_S32) {
+				move();
+				fprintf(output, "%u;\n", line);
+			} else {
+				move();
+				unsigned long l = line;
+				move();
+				unsigned long r = line;
+
+				fprintf(output, "%lu;\n", l | (r << 32));
+			}
+			break;
+		}
+
+		case TRACECODE_MOVE:
+		{
+			Usage src = usedVariables[0];
+			Usage dst = usedVariables[1];
+			
+			trline_t loadSrc = line & (1<<11);
+			trline_t loadDst = line & (1<<12);
+			int size = -1;
+			int realSize;
+
+			if (loadSrc && loadDst) {
+				raiseError("[Intern] Load src and dst at once is an illegal operation");
+				return;
+			}
+
+			fprintf(output, "\t");
+
+			if (loadDst) {
+				
+			} else if (dst.offset < 0) {
+				fprintf(output, "v%03d_%02d", dst.variable, variables[dst.variable].index);
+			} else {
+				size = line >> 16;
+				realSize = size;
+				switch (size) {
+				case 1: 
+					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", dst.variable,
+						variables[dst.variable].index, dst.offset);	
+					size = -1;
+					break;
+
+				case 2:
+					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", dst.variable,
+						variables[dst.variable].index, dst.offset);	
+					size = -1;
+					break;
+
+				case 4:
+					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", dst.variable,
+						variables[dst.variable].index, dst.offset);	
+					size = -1;
+					break;
+
+				case 8:
+					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", dst.variable,
+						variables[dst.variable].index, dst.offset);	
+					size = -1;
+					break;
+
+
+				default:
+					fprintf(output, "memcpy(v%03d_%02d + %d, ",
+						dst.variable, variables[dst.variable].index, dst.offset);
+					break;
+
+				}
+			}
+
+			if (size < 0) {
+				fprintf(output, " = ");
+			}
+
+			if (loadSrc) {
+
+			} else if (src.offset < 0) {
+				if (size < 0) {
+					fprintf(output, "v%03d_%02d", src.variable, variables[src.variable].index);
+				} else {
+					fprintf(output, "&v%03d_%02d, %d)",
+						src.variable, variables[src.variable].index, size);
+				}
+			
+			} else if (size < 0) {
+				switch (realSize) {
+				case 1: 
+					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", src.variable,
+						variables[src.variable].index, src.offset);	
+					break;
+
+				case 2:
+					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", src.variable,
+						variables[src.variable].index, src.offset);	
+					break;
+
+				case 4:
+					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", src.variable,
+						variables[src.variable].index, src.offset);	
+					break;
+
+				case 8:
+					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", src.variable,
+						variables[src.variable].index, src.offset);	
+					break;
+				}
+
+			} else {
+				fprintf(output, "v%03d_%02d + %d, %d)",
+					src.variable, variables[src.variable].index, src.offset, size);
+
+			}
+
+			fprintf(output, ";\n");
+
+
+			break;
+		}
+
+		case TRACECODE_PLACE:
+		{
+			break;
+		}
+
+		case TRACECODE_ARITHMETIC:
+		{
+			int operation = (line >> 10) & 0x7;
+			int psize = (line >> 13) & 0x3;
+
+			Usage u = usedVariables[1];
+			fprintf(output, "\t");
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, " = ");
+			if (operation <= TRACEOP_MODULO) {
+				u = usedVariables[0];
+				writePrimitive(u, variables[u.variable].size);
+				fprintf(output, " %s ", ARITHMETIC_SYMBOLS[operation]);
+				u = usedVariables[2];
+				writePrimitive(u, variables[u.variable].size);
+				fprintf(output, ";\n");
+
+			} else {
+				raiseError("[TODO] transpile this operation");
+			}
+			break;
+		}
+
+		case TRACECODE_ARITHMETIC_IMM:
+		{
+			break;
+		}
+
+		case TRACECODE_LOGIC:
+		{
+			int operation = (line >> 10) & 0xf;
+			int psize = (line >> 14) & 0x3;
+
+			Usage u = usedVariables[1];
+			fprintf(output, "\t");
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, " = ");
+			u = usedVariables[0];
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, " %s ", LOGIC_SYMBOLS[operation]);
+			u = usedVariables[2];
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, ";\n");			
+			break;
+		}
+
+		case TRACECODE_LOGIC_IMM_LEFT:
+		{
+			break;
+		}
+
+		case TRACECODE_LOGIC_IMM_RIGHT:
+		{
+			break;
+		}
+
+		case TRACECODE_FNCALL:
+		{
+			break;
+		}
+
+		case TRACECODE_IF:
+		{
+			fprintf(output, "\tif (");
+			Usage u = usedVariables[0];
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, ") {\n");
+
+			*Stack_push(char, &jmpStack) = JMPIDX_IF;
+			*Stack_push(int, &closingBraceStack) = line >> 10;
+			break;
+		}
+
+		case TRACECODE_JMP:
+		{
+			trline_t target = line >> 10;
+			switch (*Stack_pop(char, &jmpStack)) {
+			case JMPIDX_IF:
+				if (target >= instruction) {
+					fprintf(output, "\t} else {\n");
+				} else {
+					fprintf(output, "\tgoto l%d;\n\t}\n", target);
+				}
+				Stack_pop(int, &closingBraceStack); // ignore the closing brace added by if
+				// *Stack_push(int, &jmpStack) = JMPIDX_ELSE;
+				break;
+
+			case JMPIDX_ELSE:
+				// raiseError("[Intern] Should not ");
+
+			default:
+				raiseError("[Intern] jmpStack is corrupted");
+				return;
+			}
+			break;
+		}
+
+		case TRACECODE_CAST:
+		{
+			int operation = (line >> 10) & 0x7;
+			int psize = (line >> 13) & 0x3;
+
+			// Destination
+			Usage u = usedVariables[1];
+			fprintf(output, "\t");
+			writePrimitive(u, variables[u.variable].size);
+
+			const char* prefix;
+			switch (psize) {
+				case TRACETYPE_S8:  prefix = "(uint8_t)"; break;
+				case TRACETYPE_S16: prefix = "(uint16_t)"; break;
+				case TRACETYPE_S32: prefix = "(uint32_t)"; break;
+				case TRACETYPE_S64: prefix = "(uint64_t)"; break;
+				default:            prefix = "(void)"; break;
+			}
+
+			fprintf(output, " = %s(", prefix);
+
+			// Source
+			u = usedVariables[0];
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, ");\n");
+			
+			break;
+		}
+
+		case TRACECODE_STACK_PTR:
+		{
+			trline_t variable = (line >> 16) & 0xfff;
+			move();
+			int offset = line;
+
+			Usage dst = usedVariables[0];
+			if (dst.offset < 0) {
+				fprintf(output, "\tv%03d_%02d = ", dst.variable, variables[dst.variable].index);
+			} else {
+				// fprintf(output, "v%03d_%02d = ", );
+			}
+
+			if (offset == 0) {
+				fprintf(output, "(uint64_t)(v%03d_%02d)", variable, variables[variable].index);
+			} else if (offset == -1) {
+				fprintf(output, "(uint64_t)(&v%03d_%02d)", variable, variables[variable].index);
+			} else {
+				fprintf(output, "(uint64_t)(&v%03d_%02d[%d])", variable, variables[variable].index, offset);
+			}
+
+			fprintf(output, ";\n");
+			break;
+		}
+
+		case TRACECODE_LOAD:
+		{
+			break;
+		}
+
+
+		}
+
+
+		usedVariablesCount = 0;	
+	}
+
+	finishMainWhile:
+
+	Stack_free(jmpStack);
+	Stack_free(closingBraceStack);
+
+	free(usedVariables);
+	fprintf(output, "}\n");
+	#undef move
+	#undef writePrimitive
+}
 

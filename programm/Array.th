@@ -1,0 +1,13 @@
+class {
+	for {
+		T: Type;
+		length: int; // -1 if unknown
+	}
+
+
+	address: char;
+	get(_this: Pointer<T: Vector>): Vector;
+
+
+}
+

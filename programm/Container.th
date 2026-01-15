@@ -1,4 +1,8 @@
 class {
+	for {
+		J: Type;
+	}
+
 	x: int;
 	y: int;
 	z: int;

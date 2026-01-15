@@ -6,7 +6,7 @@
 #include "LabelPool.h"
 #include "Scope.h"
 
-
+#include <stdint.h>
 
 struct Module {
 	Scope scope;
@@ -15,10 +15,12 @@ struct Module {
 	Function* mainFunction;
 	char* binFolder;
 	int fileLength;
+	bool compile;
 
 	Array classes; // type: Class*
 	Array functions; // type: Function*
 };
+
 
 
 void Module_create(Module* module);

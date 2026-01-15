@@ -699,6 +699,10 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 		return Prototype_getSignedSize(expr->data.property.variableArr[subLength]->proto);
 	}
 
+	case EXPRESSION_LINK:
+		expr = expr->data.linked;
+		type = expr->type;
+		goto restart;
 
 	case EXPRESSION_ADDITION:
 	case EXPRESSION_SUBSTRACTION:
@@ -731,7 +735,9 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	/// TODO: logical operations (max of operands)
 
 
-	default: return 0;
+	default:
+		raiseError("[Intern] Cannot get size of this expression type");
+		return 0;
 	}
 }
 

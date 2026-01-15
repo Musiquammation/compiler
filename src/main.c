@@ -40,6 +40,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	Module module;
+	module.compile = false;
 	module.binFolder = argv[2];
 
 	LabelPool_create(&_labelPool);

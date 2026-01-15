@@ -335,7 +335,6 @@ ExtendedPrototypeSize Prototype_reachSizes(Prototype* proto, Scope* scope, bool 
 
 	case PROTO_MODE_DIRECT:
 	{
-
 		int size = proto->direct.sizes.size;
 		if (size >= 0) {
 			return (ExtendedPrototypeSize){

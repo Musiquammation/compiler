@@ -1,6 +1,7 @@
 #ifndef COMPILER_TRACE_H_
 #define COMPILER_TRACE_H_
 
+
 #include "declarations.h"
 #include "castable_t.h"
 #include "TraceStackHandler.h"
@@ -142,7 +143,7 @@ struct Trace {
 
 
 void Trace_create(Trace* trace);
-void Trace_delete(Trace* trace);
+void Trace_delete(Trace* trace, bool hasGeneratedAssembly);
 
 uint Trace_pushVariable(Trace* trace);
 void Trace_removeVariable(Trace* trace, uint index);
@@ -183,7 +184,7 @@ void Trace_addWhileUsages(Trace* trace, int scopeId, int startIns, int endIns, i
 
 void Trace_placeRegisters(Trace* trace);
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
-
+void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm);
 
 
 enum {
