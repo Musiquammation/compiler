@@ -1,29 +1,5 @@
 function test(): size_t {
-	let i: int;
-	let j: int;
-	let limit: int;
-	let test: int;
-	let anonymous: int;
-
-	i=1;
-	j=10;
-	limit=3;
-	anonymous = 1000;
-
-	let const1 = 1;
-	let const5 = 5;
-
-	while (i - const5) {
-		test = limit - i;
-		if (test) {
-			anonymous = limit-test;
-		}
-
-		j = j + i;
-		i = i + const1;
-	}
-
-	j = j + anonymous;
-
+	let a = 10c;
+	let b = a + 20;
 }
 

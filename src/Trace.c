@@ -1,6 +1,6 @@
 #include "Trace.h"
 
-
+#include "chooseSign.h"
 #include "TraceStackHandler.h"
 
 #include "Variable.h"
@@ -1430,25 +1430,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			int signedLeftSize = Expression_reachSignedSize(leftType, leftExpr);
 			int signedRightSize = Expression_reachSignedSize(rightType, rightExpr);
 
-			int leftSize = signedLeftSize >= 0 ? signedLeftSize : -signedLeftSize;
-			int rightSize = signedRightSize >= 0 ? signedRightSize : -signedRightSize;
-
-			int signedMaxSize;
-			int maxSize;
-			if (leftSize == rightSize) {
-				maxSize = leftSize;
-				signedMaxSize = signedLeftSize >= 0 ? 
-					signedLeftSize :
-					signedRightSize;
-
-
-			} else if (leftSize >= rightSize) {
-				signedMaxSize = signedLeftSize;
-				maxSize = leftSize;
-			} else {
-				signedMaxSize = signedRightSize;
-				maxSize = rightSize;
-			}
+			int signedMaxSize = chooseFinalSign(chooseSign(signedLeftSize, signedRightSize));
+			int maxSize = signedMaxSize >= 0 ? signedMaxSize : -signedMaxSize;
 			
 			uint leftVar = Trace_ins_create(trace, NULL, maxSize, 0, 1);
 			Trace_set(trace, leftExpr, leftVar, TRACE_OFFSET_NONE, signedMaxSize, leftType);
@@ -1521,7 +1504,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				signedSrcImmediateSize = Expression_getSignedSize(leftType);
 			}
 
-			int signedOperandSize = Expression_reachSignedSize(operandType, operand);
+			int signedOperandSize = chooseFinalSign(Expression_reachSignedSize(operandType, operand));
 			int operandSize = signedOperandSize >= 0 ? signedOperandSize : -signedOperandSize;
 			int signedDestImmediateSize;
 
@@ -1596,6 +1579,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				break;
 				
 			case 8:
+			case -8:
 				ptr = Trace_push(trace, 3);
 				ptr[0] = first | (3 << decPos);
 				ptr[1] = immValue.u64;
@@ -1645,6 +1629,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	case EXPRESSION_I64:
 	case EXPRESSION_U64:
 	case EXPRESSION_F64:
+	case EXPRESSION_INTEGER:
+	case EXPRESSION_FLOATING:
 	{
 		int signedObjSize = Expression_getSignedSize(exprType);
 		int objSize = signedObjSize >= 0 ? signedObjSize : -signedObjSize;
@@ -4436,6 +4422,21 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 		}
 
 
+	#define printImmediate(line, psize)\
+		if (psize == 0 || psize == 1) {\
+			fprintf(output, "%d", line >> 16);\
+		} else if (psize == 2) {\
+			move();\
+			fprintf(output, "%d", line);\
+		} else if (psize == 3) {\
+			move();\
+			uint64_t lo = (uint64_t)line;\
+			move();\
+			uint64_t hi = (uint64_t)line;\
+			fprintf(output, "%lu", (hi >> 32) | lo);\
+		}
+		
+
 	while (true) {
 		if (
 			!Stack_isEmpty(closingBraceStack) &&
@@ -4745,6 +4746,35 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_ARITHMETIC_IMM:
 		{
+			int operation = (line >> 10) & 0x7;
+			int psize = (line >> 13) & 0x3;
+			int immAtRight = line & (1<<15);
+
+			Usage u = usedVariables[1];
+			fprintf(output, "\t");
+			writePrimitive(u, variables[u.variable].size);
+			fprintf(output, " = ");
+
+			
+			if (operation <= TRACEOP_MODULO) {
+				if (immAtRight) {
+					u = usedVariables[0];
+					writePrimitive(u, variables[u.variable].size);
+					fprintf(output, " %s ", ARITHMETIC_SYMBOLS[operation]);
+					printImmediate(line, psize);
+					fprintf(output, ";\n");
+				} else {
+					u = usedVariables[0];
+					printImmediate(line, psize);
+					fprintf(output, " %s ", ARITHMETIC_SYMBOLS[operation]);
+					writePrimitive(u, variables[u.variable].size);
+					fprintf(output, ";\n");
+
+				}
+			} else {
+				raiseError("[TODO] Handle imm arithmetic operation");
+			}
+
 			break;
 		}
 
@@ -4892,5 +4922,6 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 	fprintf(output, "}\n");
 	#undef move
 	#undef writePrimitive
+	#undef printImmediate
 }
 

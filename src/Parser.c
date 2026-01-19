@@ -269,7 +269,7 @@ static int collectNumber(const char* str, Token* token) {
 		switch (suffix) {
 			case 'f': token->type = TOKEN_TYPE_F32; token->num.f32 = (float)val; break;
 			case 'd': token->type = TOKEN_TYPE_F64; token->num.f64 = val; break;
-			default:  token->type = TOKEN_TYPE_F32; token->num.f32 = (float)val; break;
+			default:  token->type = TOKEN_TYPE_FLOATING; token->num.f32 = (float)val; break;
 		}
 	} else {
 		unsigned long val = strtoul(start, NULL, base);
@@ -282,7 +282,7 @@ static int collectNumber(const char* str, Token* token) {
 			case 'l': token->type = TOKEN_TYPE_I64; token->num.i64 = (long)val; break;
 			case 'L': token->type = TOKEN_TYPE_U64; token->num.u64 = (unsigned long)val; break;
 			case 'd': token->type = TOKEN_TYPE_I32; token->num.i32 = (int)val; break;
-			default:  token->type = TOKEN_TYPE_I32; token->num.i32 = (int)val; break;
+			default:  token->type = TOKEN_TYPE_INTEGER; token->num.i32 = (int)val; break;
 		}
 	}
 
@@ -476,6 +476,9 @@ void Token_println(const Token* token) {
 		case TOKEN_TYPE_F32: printf("number<f32>(%f)\n", token->num.f32); break;
 		case TOKEN_TYPE_F64: printf("number<f64>(%lf\n)", token->num.f64); break;
 
+		case TOKEN_TYPE_INTEGER: printf("integer(%d)\n", token->num.i32); break;
+		case TOKEN_TYPE_FLOATING: printf("floating(%f)\n", token->num.f32); break;
+
 		// Operators
 		case TOKEN_TYPE_OPERATOR:
 			if(token->operator >= 0 && token->operator < (operator_t)(sizeof(PARSER_OPERATORS)/TOKEN_OPERATORMAXLENGTH)) {
@@ -569,6 +572,7 @@ int Token_compare(const Token* token, const Token comparators[], int length, cha
 			case TOKEN_TYPE_U32:
 			case TOKEN_TYPE_I64:
 			case TOKEN_TYPE_U64:
+			case TOKEN_TYPE_INTEGER:
 				success();
 			}
 			
@@ -587,6 +591,8 @@ int Token_compare(const Token* token, const Token comparators[], int length, cha
 			case TOKEN_TYPE_I64:
 			case TOKEN_TYPE_U64:
 			case TOKEN_TYPE_F64:
+			case TOKEN_TYPE_INTEGER:
+			case TOKEN_TYPE_FLOATING:
 				success();
 			}
 			

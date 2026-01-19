@@ -215,6 +215,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 
 	// Collect expressions
 	while (true) {
+		Token_println(&parser->token);
 		const int syntaxIndex = TokenCompare(SYNTAXLIST_EXPRESSION, 0);
 		switch (syntaxIndex) {
 
@@ -283,6 +284,16 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 				e->data.num.u64 = parser->token.num.u64;
 				break;
 
+			case TOKEN_TYPE_INTEGER:
+				e->type = EXPRESSION_INTEGER;
+				e->data.num.i32 = parser->token.num.i32;
+				break;
+
+			case TOKEN_TYPE_FLOATING:
+				e->type = EXPRESSION_FLOATING;
+				e->data.num.f32 = parser->token.num.f32;
+				break;
+
 			default:
 				raiseError("[INTERN] Token should be a number");
 				break;
@@ -306,7 +317,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 			Expression* e = Array_push(Expression, &lineArr);
 
 			int targetType = target->type;
-			if (targetType >= EXPRESSION_U8 && targetType <= EXPRESSION_F64) {
+			if (targetType >= EXPRESSION_U8 && targetType <= EXPRESSION_FLOATING) {
 				*e = *target;
 				free(target);
 
@@ -1992,7 +2003,7 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 		return pat;
 	}
 	
-	if (exprType >= EXPRESSION_U8 && exprType <= EXPRESSION_F64) {
+	if (exprType >= EXPRESSION_U8 && exprType <= EXPRESSION_FLOATING) {
 		protoAndType_t pat;
 		pat.proto = Expression_getPrimitiveProtoFromType(exprType);
 		pat.type = Expression_getPrimitiveTypeFromType(exprType);
@@ -2157,7 +2168,7 @@ static void placeExpression(
 
 
 
-	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_F64) {
+	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_FLOATING) {
 		int subLength = varrDest_len - 1;
 		/// TODO: check sizes
 
@@ -2842,8 +2853,8 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 			return;
 
 		Parser_read(parser, &_labelPool);
-		if (parser->token.type != TOKEN_TYPE_I32) {
-			raiseError("[Syntax] A i32 was expected in @stdFastAccess(x)");
+		if (parser->token.type != TOKEN_TYPE_INTEGER) {
+			raiseError("[Syntax] An integer was expected in @stdFastAccess(x)");
 			return;
 		}
 

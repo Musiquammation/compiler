@@ -1,5 +1,6 @@
 #include "Expression.h"
 
+#include "chooseSign.h"
 #include "declarations.h"
 #include "helper.h"
 #include "Function.h"
@@ -90,6 +91,9 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_F32:
 	case EXPRESSION_F64:
+
+	case EXPRESSION_INTEGER:
+	case EXPRESSION_FLOATING:
 		
 	case EXPRESSION_STRING:
 		break;
@@ -182,6 +186,10 @@ void Expression_exchangeReferences(
 
 		case EXPRESSION_F32:
 		case EXPRESSION_F64:
+
+		case EXPRESSION_INTEGER:
+		case EXPRESSION_FLOATING:
+
 			break;
 	
 
@@ -657,18 +665,21 @@ bool Expression_canSimplify(int type, int op1, int op2) {
 
 int Expression_getSignedSize(int exprType) {
 	switch (exprType) {
-	case EXPRESSION_U8:  return 1;
-	case EXPRESSION_I8:  return -1;
-	case EXPRESSION_U16: return -2;
-	case EXPRESSION_I16: return 2;
-	case EXPRESSION_U32: return 4;
-	case EXPRESSION_I32: return -4;
-	case EXPRESSION_F32: return 5;
-	case EXPRESSION_U64: return 8;
-	case EXPRESSION_I64: return -8;
-	case EXPRESSION_F64: return 9;
-	default: return 0;
-}
+		case EXPRESSION_U8:  return 1;
+		case EXPRESSION_I8:  return -1;
+		case EXPRESSION_U16: return -2;
+		case EXPRESSION_I16: return 2;
+		case EXPRESSION_U32: return 4;
+		case EXPRESSION_I32: return -4;
+		case EXPRESSION_F32: return 5;
+		case EXPRESSION_U64: return 8;
+		case EXPRESSION_I64: return -8;
+		case EXPRESSION_F64: return 9;
+		case EXPRESSION_INTEGER: return -4;
+		case EXPRESSION_FLOATING: return 5;
+
+		default: return 0;
+	}
 }
 
 int Expression_reachSignedSize(int type, const Expression* expr) {
@@ -684,6 +695,8 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	case EXPRESSION_U64: return 8;
 	case EXPRESSION_I64: return -8;
 	case EXPRESSION_F64: return 9;
+	case EXPRESSION_INTEGER: return EXPRSIZE_INTEGER;
+	case EXPRESSION_FLOATING: return EXPRSIZE_FLOATING;
 
 	case EXPRESSION_GROUP:
 		expr = expr->data.target;
@@ -708,8 +721,21 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	case EXPRESSION_SUBSTRACTION:
 	case EXPRESSION_MULTIPLICATION:
 	case EXPRESSION_DIVISION:
-	case EXPRESSION_MODULO:
+	{
+		int signedLeft = Expression_reachSignedSize(
+			expr->data.operands.left->type,
+			expr->data.operands.left
+		);
+
+		int signedRight = Expression_reachSignedSize(
+			expr->data.operands.right->type,
+			expr->data.operands.right
+		);
+
+		return chooseSign(signedLeft, signedRight);
+	}
 	
+	case EXPRESSION_MODULO:
 	case EXPRESSION_BITWISE_AND:
 	case EXPRESSION_BITWISE_OR:
 	case EXPRESSION_BITWISE_XOR:
@@ -726,9 +752,9 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 			expr->data.operands.right
 		);
 
-		int left = signedLeft >= 0 ? signedLeft : -signedLeft;
-		int right = signedRight >= 0 ? signedRight : -signedRight;
-		return left <= right ? signedLeft : signedRight;
+		/// TODO: raise floatings
+
+		return chooseSign(signedLeft, signedRight);
 	}
 
 
@@ -782,8 +808,10 @@ Prototype* Expression_getPrimitiveProtoFromType(int type) {
 	case EXPRESSION_U32:
 		return &_primitives.proto_u32;
 	case EXPRESSION_I32:
+	case EXPRESSION_INTEGER:
 		return &_primitives.proto_i32;
 	case EXPRESSION_F32:
+	case EXPRESSION_FLOATING:
 		return &_primitives.proto_f32;
 
 	case EXPRESSION_U64:
@@ -819,9 +847,11 @@ Type* Expression_getPrimitiveTypeFromType(int type) {
 		return &_primitives.type_u32;
 
 	case EXPRESSION_I32:
+	case EXPRESSION_INTEGER:
 		return &_primitives.type_i32;
 
 	case EXPRESSION_F32:
+	case EXPRESSION_FLOATING:
 		return &_primitives.type_f32;
 
 
@@ -855,9 +885,13 @@ Prototype* Expression_getPrimitiveProtoFromSize(int signedSize) {
 
 	case 4:
 		return &_primitives.proto_u32;
+	
 	case -4:
+	case EXPRSIZE_INTEGER:
 		return &_primitives.proto_i32;
+
 	case 5:
+	case EXPRSIZE_FLOATING:
 		return &_primitives.proto_f32;
 
 	case 8:

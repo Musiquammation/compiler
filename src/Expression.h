@@ -80,6 +80,9 @@ enum {
 	EXPRESSION_I64,
 	EXPRESSION_F64,
 	
+	EXPRESSION_INTEGER,
+	EXPRESSION_FLOATING,
+	
 	EXPRESSION_STRING,
 
 	EXPRESSION_ADDITION,        // a + b
@@ -117,6 +120,11 @@ enum {
 	
 	EXPRESSION_ADDR_OF,         // &a
 	EXPRESSION_VALUE_AT,        // *a
+};
+
+enum {
+	EXPRSIZE_INTEGER = 0x7ffffffe,
+	EXPRSIZE_FLOATING = 0x7fffffff
 };
 
 
