@@ -1296,9 +1296,17 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		}
 
 
-		// Mark rax will be used
+		// Mark rax will be used and mark variable
 		if (destVar != TRACE_VARIABLE_NONE) {
 			*Trace_push(trace, 1) = TRACECODE_STAR | (4 << 10);
+
+			if (destVar > 0xffff) {
+				trline_t* arr = Trace_push(trace, 2);
+				arr[0] = TRACECODE_STAR | (12 << 10) | (destVar << 16);
+				arr[1] = TRACECODE_STAR | (12 << 10) | (destVar & 0xffff0000);
+			} else {
+				*Trace_push(trace, 1) = TRACECODE_STAR | (12 << 10) | (destVar << 16);
+			}
 		}
 
 		int fnIndex = Trace_reachFunction(trace, fn);
@@ -2429,6 +2437,9 @@ void Trace_placeRegisters(Trace* trace) {
 
 			case 11: // trival usages
 				break;
+
+			case 12: // fncall return dst variable (for transpiler)
+				break;
 				
 			}
 			break;
@@ -3267,11 +3278,11 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 	TraceStackHandler_create(&trace->stackHandler, trace->stackId);
 
 	if (fnAsm->fn->returnType) {
-		fprintf(output, "fn_%p: ; %s(...) -> %s;\n",
-			fnAsm->fn, fnAsm->fn->name, 
-			fnAsm->fn->returnType->direct.cl->name);
+		fprintf(output, "fn_%016lx: ; %s(...) -> %s;\n",
+			fnAsm->fn->traceId, fnAsm->fn->name, 
+			fnAsm->fn->returnType->direct.cl->c_name);
 	} else {
-		fprintf(output, "fn_%p: ; %s(...);\n", fnAsm->fn, fnAsm->fn->name);
+		fprintf(output, "fn_%016lx: ; %s(...);\n", fnAsm->fn->traceId, fnAsm->fn->name);
 	}
 
 
@@ -3655,6 +3666,9 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 				break;
 
 			case 11: // trival usages
+				break;
+
+			case 12: // fncall return dst variable (for transpiler)
 				break;
 
 			}
@@ -4161,7 +4175,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			
 			// Call function
 			Function* fn = Trace_getFunction(trace, line>>10);
-			fprintf(output, "\tcall fn_%p\n", fn);
+			fprintf(output, "\tcall fn_%016lx\n", fn->traceId);
 			
 			// Restore@data
 			for (int i = TRACE_REG_R11 - TRACE_REG_RAX; i >= 0; i--) {
@@ -4383,18 +4397,41 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 
 
-	if (fnAsm->fn->returnType) {
-		fprintf(output, "// %s()\n%s fn_%p() {\n",
-			fnAsm->fn->name,
-			fnAsm->fn->returnType->direct.cl->name,
-			fnAsm->fn
+
+	// Write function signature (return type and name)
+	Function* currentFunction = fnAsm->fn;
+	if (currentFunction->returnType) {
+		fprintf(output, "// %s()\n%s fn_%016lx(",
+			currentFunction->name,
+			currentFunction->returnType->direct.cl->c_name,
+			currentFunction->traceId
 		);
 	} else {
-		fprintf(output, "// %s()\nvoid fn_%p() {\n",
-			fnAsm->fn->name,
-			fnAsm->fn
+		fprintf(output, "// %s()\nvoid fn_%016lx(",
+			currentFunction->name,
+			currentFunction->traceId
 		);
 	}
+
+	// Write args
+	typedef Variable* vptr_t;
+	int fnArgLen = currentFunction->arguments.length;
+	Variable** fnArgs = currentFunction->arguments.data;
+	for (int i = 0; i < fnArgLen; i++) {
+		Variable* v = fnArgs[i];
+		fprintf(output, "%s v%03d_%02d",
+			Prototype_getClass(v->proto)->c_name, i, 1);
+		
+		if (i < fnArgLen-1)
+			fprintf(output, ", ");
+	}
+
+
+
+	// Finish signature
+	fprintf(output, ") {\n");
+
+
 
 	#define move() {line = pack->line[instruction]; instruction++;}
 
@@ -4438,6 +4475,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 			fprintf(output, "%lu", (hi >> 32) | lo);\
 		}
 		
+
+
+
+	int receivingReturnVariable = -1;
 
 	while (true) {
 		if (
@@ -4522,6 +4563,14 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 			case 11: // trival usages
 				break;
 				
+			case 12: // fncall return dst variable (for transpiler)
+				if (receivingReturnVariable == -1) {
+					receivingReturnVariable = line >> 16;
+				} else {
+					receivingReturnVariable |= line & 0xffff0000;
+				}
+				break;
+
 			}
 
 			break;
@@ -4529,6 +4578,7 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_CREATE:
 		{
+			trline_t isArg = line & (1<<11);
 			trline_t variable = (line >> 16) & 0xfff;
 			trline_t registrable = line & (1<<28);
 			move();
@@ -4537,6 +4587,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 			variables[variable].index++;
 			variables[variable].size = size;
 			varFlags[variable] = (registrable ? FLAG_REGISTRABLE : 0);
+
+			// Arguments are already created, so let's skip them
+			if (isArg)
+				break;
 
 			if (!registrable)
 				goto appendNotRegistrable;
@@ -4920,16 +4974,42 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_LOGIC_IMM_LEFT:
 		{
+			raiseError("[TODO] TRACECODE_LOGIC_IMM_LEFT");
 			break;
 		}
-
+		
 		case TRACECODE_LOGIC_IMM_RIGHT:
 		{
+			raiseError("[TODO] TRACECODE_LOGIC_IMM_RIGHT");
 			break;
 		}
 
 		case TRACECODE_FNCALL:
 		{
+			// Write destination
+			if (receivingReturnVariable >= 0) {
+				fprintf(output, "\tv%03d_%02d = ",
+					receivingReturnVariable, variables[receivingReturnVariable].index);
+			} else {
+				fprintf(output, "\t");
+			}
+
+			// Call fn
+			Function* fn = TraceFunctionMap_getIdx(&trace->calledFunctions, line >> 10);
+			fprintf(output, "fn_%016lx(", fn->traceId);
+			
+			// Put args
+			for (int i = 0; i < usedVariablesCount; i++) {
+				Usage u = usedVariables[i];
+				writePrimitive(u, variables[u.variable].size);
+
+				if (i < usedVariablesCount-1) {
+					fprintf(output, ", ");
+				}
+			}
+
+			fprintf(output, ");\n");
+			receivingReturnVariable = -1;
 			break;
 		}
 

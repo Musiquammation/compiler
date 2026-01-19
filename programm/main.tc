@@ -1,13 +1,11 @@
-class Test {
-	added: int;
-	ptr: Pointer<T: Vector>;
+function call(a: int, b: int): int {
+	a = a + b;
 }
 
-function test(): size_t {
-	let vec: Vector;
-	let test: Test;
+function main {
+	let ptr: Pointer<T: Vector>;
+	let dst: int;
 
-	test.ptr = &vec;
-	test.ptr.y = 31;
+	dst = call(12, 3232);
 }
 

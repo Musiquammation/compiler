@@ -14,5 +14,8 @@ class {
 
 	@stdFastAccess(0)
 	function: T;
+
+	deepCopy(): Pointer<T: T>;
+
 }
 

@@ -8,10 +8,12 @@
 
 #include <string.h>
 
-
+long functionNextId = 0;
 
 void Function_create(Function* fn) {
 	fn->stdBehavior = -1;
+	fn->traceId = functionNextId;
+	functionNextId++;
 }
 
 void Function_delete(Function* fn) {

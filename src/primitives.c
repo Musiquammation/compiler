@@ -19,8 +19,9 @@ static int cmpLabelPtr(const void* a, const void* b) {
 
 void primitives_init(void) {
 	#define name(id, s) _commonLabels._##id##s
-	#define def(id, s, k, namemethod) \
+	#define def(id, s, k, namemethod, cname) \
 		_primitives.class_##id##s.name = namemethod(id, s); \
+		_primitives.class_##id##s.c_name = cname;\
 		_primitives.class_##id##s.meta = NULL; \
 		_primitives.class_##id##s.definitionState = DEFINITIONSTATE_DONE; \
 		_primitives.class_##id##s.primitiveSizeCode = k; \
@@ -36,16 +37,17 @@ void primitives_init(void) {
 		_primitives.type_##id##s.primitiveSizeCode = k;\
 		_primitives.type_##id##s.data = NULL;\
 		
-	def(i, 8,  -1,  name);
-	def(u, 8,  1,   name);
-	def(i, 16, -2,  name);
-	def(u, 16, 2,   name);
-	def(i, 32, -4,  name);
-	def(u, 32, 4,   name);
-	def(i, 64, -8,  name);
-	def(u, 64, 8,   name);
-	def(f, 32, 126, name);
-	def(f, 64, 127, name);
+	def(i,  8,  -1,  name, "int8_t");
+	def(u,  8,   1,  name, "uint8_t");
+	def(i, 16,  -2,  name, "int16_t");
+	def(u, 16,   2,  name, "uint16_t");
+	def(i, 32,  -4,  name, "int32_t");
+	def(u, 32,   4,  name, "uint32_t");
+	def(i, 64,  -8,  name, "int64_t");
+	def(u, 64,   8,  name, "uint64_t");
+	def(f, 32, 126,  name, "float");
+	def(f, 64, 127,  name, "double");
+
 
 	#undef def
 	#undef name

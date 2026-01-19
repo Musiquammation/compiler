@@ -29,6 +29,7 @@ struct Class {
 
 	Class* meta;
 	label_t name;
+	const char* c_name;
 
 	struct {
 		Function* fastAccess;

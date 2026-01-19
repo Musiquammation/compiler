@@ -11,13 +11,16 @@
 #include <stdio.h>
 #include "tools/Array.h"
 
+extern long functionNextId;
+
 struct Function {
 	label_t name;
 	definitionState_t definitionState;
-
+	
 	Array arguments; // type: Variable*
 	Prototype* returnType;
-
+	
+	long traceId;
 	int stdBehavior;
 };
 

@@ -272,6 +272,7 @@ enum {
 	 * ACTION=09: save shadow placements
 	 * ACTION=10: open shadow placements
 	 * ACTION=11: trival usages
+	 * ACTION=12: fncall return dst variable (for transpiler)
 	 */
 	TRACECODE_STAR = TRACE_USAGE_LIMIT+1,
 

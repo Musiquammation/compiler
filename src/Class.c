@@ -17,8 +17,10 @@ void Class_create(Class* cl) {
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
 	cl->primitiveSizeCode = PSC_UNKNOWN;
 	cl->isPrimitive = false;
-
 	cl->std_methods.fastAccess = NULL;
+
+	/// TODO: remove this line
+	cl->c_name = "unknown_t";
 }
 
 
