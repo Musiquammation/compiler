@@ -1105,7 +1105,8 @@ typedef struct {
 } HandleOriginResult;
 
 static void handleOrigin(Trace* trace, Expression* origin,
-	Expression* next, int nextType, uint destVar, int destOffset) {
+	Expression* next, int nextType, uint destVar, int destOffset
+) {
 	switch (origin->type) {
 	case EXPRESSION_FAST_ACCESS:
 	{
@@ -1150,6 +1151,7 @@ static void handleOrigin(Trace* trace, Expression* origin,
 
 			default:
 				raiseError("[Intern] Unfound type in handleOrigin");
+				return;
 			}
 
 			break;
@@ -4626,10 +4628,126 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 			fprintf(output, "\t");
 
+
+			if (loadSrc) {
+				realSize = line >> 16;
+
+				if (dst.offset < 0) {
+					size = -1;
+					fprintf(output, "v%03d_%02d", dst.variable, variables[dst.variable].index);
+				} else {
+					switch (realSize) {
+					case 1: 
+						fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+	
+					case 2:
+						fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+	
+					case 4:
+						fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+	
+					case 8:
+						fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+	
+	
+					default:
+						fprintf(output, "memcpy(v%03d_%02d + %d, ",
+							dst.variable, variables[dst.variable].index, dst.offset);
+						size = realSize;
+						break;
+	
+					}
+				}
+
+				
+				if (size < 0) {
+					fprintf(output, " = ");
+					if (src.offset < 0) {
+						switch (realSize) {
+							case 1: fprintf(output, "*(uint8_t *)"); break;
+							case 2: fprintf(output, "*(uint16_t*)"); break;
+							case 4: fprintf(output, "*(uint32_t*)"); break;
+							case 8: fprintf(output, "*(uint64_t*)"); break;
+						}
+						fprintf(output, "v%03d_%02d", src.variable, variables[src.variable].index);
+
+					} else {
+						fprintf(output, "(*(void**)(v%03d_%02d + %d))",
+							src.variable, variables[src.variable].index, src.offset);
+					}
+				
+				} else if (src.offset < 0) {
+					fprintf(output, ", v%03d_%02d, , %d)", src.variable, variables[src.variable].index, realSize);
+				} else {
+					fprintf(output, ", (*(void**)(v%03d_%02d + %d)), %d)",
+						src.variable, variables[src.variable].index, src.offset, realSize);
+				}
+
+				goto finishMove;
+			}
+
 			if (loadDst) {
+				if (dst.offset < 0) {
+					size = line >> 16;
+					realSize = size;
+					fprintf(output, "memcpy((void*)v%03d_%02d, ",
+						dst.variable, variables[dst.variable].index);
+			
+				} else {
+					size = line >> 16;
+					realSize = size;
+
+					switch (size) {
+					case 1: 
+						fprintf(output, "**((uint8_t **)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+
+					case 2:
+						fprintf(output, "**((uint16_t**)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+
+					case 4:
+						fprintf(output, "**((uint32_t**)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+
+					case 8:
+						fprintf(output, "**((uint64_t**)(v%03d_%02d + %d))", dst.variable,
+							variables[dst.variable].index, dst.offset);	
+						size = -1;
+						break;
+
+
+					default:
+						fprintf(output, "memcpy(v%03d_%02d + %d, ",
+							dst.variable, variables[dst.variable].index, dst.offset);
+						break;
+
+					}
+				}
 				
 			} else if (dst.offset < 0) {
 				fprintf(output, "v%03d_%02d", dst.variable, variables[dst.variable].index);
+				size = -1;
+				realSize = line >> 16;
+
 			} else {
 				size = line >> 16;
 				realSize = size;
@@ -4671,9 +4789,7 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 				fprintf(output, " = ");
 			}
 
-			if (loadSrc) {
-
-			} else if (src.offset < 0) {
+			if (src.offset < 0) {
 				if (size < 0) {
 					fprintf(output, "v%03d_%02d", src.variable, variables[src.variable].index);
 				} else {
@@ -4702,6 +4818,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", src.variable,
 						variables[src.variable].index, src.offset);	
 					break;
+
+				default:
+					raiseError("[Intern] size error in transpilation");
+					return;
 				}
 
 			} else {
@@ -4710,6 +4830,8 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 			}
 
+
+			finishMove:
 			fprintf(output, ";\n");
 
 
@@ -4886,7 +5008,8 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 			if (dst.offset < 0) {
 				fprintf(output, "\tv%03d_%02d = ", dst.variable, variables[dst.variable].index);
 			} else {
-				// fprintf(output, "v%03d_%02d = ", );
+				fprintf(output, "\t*(uint64_t*)(v%03d_%02d + %d) = ",
+					dst.variable, variables[dst.variable].index, dst.offset);
 			}
 
 			if (offset == 0) {

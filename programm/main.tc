@@ -1,5 +1,13 @@
+class Test {
+	added: int;
+	ptr: Pointer<T: Vector>;
+}
+
 function test(): size_t {
-	let a = 10c;
-	let b = a + 20;
+	let vec: Vector;
+	let test: Test;
+
+	test.ptr = &vec;
+	test.ptr.y = 31;
 }
 

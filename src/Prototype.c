@@ -375,7 +375,7 @@ ExtendedPrototypeSize Prototype_reachSizes(Prototype* proto, Scope* scope, bool 
 	}
 	}
 
-returnEmptySize:
+	returnEmptySize:
 	if (throwError) {
 		raiseError("[Type] Cannot get size of an incomplete type");
 	}
@@ -504,10 +504,7 @@ Class *Prototype_getMetaClass(Prototype* proto) {
 Class* Prototype_getClass(Prototype* proto) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-	{
-		raiseError("[TODO] Prototype_getClass");
-		break;
-	}
+		return Prototype_getClass(proto->ref.proto);
 
 	case PROTO_MODE_DIRECT:
 		return proto->direct.cl;
@@ -528,10 +525,8 @@ Class* Prototype_getClass(Prototype* proto) {
 
 Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
 	switch (Prototype_mode(*proto)) {
-	case PROTO_MODE_REFERENCE: {
-		raiseError("[TODO] Prototype_getClass");
-		break;
-	}
+	case PROTO_MODE_REFERENCE:
+		return Prototype_reachProto(proto->ref.proto, parent);
 
 	case PROTO_MODE_DIRECT:
 		return proto;
@@ -624,10 +619,10 @@ int Prototype_getVariableOffset(Variable* path[], int length) {
 	}
 }
 
-Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer *buffer) {
+Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-		raiseError("[TODO] subscoppe of an expression");
+		return Prototype_reachSubScope(proto->ref.proto, buffer);
 
 	case PROTO_MODE_DIRECT:
 		buffer->cl.scope.parent = NULL;
@@ -637,7 +632,7 @@ Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer *buffer) {
 		return &buffer->cl.scope;
 
 	case PROTO_MODE_VARIADIC:
-		raiseError("[TODO] subscoppe of a variable");
+		raiseError("[TODO] subscoppe of a variadic");
 		break;
 
 	case PROTO_MODE_PRIMITIVE:

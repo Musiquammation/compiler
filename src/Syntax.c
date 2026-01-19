@@ -215,7 +215,6 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 
 	// Collect expressions
 	while (true) {
-		Token_println(&parser->token);
 		const int syntaxIndex = TokenCompare(SYNTAXLIST_EXPRESSION, 0);
 		switch (syntaxIndex) {
 
@@ -2365,8 +2364,8 @@ void Syntax_functionScope_freeLabel(
 	label_t firstLabel,
 	Trace* trace
 ) {
-	Expression* expression = Syntax_readPath(firstLabel, parser, &scope->scope);
-	int expressionType = expression->type;
+	Expression* destExpression = Syntax_readPath(firstLabel, parser, &scope->scope);
+	int destExpressionType = destExpression->type;
 
 	// Analyze 
 	bool containsEqual;
@@ -2384,7 +2383,7 @@ void Syntax_functionScope_freeLabel(
 
 
 	// fill branches
-	switch (expressionType) {
+	switch (destExpressionType) {
 	case EXPRESSION_PROPERTY:
 	{
 		if (!containsEqual) {
@@ -2396,18 +2395,99 @@ void Syntax_functionScope_freeLabel(
 
 		
 		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
+		int valueExprType = valueExpr->type;
 
 		// End operand
 		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
 
-		placeExpression(trace, valueExpr, expression->data.property.variableArr,
-			expression->data.property.length);
+		Variable** varr = destExpression->data.property.variableArr;
+		int length = destExpression->data.property.length;
+		Expression* origin = destExpression->data.property.origin;
+
+		if (origin) {
+			Variable* last = varr[length-1];
+			ExtendedPrototypeSize eps = Prototype_getSizes(last->proto);
+			uint tmpId = Trace_ins_create(trace, NULL, eps.size, 0, eps.primitiveSizeCode);
+			// Put source in tmp variable
+			Trace_set(trace, valueExpr, tmpId, -1, eps.size, valueExprType);
+
+			switch (origin->type) {
+			case EXPRESSION_FAST_ACCESS:
+			{
+				Function* accessor = origin->data.fastAccess.accessor;
+				int stdBehavior = accessor->stdBehavior;
+				if (stdBehavior < 0) {
+					raiseError("[TODO] real stdbehavior");
+					return;
+				}
+
+				switch (stdBehavior) {
+				// pointer
+				case 0:
+				{
+					Expression* base = origin->data.fastAccess.origin;
+					int originType = base->type;
+					uint ptrVariable = Trace_ins_create(trace, NULL, 8, 0, true);
+					Trace_set(trace, base, ptrVariable, -1, 8, originType); // base should be a pointer
+
+					// Get pointer
+					switch (originType) {
+					case EXPRESSION_PROPERTY:
+					{
+						Variable** varr = base->data.property.variableArr;
+						int length = base->data.property.length;
+						int offset = Prototype_getVariableOffset(varr, length);
+						
+						if (offset >= 0) {
+							Trace_addUsage(trace, ptrVariable, -1, true);
+							Trace_addUsage(trace, ptrVariable, -1, false);
+							trline_t* arr = Trace_push(trace, 3);
+							arr[0] = TRACECODE_ARITHMETIC_IMM |
+								(0 << 10) | // addition
+								(3 << 13) | // size = 8 bytes
+								(1 << 15); // value is the right operand
+							arr[1] = offset;
+							arr[2] = 0;
+						}
+
+						break;
+					}
+
+					default:
+						raiseError("[Intern] Unfound type in handleOrigin");
+						return;
+
+					}
+
+					// Move
+					Trace_ins_loadDst(trace, ptrVariable, tmpId, -1, -1, eps.size, eps.primitiveSizeCode);
+
+					Trace_removeVariable(trace, ptrVariable);
+					break;
+				}
+				}
+
+				break;
+			}
+
+
+			default:
+				raiseError("[Syntax] Cannot use this origin for a destination");
+				return;
+			}
+
+			Trace_removeVariable(trace, tmpId);
+
+		} else {
+			placeExpression(trace, valueExpr, varr, length);
+		}
+
 
 
 		// Free expression
-		Expression_free(valueExpr->type, valueExpr);
+		Expression_free(valueExprType, valueExpr);
 		free(valueExpr);
 
 
@@ -2418,7 +2498,7 @@ void Syntax_functionScope_freeLabel(
 	{
 		Trace_set(
 			trace,
-			expression,
+			destExpression,
 			TRACE_VARIABLE_NONE,
 			0,
 			0,
@@ -2447,8 +2527,8 @@ void Syntax_functionScope_freeLabel(
 
 
 	freeData:
-	Expression_free(expressionType, expression);
-	free(expression);
+	Expression_free(destExpressionType, destExpression);
+	free(destExpression);
 }
 
 
