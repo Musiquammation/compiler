@@ -4431,7 +4431,39 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 	// Finish signature
 	fprintf(output, ") {\n");
 
+	// Create final variable
+	bool finalDefined;
+	if (currentFunction->returnType) {
+		finalDefined = true;
+		int size = Prototype_getSignedSize(currentFunction->returnType);
+		switch (size) {
+			case 1:
+			case -1:
+				fprintf(output, "\tuint8_t  final;\n");
+				break;
 
+			case 2:
+			case -2:
+				fprintf(output, "\tuint16_t final;\n");
+				break;
+
+			case 4:
+			case -4:
+				fprintf(output, "\tuint32_t final;\n");
+				break;
+
+			case 8:
+			case -8:
+				fprintf(output, "\tuint64_t final;\n");
+				break;
+
+			default:
+				fprintf(output, "\tuint8_t  final[%d];\n", size);
+				break;
+			}
+	} else {
+		finalDefined = false;
+	}
 
 	#define move() {line = pack->line[instruction]; instruction++;}
 
@@ -4533,6 +4565,7 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 				break;
 			
 			case 2: // return
+				fprintf(output, finalDefined ? "\treturn final;\n" : "return;");
 				break;
 
 			case 3: // forbid moves
@@ -4592,9 +4625,6 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 			if (isArg)
 				break;
 
-			if (!registrable)
-				goto appendNotRegistrable;
-
 			switch (size) {
 			case 1:
 				fprintf(output, "\tuint8_t  v%03d_%02d;\n", variable, variables[variable].index);
@@ -4613,7 +4643,6 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 				break;
 
 			default:
-				appendNotRegistrable:
 				fprintf(output, "\tuint8_t  v%03d_%02d[%d];\n", variable, variables[variable].index, size);
 				
 			}
@@ -4894,6 +4923,14 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 		case TRACECODE_PLACE:
 		{
+			// Edit variable (can be ignored by transpiler)
+			if (line & (1<<12)) {
+				break;
+			}
+
+
+			Usage u = usedVariables[0];
+			fprintf(output, "\tfinal = v%03d_%02d;\n", u.variable, variables[u.variable].index);
 			break;
 		}
 

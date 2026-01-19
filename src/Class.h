@@ -25,7 +25,7 @@ enum {
 
 struct Class {
 	Array variables; // type: Variable*
-	Array functions; // type: Function*
+	Array methods; // type: Function*
 
 	Class* meta;
 	label_t name;

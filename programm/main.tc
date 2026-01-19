@@ -1,11 +1,10 @@
 function call(a: int, b: int): int {
-	a = a + b;
+	return a+b;
 }
 
 function main {
-	let ptr: Pointer<T: Vector>;
-	let dst: int;
+	let sum = call(10, 20);
 
-	dst = call(12, 3232);
+	return 42;
 }
 

@@ -1681,7 +1681,6 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 
 
 Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
-	printf("READPATH\n");
 	Expression* last = NULL;
 
 	ScopeBuffer subScope;

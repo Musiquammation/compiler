@@ -11,7 +11,7 @@
 
 void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
-	Array_create(&cl->functions, sizeof(Function*));
+	Array_create(&cl->methods, sizeof(Function*));
 	cl->definitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
@@ -35,13 +35,13 @@ void Class_delete(Class* cl) {
 	Array_free(cl->variables);
 
 	// Delete functions
-	Array_loopPtr(Function, cl->functions, ptr) {
+	Array_loopPtr(Function, cl->methods, ptr) {
 		Function* i = *ptr;
 		Function_delete(i);
 		free(i);
 	}
 
-	Array_free(cl->functions);
+	Array_free(cl->methods);
 
 	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Class_delete(cl->meta);
@@ -275,7 +275,7 @@ Function* ScopeClass_searchFunction(ScopeClass* scope, label_t name, ScopeSearch
 	if (!scope->cl)
 		return NULL;
 
-	Array_loopPtr(Function, scope->cl->functions, ptr) {
+	Array_loopPtr(Function, scope->cl->methods, ptr) {
 		Function* f = *ptr;
 		if (f->name == name)
 			return f;
@@ -296,6 +296,6 @@ void ScopeClass_addClass(ScopeClass* scope, Class* cl) {
 }
 
 void ScopeClass_addFunction(ScopeClass* scope, Function* fn) {
-	*Array_push(Function*, &scope->cl->functions) = fn;
+	*Array_push(Function*, &scope->cl->methods) = fn;
 }
 
