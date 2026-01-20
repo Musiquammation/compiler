@@ -13,15 +13,29 @@
 
 extern long functionNextId;
 
+
+enum {
+	FONCTIONFLAGS_SEPARATED
+};
+
+
 struct Function {
 	label_t name;
 	definitionState_t definitionState;
+	definitionState_t metaDefinitionState;
 	
-	Array arguments; // type: Variable*
+	Function* meta;
+	
+	Variable** arguments;
+	Variable** settings;
+	int args_len;
+	int settings_len;
 	Prototype* returnType;
+	
 	
 	long traceId;
 	int stdBehavior;
+	int flags;
 };
 
 /// TODO: init defnodes
@@ -48,6 +62,9 @@ typedef struct {
 
 void Function_create(Function* fn);
 void Function_delete(Function* fn);
+label_t Function_generateMetaName(label_t name, char addChar);
+
+
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 void FunctionAssembly_delete(FunctionAssembly* fa);

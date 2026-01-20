@@ -23,6 +23,11 @@ Token SYNTAXLIST_FILE[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_ORDER},
 };
 
+Token SYNTAXLIST_SINGLETON_FUNCTION[] = {
+	{.type = TOKEN_CTYPE_KEYWORD, .string = k_function},
+};
+
+
 Token SYNTAXLIST_ORDER[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_module},
 };
@@ -54,8 +59,8 @@ Token SYNTAXLIST_MEMBER[] = {
 
 
 Token SYNTAXLIST_FUNCTION_DECLARATION[] = {
-	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LANGLE},
 	{.type = TOKEN_CTYPE_LABEL},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LANGLE},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_COLON},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LBRACE},
@@ -89,6 +94,7 @@ Token SYNTAXLIST_MODULE_MODULE[] = {
 Token SYNTAXLIST_CLASS_ABSTRACT_MEMBER[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_COLON},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LPAREN},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_LANGLE},
 };
 
 Token SYNTAXLIST_START_TYPE[] = {
@@ -204,6 +210,11 @@ Token SYNTAXLIST_SETTING[] = {
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_END},
 };
 
+Token SYNTAXLIST_FN_SETTING[] = {
+	{.type = TOKEN_CTYPE_LABEL},
+	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RANGLE}
+};
+
 
 
 #define op(x) {.type = TOKEN_CTYPE_OPERATOR, .operator = x}
@@ -281,6 +292,7 @@ static void initSyntaxList(Token tokens[], int length) {
 #define init(list) initSyntaxList(list, sizeof(list)/sizeof(Token))
 void syntaxList_init(void) {
 	init(SYNTAXLIST_FILE);
+	init(SYNTAXLIST_SINGLETON_FUNCTION);
 	init(SYNTAXLIST_ORDER);
 	init(SYNTAXLIST_REQUIRE_BRACE);
 	init(SYNTAXLIST_DECLARATION_LIST);
@@ -315,6 +327,7 @@ void syntaxList_init(void) {
 	init(SYNTAXLIST_EXPRESSION_SEPARATOR);
 	init(SYNTAXLIST_CONTINUE_FNCALL);
 	init(SYNTAXLIST_SETTING);
+	init(SYNTAXLIST_FN_SETTING);
 }
 
 

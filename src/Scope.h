@@ -18,7 +18,11 @@ struct Scope {
 };
 
 
-
+enum {
+	SCOPEFILEDEFFLAGS_TH = 1,
+	SCOPEFILEDEFFLAGS_TL = 2,
+	SCOPEFILEDEFFLAGS_TC = 4,
+};
 
 
 
@@ -26,9 +30,10 @@ struct ScopeFile {
 	Scope scope;
 	label_t name;
 	char* filepath;
-	char definitionMode; // 0=all, -1=tc only , +1=th only
-	definitionState_t state_tc;
+	char definitionMode;
 	definitionState_t state_th;
+	definitionState_t state_tl;
+	definitionState_t state_tc;
 
 	char generationState;
 	char* id;

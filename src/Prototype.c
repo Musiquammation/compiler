@@ -429,7 +429,16 @@ ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype* proto, Scope* scope, b
 
 	case PROTO_MODE_DIRECT:
 	{
-		return Prototype_reachSizes(proto->direct.meta, scope, throwError);
+		switch (Prototype_directHasMeta(proto)) {
+		case 1:
+			return Prototype_reachSizes(proto->direct.meta, scope, throwError);
+
+		case 0:
+			return (ExtendedPrototypeSize){CLASSSIZE_NOEXIST, CLASSSIZE_NOEXIST, PSC_UNKNOWN};
+
+		case -1:
+			raiseError("[TODO]");
+		}
 	}
 
 	case PROTO_MODE_VARIADIC:
@@ -573,6 +582,11 @@ char Prototype_getPrimitiveSizeCode(Prototype* proto) {
 
 	case PROTO_MODE_DIRECT:
 	{
+		char psc = proto->direct.primitiveSizeCode;
+		if (psc == PSC_UNKNOWN) {
+			ExtendedPrototypeSize eps = Prototype_defineSize_direct(proto, proto->direct.cl);
+			return eps.primitiveSizeCode;
+		}
 		return proto->direct.primitiveSizeCode;
 	}
 

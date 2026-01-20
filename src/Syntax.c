@@ -195,6 +195,183 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 
 
+void Syntax_tlFile(ScopeFile* scope) {
+	char* const filepath = generateExtension(scope->filepath, ".tl");
+	Parser parser;
+	Parser_open(&parser, filepath);
+	free(filepath);
+	
+	scope->state_tl = DEFINITIONSTATE_READING;
+
+	Class* definedClass = Module_searchClass(Scope_reachModule(&scope->scope), scope->name, NULL);
+
+	
+	while (true) {
+		Parser_readAnnotated(&parser, &_labelPool);
+		Class* subDefinedClass = definedClass;
+
+		
+		if (TokenCompareWithRealParser(SYNTAXLIST_SINGLETON_FUNCTION, SYNTAXFLAG_EOF))
+			goto close;
+	
+		// Here, we have a function
+		Parser_read(&parser, &_labelPool); // read name
+		if (TokenCompareWithRealParser(SYNTAXLIST_FREE_LABEL, 0))
+			return;
+
+		label_t name = parser.token.label;
+
+		// Search function in scope
+		
+		Function* fn = NULL;
+		Function* originFn = NULL;
+
+		Array_loop(Annotation, parser.annotations, annotation) {
+			int annotType = annotation->type;
+			
+			switch (annotType) {
+				case ANNOTATION_CONTROL:
+			{
+				subDefinedClass = definedClass->meta;
+				
+				if (!subDefinedClass) {
+					raiseError("[Architecture] Cannot control a class without meta");
+				}
+				break;
+			}
+			
+			case ANNOTATION_SEPARATION:
+			{
+				ScopeClass sc = {
+					.scope = {.type=SCOPE_CLASS, .parent=NULL},
+					.allowThis = false,
+					.cl = definedClass
+				};
+
+				originFn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
+				if (originFn == NULL) {
+					raiseError("[Unknown] Cannot find function");
+					return;
+				}
+
+				if (originFn->metaDefinitionState != DEFINITIONSTATE_UNDEFINED) {
+					raiseError("[TODO] originFn->metaDefinitionState != DEFINITIONSTATE_UNDEFINED");
+				}
+
+				// Brace to start content
+				Parser_read(&parser, &_labelPool);
+				if (TokenCompareWithRealParser(SYNTAXLIST_SINGLETON_LBRACE, 0))
+					return;
+				
+				// Produce meta function
+				originFn->metaDefinitionState = DEFINITIONSTATE_READING;
+				
+				int originArgLen = originFn->args_len;
+				int originSettingLength = originFn->settings_len;
+				Variable** arguments = malloc(sizeof(Variable*) * (originArgLen + originSettingLength));
+				int argLen = 0;
+
+				// Fill arguments
+				typedef Variable* vptr_t;
+				Array_for(vptr_t, originFn->arguments, originFn->args_len, vptr) {
+					Variable* src = *vptr;
+					Prototype* proto = Prototype_reachMeta(src->proto);
+					if (!proto)
+						continue;
+
+					Prototype_addUsage(*proto);
+
+					Variable* dst = malloc(sizeof(Variable));
+					Variable_create(dst);
+					dst->name = src->name;
+					dst->proto = proto;
+					dst->id = argLen;
+					arguments[argLen] = dst;
+					argLen++;
+				}
+
+				Array_for(vptr_t, originFn->settings, originFn->settings_len, vptr) {
+					Variable* src = *vptr;
+					Prototype* proto = src->proto;
+					Prototype_addUsage(*proto);
+
+					Variable* dst = malloc(sizeof(Variable));
+					Variable_create(dst);
+					dst->name = src->name;
+					dst->proto = proto;
+					dst->id = argLen;
+					arguments[argLen] = dst;
+					argLen++;
+				}
+
+
+				fn = malloc(sizeof(Function));
+				Function_create(fn);
+				fn->name = Function_generateMetaName(originFn->name, '^');
+				fn->definitionState = DEFINITIONSTATE_READING;
+				fn->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
+
+				fn->arguments = realloc(arguments, sizeof(Variable*) * argLen);
+				fn->args_len = argLen;
+				fn->settings = NULL;
+				fn->settings_len = 0;
+
+
+				// Fill return type
+				Prototype* returnType = originFn->returnType;
+				if (returnType) {
+					returnType = Prototype_reachMeta(returnType);
+					fn->returnType = returnType;
+					if (returnType) {
+						Prototype_addUsage(*returnType);
+					}
+				} else {
+					fn->returnType = NULL;
+				}
+
+
+
+				break;
+			}
+
+
+			default:
+			{
+				raiseError("[Syntax] Illegal annotation");
+				return;
+			}
+			}
+		}
+		
+		parser.annotations.length = 0;
+		if (fn == NULL) {
+			raiseError("[Unknown] Cannot find function");
+			return;
+		}
+
+		Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
+		const Syntax_FunctionDeclarationArg defaultData = {
+			.defaultName = scope->name,
+			.definedClass = subDefinedClass
+		};
+
+
+		Syntax_functionDefinition(&scope->scope, &parser, fn, subDefinedClass);
+
+		if (originFn) {
+			originFn->metaDefinitionState = DEFINITIONSTATE_DONE;
+			originFn->meta = fn;
+		}
+	}
+
+
+	close:
+	scope->state_tl = DEFINITIONSTATE_DONE;
+	Parser_close(&parser);
+
+}
+
+
 
 
 Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoot) {
@@ -742,9 +919,10 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	};
 
 	metaControlFunctions.reserved = 0; // to prevent Array_free
-
+	
 	// Read content
 	while (true) {
+		bool noMeta = false;
 		annotationFlags = 0; // reset
 
 		Parser_readAnnotated(parser, &_labelPool);
@@ -802,7 +980,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				annotationFlags |= ANNOTFLAG_STD_FAST_ACCESS;
 				break;
 
-
+			case ANNOTATION_NO_META:
+				noMeta = true;
+				break;
 
 			default:
 			{
@@ -835,7 +1015,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			if (annotationFlags & ANNOTFLAG_FAST_ACCESS) {
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL
+					.definedClass = NULL,
+					.stdBehavior = -1,
 				};
 
 
@@ -856,7 +1037,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
 					.definedClass = NULL,
-					.stdBehavior = stdBehavior
+					.stdBehavior = stdBehavior,
 				};
 
 
@@ -913,6 +1094,13 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		{
 			const label_t name = parser->token.label;
 			Parser_read(parser, &_labelPool);
+
+			Syntax_FunctionDeclarationArg fnDeclData = {
+				.defaultName = name,
+				.stdBehavior = -1,
+				.definedClass = NULL,
+			};
+
 			switch (TokenCompare(SYNTAXLIST_CLASS_ABSTRACT_MEMBER, 0)) {
 			// variable
 			case 0:
@@ -949,17 +1137,15 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			
 			// function
 			case 1:
+			case 2:
 			{
+				runMethod:
 				if (annotationFlags & (ANNOTATION_FAST_ACCESS | ANNOTATION_STD_FAST_ACCESS)) {
 					raiseError("[Syntax] With fastAccess annotation, "
 						"you must use function keyword");
 				}
 
 				/// TODO: pass annotation flag
-				Syntax_FunctionDeclarationArg declData = {
-					.defaultName = name,
-					.definedClass = NULL
-				};
 
 				Parser_saveToken(parser);
 
@@ -967,8 +1153,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
-					SYNTAXDATAFLAG_FNDCL_FORBID_NAME,
-					&declData
+					SYNTAXDATAFLAG_FNDCL_FORBID_NAME | (noMeta ? SYNTAXDATAFLAG_FNDCL_NO_META : 0),
+					&fnDeclData
 				);
 
 				break;
@@ -1317,12 +1503,17 @@ Function* Syntax_functionDeclaration(
 	int flags,
 	const Syntax_FunctionDeclarationArg* defaultData
 ) {
+	int fnflags = 0;
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
+	char noMeta = flags & SYNTAXDATAFLAG_FNDCL_NO_META;
 	bool definitionToRead;
 	bool returnTypeAlreadyRead = false;
 	Array arguments = {.length = 0xffff}; // no args read ; type: Variable*
+	Variable** settings;
+	int settings_len = -1;
 	Prototype* returnType = NULL;
+
 	
 	// Handle annotations
 	/// TODO: complete annotations 
@@ -1352,7 +1543,14 @@ Function* Syntax_functionDeclaration(
 			arguments.length = 1;
 
 			break;
-		}		
+		}
+
+		case ANNOTATION_NO_META:
+		{
+			noMeta = 1;
+			break;
+		}
+
 		default:
 		{
 			raiseError("[Syntax] Illegal annotation\n");
@@ -1383,7 +1581,6 @@ Function* Syntax_functionDeclaration(
 
 	// Read content
 	while (true) {
-		Token token;
 		// Collect next syntaxIndex
 		{
 			Parser_read(parser, &_labelPool);
@@ -1398,19 +1595,61 @@ Function* Syntax_functionDeclaration(
 
 
 		switch (syntaxIndex) {
-		// Settings
-		case 0:
-			raiseError("[TODO] read settings");
-			break;
-		
 		// Name
-		case 1:
+		case 0:
 			if (flags & SYNTAXDATAFLAG_FNDCL_FORBID_NAME) {
 				raiseError("[Syntax] Name already given");
 				break;
 			}
 			name = parser->token.label;
 			break;
+
+		// Settings
+		case 1:
+		{
+			if (settings_len != -1) {
+				raiseError("[Architecture] setting list already defined");
+				break;
+			}
+
+			Array settingsArr;
+			Array_create(&settingsArr, sizeof(Variable*));
+
+			// Read settings
+			while (true) {
+				// Name (or right angle meaning end)
+				Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_FN_SETTING, 0)) {
+					break;
+				}
+
+				// Colon (for syntax)
+				Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_SINGLETON_COLON, 0))
+					break;
+
+				Prototype* proto = Syntax_proto(parser, scope);
+
+				label_t varName = parser->token.label;
+				Variable* variable = malloc(sizeof(Variable));
+				Variable_create(variable);
+				variable->name = varName;
+				variable->proto = proto;
+
+				/// TODO: use real ids ?
+				variable->id = -1;
+
+				*Array_push(Variable*, &settingsArr) = variable;
+			}
+
+			
+			settings_len = settingsArr.length;
+			settings = malloc(sizeof(Variable*) * settingsArr.length);
+			memcpy(settings, settingsArr.data, sizeof(Variable*) * settings_len);
+			Array_free(settingsArr);
+			break;
+		}
+		
 		
 		// Arguments
 		case 2:
@@ -1524,6 +1763,11 @@ Function* Syntax_functionDeclaration(
 			return NULL;
 		}
 
+		if (settings_len != -1) {
+			raiseError("[Architecture] A definition of settings already exists for this function");
+			return NULL;
+		}
+
 		if (returnType) {
 			raiseError("[Architecture] A definition of return type already exists for this function");
 			return NULL;
@@ -1538,19 +1782,28 @@ Function* Syntax_functionDeclaration(
 			return NULL;
 		}
 
-		
-
-		/// TODO: check for settings
-
-
 
 		// Generate function
 		fn = malloc(sizeof(Function));
 		Function_create(fn);
 		fn->name = name;
 		fn->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_UNDEFINED;
-		fn->arguments = arguments;
+		fn->metaDefinitionState = noMeta ? DEFINITIONSTATE_NOEXIST : DEFINITIONSTATE_UNDEFINED;
+
+		Variable** args = malloc(sizeof(Variable*) * arguments.length);
+		memcpy(args, arguments.data, sizeof(Variable*) * arguments.length);
+		fn->arguments = args;
+		fn->args_len = arguments.length;
 		fn->returnType = returnType;
+		fn->flags = fnflags;
+
+		if (settings_len <= 0) {
+			fn->settings = NULL;
+			fn->settings_len = 0;
+		} else {
+			fn->settings = settings;
+			fn->settings_len = settings_len;
+		}
 
 		Scope_addFunction(scope, scope->type, fn);
 	}
@@ -1593,6 +1846,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 				goto finish;
 
 			Variable* variable = malloc(sizeof(Variable));
+			Variable_create(variable);
 			int position = arguments.length;
 			*Array_push(Variable*, &arguments) = variable;
 
@@ -2844,7 +3098,7 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	}
 
 	// Add arguments
-	Trace_pushArgs(&trace, fn->arguments.data, fn->arguments.length);
+	Trace_pushArgs(&trace, fn->arguments, fn->args_len);
 	
 
 	// Function procedure
@@ -2945,7 +3199,15 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		return;
 	}
 
+	if (parser->token.label == _commonLabels._noMeta) {
+		annotation->type = ANNOTATION_NO_META;
+		return;
+	}
 	
+	if (parser->token.label == _commonLabels._separation) {
+		annotation->type = ANNOTATION_SEPARATION;
+		return;
+	}
 
 	raiseError("[Syntax] Unkown annotation");
 }

@@ -224,7 +224,7 @@ void Class_acheiveDefinition(Class* cl) {
 		// raiseError("[Architecture] Cannot acheive a class with unknown meta");
 		cl->metaDefinitionState = DEFINITIONSTATE_NOEXIST;
 		break;
-
+		
 	case DEFINITIONSTATE_READING:
 		Class_acheiveDefinition(cl->meta);
 		cl->metaDefinitionState = DEFINITIONSTATE_DONE;
@@ -234,9 +234,30 @@ void Class_acheiveDefinition(Class* cl) {
 	case DEFINITIONSTATE_DONE:
 		raiseError("[Intern] Cannot acheive a class with NOEXIST/DONE state");
 		break;
+
+	default:
+		break;
 	}
 	
 	cl->definitionState = DEFINITIONSTATE_DONE;
+
+	// Define method arguments prototypes
+	/*
+	typedef Function* fn_ptr_t;
+	typedef Variable* var_ptr_t;
+	Array_loop(fn_ptr_t, cl->methods, mptr) {
+		Function* fn = *mptr;
+		Array_loop(var_ptr_t, fn->arguments, argptr) {
+			Variable* arg = *argptr;
+			Prototype* proto = arg->proto;
+			if (Prototype_mode(*proto) == PROTO_MODE_DIRECT) {
+				if (proto->direct.cl != cl)
+					continue;
+				
+				continue;
+			}
+		}
+	}*/
 }
 
 

@@ -17,17 +17,49 @@ void Function_create(Function* fn) {
 }
 
 void Function_delete(Function* fn) {
-	Array_loopPtr(Variable, fn->arguments, vptr) {
-		Variable* v = *vptr;
-		Variable_destroy(v);
-		free(v);
+	typedef Variable* vptr_t;
+	if (fn->metaDefinitionState == DEFINITIONSTATE_DONE) {
+		Function_delete(fn->meta);
+		free(fn->meta);
 	}
 
-	Array_free(fn->arguments);
+	if (fn->arguments) {
+		Array_for(vptr_t, fn->arguments, fn->args_len, vptr) {
+			Variable* v = *vptr;
+			Variable_destroy(v);
+			free(v);
+		}
+		free(fn->arguments);
+	}
+
 	if (fn->returnType) {
 		Prototype_free(fn->returnType, true);
 	}
+
+	if (fn->settings) {
+		Array_for(vptr_t, fn->settings, fn->settings_len, vptr) {
+			Variable* v = *vptr;
+			Variable_destroy(v);
+			free(v);
+		}
+		free(fn->settings);
+	}
 }
+
+
+label_t Function_generateMetaName(label_t name, char addChar) {
+	size_t length = strlen(name);
+	char* dest = malloc(length+2);
+	memcpy(dest, name, length);
+	dest[length] = addChar;
+	dest[length+1] = 0;
+	label_t result = LabelPool_push(&_labelPool, dest);
+	free(dest);
+
+	return result;
+}
+
+
 
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf) {
@@ -45,10 +77,10 @@ void FunctionAssembly_delete(FunctionAssembly* fa) {
 
 void ScopeFunction_create(ScopeFunction* scope) {
 	// Add defintions
-	int argLength = scope->fn->arguments.length;
+	int argLength = scope->fn->args_len;
 	Array_create(&scope->types, sizeof(TypeDefinition));
 
-	Variable** arguments = scope->fn->arguments.data;
+	Variable** arguments = scope->fn->arguments;
 	for (int i = 0; i < argLength; i++) {
 		Variable* v = arguments[i];
 		TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
@@ -61,7 +93,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
-	int arglen = scope->fn->arguments.length;
+	int arglen = scope->fn->args_len;
 	int typelen = scope->types.length;
 	TypeDefinition* types = scope->types.data;
 	
@@ -147,4 +179,7 @@ Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
 	
 	return NULL;
 }
+
+
+
 

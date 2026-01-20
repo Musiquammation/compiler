@@ -59,6 +59,8 @@ struct CommonLabels {
 	label_t _token;
 	label_t _fastAccess;
 	label_t _stdFastAccess;
+	label_t _noMeta;
+	label_t _separation;
 	
 };
 

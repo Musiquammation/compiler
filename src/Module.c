@@ -82,11 +82,13 @@ void Module_generateFilesScopes(Module* module) {
 		char* ext = strrchr(filename, '.');
 		if (!ext) continue;
 
-		char definitionMode;
+		char definitionMode = 0;
 		if (strcmp(ext, ".th") == 0) {
-			definitionMode = 1;
+			definitionMode |= SCOPEFILEDEFFLAGS_TH;
 		} else if (strcmp(ext, ".tc") == 0) {
-			definitionMode = -1;
+			definitionMode |= SCOPEFILEDEFFLAGS_TC;
+		} else if (strcmp(ext, ".tl") == 0) {
+			definitionMode |= SCOPEFILEDEFFLAGS_TL;
 		} else {
 			continue;
 		}
@@ -99,24 +101,22 @@ void Module_generateFilesScopes(Module* module) {
 
 		if (!isValidVariableName(nameBuf)) continue;
 
-		// Récupérer le label
 		label_t label = LabelPool_push(&_labelPool, nameBuf);
 		if (label == _commonLabels._module)
 			continue; // skip module
 
-		// Vérifier si on a déjà un ScopeFile pour ce label
+		// Check already existing scopefile
 		bool found = false;
 		Array_loop(ScopeFile, filesArray, sf) {
 			if (sf->name == label) {
-				// Fusionner : .th + .tc => 0
-				sf->definitionMode = 0;
+				sf->definitionMode |= definitionMode;
 				found = true;
 				break;
 			}
 		}
 		if (found) continue;
 
-		// Créer un nouveau ScopeFile
+		// Create new scope file
 		ScopeFile* sf = Array_push(ScopeFile, &filesArray);
 		ScopeFile_create(sf);
 		sf->name = label;
@@ -127,13 +127,14 @@ void Module_generateFilesScopes(Module* module) {
 		snprintf(sf->filepath, pathLen, "%s/%s", path, nameBuf);
 
 		sf->definitionMode = definitionMode;
-		sf->state_tc = DEFINITIONSTATE_UNDEFINED;
 		sf->state_th = DEFINITIONSTATE_UNDEFINED;
+		sf->state_tl = DEFINITIONSTATE_UNDEFINED;
+		sf->state_tc = DEFINITIONSTATE_UNDEFINED;
 	}
 
 	closedir(d);
 
-	// Copier dans module
+	// Copy in module
 	module->fileLength = filesArray.length;
 	module->files = malloc(sizeof(ScopeFile) * filesArray.length);
 	memcpy(module->files, filesArray.data, sizeof(ScopeFile) * filesArray.length);
@@ -179,9 +180,46 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing class definition file\n");
 		}
 
-		if (file->definitionMode >= 0 && file->state_th == DEFINITIONSTATE_UNDEFINED)
+		if ((file->definitionMode & SCOPEFILEDEFFLAGS_TH) && 
+			file->state_th == DEFINITIONSTATE_UNDEFINED) {
 			Syntax_thFile(file);
+		}
 	}
+
+	// Read tl classes
+	Array_loopPtr(Class, module->classes, clPtr) {
+		Class* cl = *clPtr;
+		ScopeFile* file = Module_findModuleFile(module, cl->name);
+
+		/// TODO: should we raise an error?
+		if (!file) {
+			raiseError("[Architecture] Missing module file\n");
+		}
+
+
+		if ((file->definitionMode & SCOPEFILEDEFFLAGS_TL) && 
+			file->state_tl == DEFINITIONSTATE_UNDEFINED) {
+			Syntax_tlFile(file);
+		}
+	}
+
+	// Read tl functions
+	Array_loopPtr(Function, module->functions, fnPtr) {
+		Function* fn = *fnPtr;
+		ScopeFile* file = Module_findModuleFile(module, fn->name);
+
+		/// TODO: should we raise an error?
+		if (!file) {
+			raiseError("[Architecture] Missing module file\n");
+		}
+
+		if ((file->definitionMode & SCOPEFILEDEFFLAGS_TL) && 
+			file->state_tl == DEFINITIONSTATE_UNDEFINED) {
+			Syntax_tlFile(file);
+		}
+	}
+
+
 
 	// Read tc classes
 	Array_loopPtr(Class, module->classes, clPtr) {
@@ -194,11 +232,13 @@ void Module_generateDefinitions(Module* module) {
 		}
 
 
-		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_UNDEFINED)
+		if ((file->definitionMode & SCOPEFILEDEFFLAGS_TC) && 
+			file->state_tc == DEFINITIONSTATE_UNDEFINED) {
 			Syntax_tcFile(file);
+		}
 	}
 
-	// Read th functions
+	// Read tc functions
 	Array_loopPtr(Function, module->functions, fnPtr) {
 		Function* fn = *fnPtr;
 		ScopeFile* file = Module_findModuleFile(module, fn->name);
@@ -208,8 +248,10 @@ void Module_generateDefinitions(Module* module) {
 			raiseError("[Architecture] Missing module file\n");
 		}
 
-		if (file->definitionMode <= 0 && file->state_tc == DEFINITIONSTATE_UNDEFINED)
+		if ((file->definitionMode & SCOPEFILEDEFFLAGS_TC) && 
+			file->state_tc == DEFINITIONSTATE_UNDEFINED) {
 			Syntax_tcFile(file);
+		}
 	}
 }
 

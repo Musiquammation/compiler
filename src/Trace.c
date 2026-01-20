@@ -1257,7 +1257,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	{
 		int argsLength = expr->data.fncall.argsLength;
 		Function* fn = expr->data.fncall.fn;
-		Variable** arguments = fn->arguments.data;
+		Variable** arguments = fn->arguments;
 		Expression** args = expr->data.fncall.args;
 		uint* variables = malloc(argsLength * sizeof(int));
 
@@ -4415,8 +4415,8 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 
 	// Write args
 	typedef Variable* vptr_t;
-	int fnArgLen = currentFunction->arguments.length;
-	Variable** fnArgs = currentFunction->arguments.data;
+	int fnArgLen = currentFunction->args_len;
+	Variable** fnArgs = currentFunction->arguments;
 	for (int i = 0; i < fnArgLen; i++) {
 		Variable* v = fnArgs[i];
 		fprintf(output, "%s v%03d_%02d",

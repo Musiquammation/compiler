@@ -17,8 +17,9 @@ enum {
 	SYNTAXDATAFLAG_FNDCL_FORBID_NAME = 8,
 	SYNTAXDATAFLAG_FNDCL_FORBID_RETURN = 16,
 	SYNTAXDATAFLAG_FNDCL_FAST_ACCESS = 32,
-	SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS = 64,
-	SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN = 128,
+	SYNTAXDATAFLAG_FNDCL_NO_META = 64,
+	SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS = 128,
+	SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN = 256,
 
 
 	// Class declaration
@@ -45,6 +46,7 @@ typedef struct {
 
 void Syntax_thFile(ScopeFile* scope);
 void Syntax_tcFile(ScopeFile* scope);
+void Syntax_tlFile(ScopeFile* scope);
 void Syntax_module(Module* module, const char* filepath);
 
 void Syntax_order(Scope* scope, Parser* parser);

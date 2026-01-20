@@ -1,0 +1,4 @@
+@separation
+function define {
+
+}
