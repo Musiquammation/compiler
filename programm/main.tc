@@ -1,5 +1,3 @@
-
-
 function main {
 	return 4918;
 }

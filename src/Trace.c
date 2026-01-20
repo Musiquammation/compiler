@@ -276,7 +276,7 @@ uint Trace_pushVariable(Trace* trace) {
 	return pos;
 }
 
-void Trace_removeVariable(Trace* trace, uint index) {
+void Trace_popVariable(Trace* trace, uint index) {
 	*Stack_push(uint, &trace->varPlacements) = index;
 	VariableTrace* vt = Array_get(VariableTrace, trace->variables, index);
 
@@ -304,14 +304,26 @@ void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
 	for (int i = 0; i < arglen; i++) {
 		Variable* v = args[i];
 		
-		// '2' for argument
+		// '1<<1' for argument
 		Trace_ins_create(
 			trace, v,
-			Prototype_getSizes(v->proto).size, 2,
+			Prototype_getSizes(v->proto).size, 1<<1,
 			Prototype_getPrimitiveSizeCode(v->proto)
 		);
 	}
+}
 
+void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
+	for (int i = 0; i < arglen; i++) {
+		Variable* v = args[i];
+		
+		// '1<<1' for argument
+		Trace_ins_create(
+			trace, v,
+			Prototype_getSizes(v->proto).size, 1<<1,
+			Prototype_getPrimitiveSizeCode(v->proto)
+		);
+	}
 }
 
 
@@ -693,6 +705,7 @@ static Write* reachWrite(int idx, int deep, int usageCapacity, VariableTrace* vt
 
 	int nextCapacity = usageCapacity*2 + 4;
 	Write* nextWrites = malloc(nextCapacity * sizeof(Write));
+	printf("%p %d\n", nextWrites, usageCapacity);
 	if (usageCapacity > 0) {
 		Write* oldWrites = vt->writes;
 		memcpy(nextWrites, oldWrites, usageCapacity * sizeof(Write));
@@ -1246,7 +1259,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			Trace_packSize(size) << 18;
 
 
-		Trace_removeVariable(trace, tempVar);
+		Trace_popVariable(trace, tempVar);
 
 
 		return;
@@ -1292,7 +1305,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				return;
 			}
 
-			Trace_removeVariable(trace, bufferVar);
+			Trace_popVariable(trace, bufferVar);
 		}
 
 
@@ -1330,7 +1343,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		// Remove variables
 		for (int i = argsLength-1; i >= 0; i--) {
-			Trace_removeVariable(trace, variables[i]);
+			Trace_popVariable(trace, variables[i]);
 		}
 
 		// Output
@@ -1361,7 +1374,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					Trace_packSize(size) << 18;
 	
 	
-				Trace_removeVariable(trace, temp);
+				Trace_popVariable(trace, temp);
 			}
 		}
 
@@ -1494,11 +1507,11 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					(Trace_packSize(size) << 18);
 
 
-				Trace_removeVariable(trace, tempDestVar);
+				Trace_popVariable(trace, tempDestVar);
 			}
 
-			Trace_removeVariable(trace, rightVar);
-			Trace_removeVariable(trace, leftVar);
+			Trace_popVariable(trace, rightVar);
+			Trace_popVariable(trace, leftVar);
 
 		} else {
 			Expression* operand;
@@ -1602,7 +1615,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			}
 
 			
-			Trace_removeVariable(trace, variable);
+			Trace_popVariable(trace, variable);
 
 			// Perform final cast
 			if (!notCast) {
@@ -1617,7 +1630,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					Trace_packSize(operandSize) << 16 |
 					Trace_packSize(size) << 18;
 				
-				Trace_removeVariable(trace, resultVariable);
+				Trace_popVariable(trace, resultVariable);
 			}
 
 
@@ -4357,7 +4370,7 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 
 
-void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
+void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThis) {
 	typedef struct {
 		int index;
 		int size;
@@ -4413,14 +4426,21 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm) {
 		);
 	}
 
+	int fnArgLen = currentFunction->args_len;
+	if (useThis) {
+		fprintf(output, "/* this */ uint64_t v%03d_%02d", 0, 1);
+		if (fnArgLen) {
+			fprintf(output, ", ");
+		}
+	}
+
 	// Write args
 	typedef Variable* vptr_t;
-	int fnArgLen = currentFunction->args_len;
 	Variable** fnArgs = currentFunction->arguments;
 	for (int i = 0; i < fnArgLen; i++) {
 		Variable* v = fnArgs[i];
 		fprintf(output, "%s v%03d_%02d",
-			Prototype_getClass(v->proto)->c_name, i, 1);
+			Prototype_getClass(v->proto)->c_name, v->id, 1);
 		
 		if (i < fnArgLen-1)
 			fprintf(output, ", ");

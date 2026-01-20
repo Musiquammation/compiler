@@ -1,4 +1,0 @@
-@separation
-function define {
-
-}

@@ -159,7 +159,8 @@ void Syntax_tcFile(ScopeFile* scope) {
 				.definedClass = subDefinedClass
 			};
 
-			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser, 0, &defaultData);
+			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser,
+				subDefinedClass ? SYNTAXDATAFLAG_FNDCL_THIS : 0, &defaultData);
 
 			break;
 		}
@@ -285,7 +286,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 					Variable_create(dst);
 					dst->name = src->name;
 					dst->proto = proto;
-					dst->id = argLen;
+					dst->id = argLen+1;
 					arguments[argLen] = dst;
 					argLen++;
 				}
@@ -299,7 +300,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 					Variable_create(dst);
 					dst->name = src->name;
 					dst->proto = proto;
-					dst->id = argLen;
+					dst->id = argLen+1;
 					arguments[argLen] = dst;
 					argLen++;
 				}
@@ -1025,6 +1026,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&variadicScope.scope,
 					parser,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_THIS |
 						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_FAST_ACCESS),
 
@@ -1046,6 +1048,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&variadicScope.scope,
 					parser,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_THIS |
 						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS),
 
@@ -1153,7 +1156,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
-					SYNTAXDATAFLAG_FNDCL_FORBID_NAME | (noMeta ? SYNTAXDATAFLAG_FNDCL_NO_META : 0),
+					SYNTAXDATAFLAG_FNDCL_THIS | SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						(noMeta ? SYNTAXDATAFLAG_FNDCL_NO_META : 0),
 					&fnDeclData
 				);
 
@@ -1657,7 +1661,8 @@ Function* Syntax_functionDeclaration(
 				raiseError("[Architecture] argument list already defined");
 				break;
 			}
-			arguments = Syntax_functionArgumentsDecl(scope, parser);
+			arguments = Syntax_functionArgumentsDecl(scope, parser,
+				flags & SYNTAXDATAFLAG_FNDCL_THIS ? 1 : 0);
 			break;
 
 		// Type
@@ -1792,6 +1797,7 @@ Function* Syntax_functionDeclaration(
 
 		Variable** args = malloc(sizeof(Variable*) * arguments.length);
 		memcpy(args, arguments.data, sizeof(Variable*) * arguments.length);
+		Array_free(arguments);
 		fn->arguments = args;
 		fn->args_len = arguments.length;
 		fn->returnType = returnType;
@@ -1825,7 +1831,7 @@ Function* Syntax_functionDeclaration(
 }
 
 
-Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
+Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser, char thisDecalage) {
 	Array arguments;
 	Array_create(&arguments, sizeof(Variable*));
 
@@ -1851,7 +1857,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 			*Array_push(Variable*, &arguments) = variable;
 
 			variable->name = name;
-			variable->id = position;
+			variable->id = position = thisDecalage;
 
 			variable->proto = Syntax_proto(parser, scope);
 
@@ -2717,7 +2723,7 @@ void Syntax_functionScope_freeLabel(
 					// Move
 					Trace_ins_loadDst(trace, ptrVariable, tmpId, -1, -1, eps.size, eps.primitiveSizeCode);
 
-					Trace_removeVariable(trace, ptrVariable);
+					Trace_popVariable(trace, ptrVariable);
 					break;
 				}
 				}
@@ -2731,7 +2737,7 @@ void Syntax_functionScope_freeLabel(
 				return;
 			}
 
-			Trace_removeVariable(trace, tmpId);
+			Trace_popVariable(trace, tmpId);
 
 		} else {
 			placeExpression(trace, valueExpr, varr, length);
@@ -2828,7 +2834,7 @@ static void Syntax_functionScope_if(
 
 	
 	trline_t* ifLine = Trace_ins_if(trace, dest);
-	Trace_removeVariable(trace, dest);
+	Trace_popVariable(trace, dest);
 
 	Trace_ins_savePlacement(trace);
 
@@ -2918,7 +2924,7 @@ static void Syntax_functionScope_while(
 
 	// Add ifline
 	trline_t* ifLine = Trace_ins_if(trace, dest);
-	Trace_removeVariable(trace, dest);
+	Trace_popVariable(trace, dest);
 
 	Trace_ins_saveShadowPlacement(trace);
 
@@ -3014,10 +3020,10 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			// Place value in rax
 			uint regVar = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
 			Trace_ins_placeReg(trace, variable, regVar, TRACE_REG_RAX, Trace_packSize(size));
-			Trace_removeVariable(trace, variable);
+			Trace_popVariable(trace, variable);
 			
 			*Trace_push(trace, 1) = TRACECODE_STAR | (2<<10);
-			Trace_removeVariable(trace, regVar);
+			Trace_popVariable(trace, regVar);
 
 
 			Parser_read(parser, &_labelPool);
@@ -3053,7 +3059,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	// Remove variable traces
 	finishScope:
 	Array_loop(TypeDefinition, scope->types, td) {
-		Trace_removeVariable(trace, td->variable->id);
+		Trace_popVariable(trace, td->variable->id);
 	}
 
 	trace->deep--;
@@ -3073,12 +3079,20 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 
 	if (thisclass) {
-		thisvar.name = _commonLabels._this;
+		// Construct 'this' object
+		{
+			ProtoSetting* setting = malloc(sizeof(ProtoSetting));
+			setting->useVariable = true;
+			setting->useProto = true;
+			setting->variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
+			setting->proto = Prototype_create_direct(thisclass,
+				Class_getPrimitiveSizeCode(thisclass), NULL, 0);
 
-		thisvar.id = Trace_pushVariable(&trace);
-		/// TODO: warning with this declaration (no settings)
-		thisvar.proto = Prototype_create_direct(thisclass, 0, NULL, 0);
-		Variable_create(&thisvar);
+			thisvar.name = _commonLabels._this;
+			thisvar.id = Trace_ins_create(&trace, &thisvar, 8, 1<<1, 8);
+			thisvar.proto = Prototype_create_direct(_langstd.pointer, 0, setting, 1);
+			Variable_create(&thisvar);
+		}
 
 		fnScope = (ScopeFunction){
 			{scope, SCOPE_FUNCTION},
@@ -3134,17 +3148,22 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	} else {
 		FunctionAssembly fnAsm;
 		FunctionAssembly_create(&fnAsm, &fnScope);
-		Trace_generateTranspiled(&trace, &fnAsm);
+		Trace_generateTranspiled(&trace, &fnAsm, thisclass ? true : false);
 		FunctionAssembly_delete(&fnAsm);
+		Trace_popArgs(&trace, fn->arguments, fn->args_len);
+
+		if (fnScope.thisvar)
+			Trace_popVariable(&trace, thisvar.id);
+		
 		Trace_delete(&trace, false);
 	}
 	
 	
-
-
+	
 	if (fnScope.thisvar) {
 		Variable_delete(&thisvar);
 	}
+
 
 	fn->definitionState = DEFINITIONSTATE_DONE;
 	return true;

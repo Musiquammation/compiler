@@ -20,6 +20,7 @@ enum {
 	SYNTAXDATAFLAG_FNDCL_NO_META = 64,
 	SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS = 128,
 	SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN = 256,
+	SYNTAXDATAFLAG_FNDCL_THIS = 512,
 
 
 	// Class declaration
@@ -57,7 +58,7 @@ void Syntax_classDefinition(Scope* scope, Parser* parser, Class* cl, Syntax_Clas
 Prototype* Syntax_proto(Parser* parser, Scope* scope);
 
 Function* Syntax_functionDeclaration(Scope* scope, Scope* variadicScope, Parser* parser, int flags, const Syntax_FunctionDeclarationArg* defaultData);
-Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser);
+Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser, char thisDecalage);
 Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* thisExpr);
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
 int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);

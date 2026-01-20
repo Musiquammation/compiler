@@ -1,6 +1,6 @@
 class {
 	for {
-		T: Type;
+		T: Type; // /!\ must be the first variable /!\ 
 		knownAddress: size_t;
 		
 		isValueKnown: bool;

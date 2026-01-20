@@ -9,6 +9,8 @@ class {
 
 	value: int;
 	define<u: int>();
+
+	put(value: int);
 }
 
 

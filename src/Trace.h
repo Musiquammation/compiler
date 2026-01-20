@@ -146,10 +146,11 @@ void Trace_create(Trace* trace);
 void Trace_delete(Trace* trace, bool hasGeneratedAssembly);
 
 uint Trace_pushVariable(Trace* trace);
-void Trace_removeVariable(Trace* trace, uint index);
+void Trace_popVariable(Trace* trace, uint index);
 int Trace_reachFunction(Trace* trace, Function* fn);
 Function* Trace_getFunction(Trace* trace, int index);
 void Trace_pushArgs(Trace* trace, Variable** args, int arglen);
+void Trace_popArgs(Trace* trace, Variable** args, int arglen);
 
 int Trace_packSize(int size);
 int Trace_unpackSize(int psize);
@@ -184,7 +185,7 @@ void Trace_addWhileUsages(Trace* trace, int scopeId, int startIns, int endIns, i
 
 void Trace_placeRegisters(Trace* trace);
 void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
-void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm);
+void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThis);
 
 
 enum {
