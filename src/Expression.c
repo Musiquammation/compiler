@@ -42,7 +42,7 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_FNCALL:
 	{
-		int argLength = e->data.fncall.argsLength;
+		int argLength = e->data.fncall.length;
 		if (argLength) {
 			typedef Expression* ptr_t;
 			Array_for(ptr_t, e->data.fncall.args, argLength, ptr) {
@@ -131,17 +131,20 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_ADDR_OF:
 	case EXPRESSION_VALUE_AT:
 	case EXPRESSION_LOGICAL_NOT:
-		Expression_free(e->data.operand->type, e->data.operand);
+		Expression_free(e->data.operand.op->type, e->data.operand.op);
+		if (e->data.operand.toFree) {free(e->data.operand.op);}
 		break;
 
 	case EXPRESSION_R_INCREMENT:
 	case EXPRESSION_R_DECREMENT:
-		Expression_free(e->data.operand->type, e->data.operand);
+		Expression_free(e->data.operand.op->type, e->data.operand.op);
+		if (e->data.operand.toFree) {free(e->data.operand.op);}
 		break;
 
 	case EXPRESSION_L_INCREMENT:
 	case EXPRESSION_L_DECREMENT:
-		Expression_free(e->data.operand->type, e->data.operand);
+		Expression_free(e->data.operand.op->type, e->data.operand.op);
+		if (e->data.operand.toFree) {free(e->data.operand.op);}
 		break;
 
 
@@ -240,7 +243,7 @@ void Expression_exchangeReferences(
 		case EXPRESSION_A_DECREMENT:
 		case EXPRESSION_ADDR_OF:
 		case EXPRESSION_VALUE_AT:
-			exchange(expr->data.operand);
+			exchange(expr->data.operand.op);
 			break;
 
 	}
@@ -357,7 +360,8 @@ Expression* Expression_processLine(Expression* line, int length) {
 				lineUsed[prev_index] = 1; // consume expression
 				prev_type = i_type - (EXPRESSION_A_INCREMENT - EXPRESSION_R_INCREMENT); // change type
 				line[i].type = prev_type;
-				line[i].data.operand = &line[prev_index];
+				line[i].data.operand.op = &line[prev_index];
+				line[i].data.operand.toFree = false;
 				goto nextIncrement;
 			}
 			
@@ -395,7 +399,8 @@ Expression* Expression_processLine(Expression* line, int length) {
 			lineUsed[i] = 1; // consume expression
 			prev_type = i_type - (EXPRESSION_A_INCREMENT - EXPRESSION_L_INCREMENT);
 			line[prev_index].type = prev_type;
-			line[prev_index].data.operand = &line[i];
+			line[prev_index].data.operand.op = &line[i];
+			line[prev_index].data.operand.toFree = false;
 			goto nextIncrement;
 		}
 
@@ -499,7 +504,8 @@ Expression* Expression_processLine(Expression* line, int length) {
 			changeType:
 			// Change type
 			line[prev_index].type = i_type;
-			line[prev_index].data.operand = &line[i];
+			line[prev_index].data.operand.op = &line[i];
+			line[prev_index].data.operand.toFree = false;
 			prev_type = i_type;
 		}
 

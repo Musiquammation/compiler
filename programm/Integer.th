@@ -2,15 +2,16 @@ class {
 	for {
 		val: int;
 		isValueKnown: bool;
-		positive: char; // 1: yes, 0: no, -1: unknown
+		positive: char; // 0: no, 1: yes, 2: unknown
 
 		isPositive(): bool;
 	}
 
 	value: int;
-	define<u: int>();
 
-	put(value: int);
+	define<value: int>();
+
+	put(value: int): int;
 }
 
 

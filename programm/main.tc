@@ -1,5 +1,11 @@
 function main {
-	return 4918;
+	let integer: Integer;
+	integer.value = 991;
+	let testReturns = integer.put(323);
+
+	integer.define<73>();
+
+	return testReturns;
 }
 
 

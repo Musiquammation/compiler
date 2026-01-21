@@ -21,7 +21,10 @@ struct Expression {
 			Expression* right;
 		} operands;
 
-		Expression* operand;
+		struct {
+			Expression* op;
+			bool toFree;
+		} operand;
 
 		Expression* target;
 
@@ -33,7 +36,8 @@ struct Expression {
 		struct {
 			Expression** args;
 			Function* fn;
-			int argsLength;
+			int length;
+			int argsStartIndex;
 		} fncall;
 
 		struct {

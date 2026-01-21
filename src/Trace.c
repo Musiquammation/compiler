@@ -305,7 +305,7 @@ void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
 		Variable* v = args[i];
 		
 		// '1<<1' for argument
-		Trace_ins_create(
+		v->id = Trace_ins_create(
 			trace, v,
 			Prototype_getSizes(v->proto).size, 1<<1,
 			Prototype_getPrimitiveSizeCode(v->proto)
@@ -316,13 +316,9 @@ void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
 void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
 	for (int i = 0; i < arglen; i++) {
 		Variable* v = args[i];
-		
-		// '1<<1' for argument
-		Trace_ins_create(
-			trace, v,
-			Prototype_getSizes(v->proto).size, 1<<1,
-			Prototype_getPrimitiveSizeCode(v->proto)
-		);
+		printf("pop %d\n", v->id);
+		Trace_popVariable(trace, v->id);
+		v->id = -1;
 	}
 }
 
@@ -1184,7 +1180,7 @@ static void handleOrigin(Trace* trace, Expression* origin,
 }
 
 void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int signedSize, int exprType) {
-	int size = signedSize >= 0 ? signedSize : -signedSize;
+	const int destSize = signedSize >= 0 ? signedSize : -signedSize;
 
 	retry:
 	switch (exprType) {
@@ -1227,7 +1223,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				varr[0]->id,
 				destOffset,
 				Prototype_getVariableOffset(varr, length),
-				size,
+				destSize,
 				primitiveSizeCode
 			);
 			return;
@@ -1256,7 +1252,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			(signedSize < 0 ? (1<<12) : 0) |
 			(0<<13) |
 			Trace_packSize(objSize) << 16 |
-			Trace_packSize(size) << 18;
+			Trace_packSize(destSize) << 18;
 
 
 		Trace_popVariable(trace, tempVar);
@@ -1268,18 +1264,62 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 	case EXPRESSION_FNCALL:
 	{
-		int argsLength = expr->data.fncall.argsLength;
+		int argsLength = expr->data.fncall.length;
+		int argsStartIndex = expr->data.fncall.argsStartIndex;
+		Expression** args = expr->data.fncall.args;
+
 		Function* fn = expr->data.fncall.fn;
 		Variable** arguments = fn->arguments;
-		Expression** args = expr->data.fncall.args;
-		uint* variables = malloc(argsLength * sizeof(int));
 
-		for (int i = 0; i < argsLength; i++) {
-			/// TODO: check sizes
+		bool useThis = (fn->flags & FUNCTIONFLAGS_THIS) ? true : false;
+		uint variables[argsLength - argsStartIndex];
+		uint* scaledVariables;
+
+		const int* currentRegister;
+		int usedArgsLength = argsLength - argsStartIndex;
+
+		if (useThis) {
+			uint bufferVar = Trace_ins_create(trace, NULL, 8, 0, 8);
+ 			Trace_set(
+				trace,
+				args[argsStartIndex],
+				bufferVar,
+				-1,
+				8,
+				args[argsStartIndex]->type
+			);
+
+			uint finalVar = Trace_ins_create(trace, NULL, 8, 0, 8);
+			variables[0] = finalVar;
+
+			Trace_ins_placeReg(
+				trace,
+				bufferVar,
+				finalVar,
+				ARGUMENT_REGISTERS[0],
+				Trace_packSize(8)
+			);
+
+			Trace_popVariable(trace, bufferVar);
+
+			currentRegister = &ARGUMENT_REGISTERS[1];
+			scaledVariables = &variables[1];
+			args++;
+			usedArgsLength--;
+		
+		} else {
+			currentRegister = ARGUMENT_REGISTERS;
+			scaledVariables = variables;
+		}
+
+
+		// Place arguments
+		for (int i = 0; i < usedArgsLength; i++) {
+			/// TODO: check size
 			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
-			int size = Prototype_getSizes(arguments[i]->proto).size;
-			uint bufferVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
-			
+			int subSize = Prototype_getSizes(arguments[i]->proto).size;
+			uint bufferVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
+
 			Trace_set(
 				trace,
 				args[i],
@@ -1289,17 +1329,19 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				args[i]->type
 			);
 
-			uint finalVar = Trace_ins_create(trace, NULL, size, 0, primitiveSizeCode);
-			variables[i] = finalVar;
-			
-			if (i < ARGUMENT_REGISTERS_LENGTH) {
+			uint finalVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
+			scaledVariables[i] = finalVar;
+
+			if (currentRegister < &ARGUMENT_REGISTERS[ARGUMENT_REGISTERS_LENGTH]) {
 				Trace_ins_placeReg(
 					trace,
 					bufferVar,
 					finalVar,
-					ARGUMENT_REGISTERS[i],
-					Trace_packSize(size)
+					*currentRegister,
+					Trace_packSize(subSize)
 				);
+
+				currentRegister++;
 			} else {
 				raiseError("[TODO] handle a lot of arguements");
 				return;
@@ -1307,7 +1349,6 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 			Trace_popVariable(trace, bufferVar);
 		}
-
 
 		// Mark rax will be used and mark variable
 		if (destVar != TRACE_VARIABLE_NONE) {
@@ -1322,47 +1363,59 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			}
 		}
 
-		int fnIndex = Trace_reachFunction(trace, fn);
-
 		// Add usages
-		for (int i = 0; i < argsLength; i++) {
+		if (useThis) {
+			Trace_addUsage(
+				trace, variables[0],
+				TRACE_OFFSET_NONE,
+				true
+			);
+		}
+
+		for (int i = 0; i < argsLength - argsStartIndex - useThis; i++) {
 			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			if (psc == PSC_UNKNOWN) {
 				raiseError("[Architecture] Registrable status is unknown");
 			}
 
 			Trace_addUsage(
-				trace, variables[i],
+				trace, scaledVariables[i],
 				psc ? TRACE_OFFSET_NONE : 0,
 				true
 			);
 		}
 
 		// Function call
+		int fnIndex = Trace_reachFunction(trace, fn);
 		*Trace_push(trace, 1) = TRACECODE_FNCALL | (fnIndex << 10);
 
+
 		// Remove variables
-		for (int i = argsLength-1; i >= 0; i--) {
+		for (int i = argsLength - argsStartIndex - 1; i >= 0; i--) {
 			Trace_popVariable(trace, variables[i]);
 		}
+
+
+
+
 
 		// Output
 		if (destVar != TRACE_VARIABLE_NONE) {
 			int signedOutputSize = Prototype_getSignedSize(fn->returnType);
 			if (signedOutputSize == signedSize) {
-				Trace_ins_placeVar(trace, destVar, TRACE_REG_RAX, Trace_packSize(size));
-	
+				Trace_ins_placeVar(trace, destVar, TRACE_REG_RAX, Trace_packSize(destSize));
+
 			} else {
 				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
 				uint temp = Trace_ins_create(
 					trace, NULL, outputSize, 0,
 					Prototype_getPrimitiveSizeCode(fn->returnType)
 				);
-	
+
 				// Put output in temp variable
 				/// TODO: check TRACE_VARIABLE_NONE
-				Trace_ins_placeVar(trace, temp, TRACE_REG_RAX, Trace_packSize(size));
-	
+				Trace_ins_placeVar(trace, temp, TRACE_REG_RAX, Trace_packSize(destSize));
+
 				Trace_addUsage(trace, temp, TRACE_OFFSET_NONE, true);
 				Trace_addUsage(trace, destVar, destOffset, true);
 				*Trace_push(trace, 1) = TRACECODE_CAST |
@@ -1371,17 +1424,16 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					(signedSize < 0 ? (1<<12) : 0) |
 					(0<<13) |
 					Trace_packSize(outputSize) << 16 |
-					Trace_packSize(size) << 18;
-	
-	
+					Trace_packSize(destSize) << 18;
+
+
 				Trace_popVariable(trace, temp);
 			}
 		}
 
-		free(variables);
-
 		/// TODO: handle return value
 		return;
+
 	}
 
 	case EXPRESSION_GROUP:
@@ -1504,7 +1556,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					(signedSize < 0 ? (1<<12) : 0) |
 					(0<<13) |
 					(packedMaxSize << 16) |
-					(Trace_packSize(size) << 18);
+					(Trace_packSize(destSize) << 18);
 
 
 				Trace_popVariable(trace, tempDestVar);
@@ -1533,12 +1585,12 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 			uint variable;
 			uint resultVariable;
-			bool notCast = operandSize <= size;
+			bool notCast = operandSize <= destSize;
 
 			/// TODO: handle case for same size but different sign
 			if (notCast) {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0, 1);
+				variable = Trace_ins_create(trace, NULL, destSize, 0, 1);
 				signedDestImmediateSize = signedSize;
 				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedSize, operandType);
 
@@ -1548,11 +1600,11 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 			} else {
 				// Load operand
-				variable = Trace_ins_create(trace, NULL, size, 0, 1);
+				variable = Trace_ins_create(trace, NULL, destSize, 0, 1);
 				signedDestImmediateSize = signedOperandSize;
 				Trace_set(trace, operand, variable, TRACE_OFFSET_NONE, signedOperandSize, operandType);
 
-				resultVariable = Trace_ins_create(trace, NULL, size, 0, 1);
+				resultVariable = Trace_ins_create(trace, NULL, destSize, 0, 1);
 
 				// Add usages
 				Trace_addUsage(trace, variable, TRACE_OFFSET_NONE, true);
@@ -1628,7 +1680,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 					(signedSize < 0 ? (1<<12) : 0) |
 					(0<<13) |
 					Trace_packSize(operandSize) << 16 |
-					Trace_packSize(size) << 18;
+					Trace_packSize(destSize) << 18;
 				
 				Trace_popVariable(trace, resultVariable);
 			}
@@ -1669,7 +1721,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 	case EXPRESSION_ADDR_OF:
 	{
-		Expression* reference = Expression_cross(expr->data.operand);
+		Expression* reference = Expression_cross(expr->data.operand.op);
 		if (reference->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] Can only get the address of a variable");
 			return;
@@ -4486,28 +4538,28 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 	}
 
 	#define move() {line = pack->line[instruction]; instruction++;}
+	#define couple(u) u.variable, variables[u.variable].index
 
 	#define writePrimitive(u, size)\
 		if (u.offset < 0) {\
-			fprintf(output, "v%03d_%02d", u.variable,\
-				variables[u.variable].index);\
+			fprintf(output, "v%03d_%02d", couple(u));\
 		} else {\
 			switch (size) {\
 			case 1:\
 				fprintf(output, "*(tuint8_t *)(&v%03d_%02d[%d])",\
-					u.variable, variables[u.variable].index, u.offset);\
+					couple(u), u.offset);\
 				break;\
 			case 2:\
 				fprintf(output, "*(tuint16_t*)(&v%03d_%02d[%d])",\
-					u.variable, variables[u.variable].index, u.offset);\
+					couple(u), u.offset);\
 				break;\
 			case 4:\
 				fprintf(output, "*(tuint32_t*)(&v%03d_%02d[%d])",\
-					u.variable, variables[u.variable].index, u.offset);\
+					couple(u), u.offset);\
 				break;\
 			case 8:\
 				fprintf(output, "*(tuint64_t*)(&v%03d_%02d[%d])",\
-					u.variable, variables[u.variable].index, u.offset);\
+					couple(u), u.offset);\
 				break;\
 			}\
 		}
@@ -4527,7 +4579,6 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 			fprintf(output, "%lu", (hi >> 32) | lo);\
 		}
 		
-
 
 
 	int receivingReturnVariable = -1;
@@ -4737,37 +4788,33 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 				if (dst.offset < 0) {
 					size = -1;
-					fprintf(output, "v%03d_%02d", dst.variable, variables[dst.variable].index);
+					fprintf(output, "v%03d_%02d", couple(dst));
 				} else {
 					switch (realSize) {
 					case 1: 
-						fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 	
 					case 2:
-						fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 	
 					case 4:
-						fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 	
 					case 8:
-						fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 	
 	
 					default:
 						fprintf(output, "memcpy(v%03d_%02d + %d, ",
-							dst.variable, variables[dst.variable].index, dst.offset);
+							couple(dst), dst.offset);
 						size = realSize;
 						break;
 	
@@ -4784,18 +4831,18 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 							case 4: fprintf(output, "*(uint32_t*)"); break;
 							case 8: fprintf(output, "*(uint64_t*)"); break;
 						}
-						fprintf(output, "v%03d_%02d", src.variable, variables[src.variable].index);
+						fprintf(output, "v%03d_%02d", couple(src));
 
 					} else {
 						fprintf(output, "(*(void**)(v%03d_%02d + %d))",
-							src.variable, variables[src.variable].index, src.offset);
+							couple(src), src.offset);
 					}
 				
 				} else if (src.offset < 0) {
-					fprintf(output, ", v%03d_%02d, , %d)", src.variable, variables[src.variable].index, realSize);
+					fprintf(output, ", v%03d_%02d, , %d)", couple(src), realSize);
 				} else {
 					fprintf(output, ", (*(void**)(v%03d_%02d + %d)), %d)",
-						src.variable, variables[src.variable].index, src.offset, realSize);
+						couple(src), src.offset, realSize);
 				}
 
 				goto finishMove;
@@ -4806,7 +4853,7 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 					size = line >> 16;
 					realSize = size;
 					fprintf(output, "memcpy((void*)v%03d_%02d, ",
-						dst.variable, variables[dst.variable].index);
+						couple(dst));
 			
 				} else {
 					size = line >> 16;
@@ -4814,40 +4861,35 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 					switch (size) {
 					case 1: 
-						fprintf(output, "**((uint8_t **)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "**((uint8_t **)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 
 					case 2:
-						fprintf(output, "**((uint16_t**)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "**((uint16_t**)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 
 					case 4:
-						fprintf(output, "**((uint32_t**)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "**((uint32_t**)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 
 					case 8:
-						fprintf(output, "**((uint64_t**)(v%03d_%02d + %d))", dst.variable,
-							variables[dst.variable].index, dst.offset);	
+						fprintf(output, "**((uint64_t**)(v%03d_%02d + %d))", couple(dst), dst.offset);	
 						size = -1;
 						break;
 
 
 					default:
-						fprintf(output, "memcpy(v%03d_%02d + %d, ",
-							dst.variable, variables[dst.variable].index, dst.offset);
+						fprintf(output, "memcpy(v%03d_%02d + %d, ", couple(dst), dst.offset);
 						break;
 
 					}
 				}
 				
 			} else if (dst.offset < 0) {
-				fprintf(output, "v%03d_%02d", dst.variable, variables[dst.variable].index);
+				fprintf(output, "v%03d_%02d", couple(dst));
 				size = -1;
 				realSize = line >> 16;
 
@@ -4856,33 +4898,28 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 				realSize = size;
 				switch (size) {
 				case 1: 
-					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", dst.variable,
-						variables[dst.variable].index, dst.offset);	
+					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", couple(dst), dst.offset);
 					size = -1;
 					break;
 
 				case 2:
-					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", dst.variable,
-						variables[dst.variable].index, dst.offset);	
+					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);
 					size = -1;
 					break;
 
 				case 4:
-					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", dst.variable,
-						variables[dst.variable].index, dst.offset);	
+					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);
 					size = -1;
 					break;
 
 				case 8:
-					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", dst.variable,
-						variables[dst.variable].index, dst.offset);	
+					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", couple(dst), dst.offset);
 					size = -1;
 					break;
 
 
 				default:
-					fprintf(output, "memcpy(v%03d_%02d + %d, ",
-						dst.variable, variables[dst.variable].index, dst.offset);
+					fprintf(output, "memcpy(v%03d_%02d + %d, ", couple(dst), dst.offset);
 					break;
 
 				}
@@ -4894,32 +4931,28 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 			if (src.offset < 0) {
 				if (size < 0) {
-					fprintf(output, "v%03d_%02d", src.variable, variables[src.variable].index);
+					fprintf(output, "v%03d_%02d", couple(src));
 				} else {
 					fprintf(output, "&v%03d_%02d, %d)",
-						src.variable, variables[src.variable].index, size);
+						couple(src), size);
 				}
 			
 			} else if (size < 0) {
 				switch (realSize) {
 				case 1: 
-					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", src.variable,
-						variables[src.variable].index, src.offset);	
+					fprintf(output, "*((uint8_t *)(v%03d_%02d + %d))", couple(src), src.offset);	
 					break;
 
 				case 2:
-					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", src.variable,
-						variables[src.variable].index, src.offset);	
+					fprintf(output, "*((uint16_t*)(v%03d_%02d + %d))", couple(src), src.offset);	
 					break;
 
 				case 4:
-					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", src.variable,
-						variables[src.variable].index, src.offset);	
+					fprintf(output, "*((uint32_t*)(v%03d_%02d + %d))", couple(src), src.offset);	
 					break;
 
 				case 8:
-					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", src.variable,
-						variables[src.variable].index, src.offset);	
+					fprintf(output, "*((uint64_t*)(v%03d_%02d + %d))", couple(src), src.offset);	
 					break;
 
 				default:
@@ -4928,8 +4961,7 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 				}
 
 			} else {
-				fprintf(output, "v%03d_%02d + %d, %d)",
-					src.variable, variables[src.variable].index, src.offset, size);
+				fprintf(output, "v%03d_%02d + %d, %d)", couple(src), src.offset, size);
 
 			}
 
@@ -4944,13 +4976,52 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 		case TRACECODE_PLACE:
 		{
 			// Edit variable (can be ignored by transpiler)
+			trline_t reg = (line >> 16) & 0xff;
 			if (line & (1<<12)) {
+				if (reg != TRACE_REG_RAX)
+					raiseError("[TODO] transpile TRACECODE_PLACE edit var");
+					
 				break;
 			}
 
+			if (reg == TRACE_REG_RAX) {
+				Usage u = usedVariables[0];
+				fprintf(output, "\tfinal = v%03d_%02d;\n", couple(u));
+			} else {
+				Usage src = usedVariables[0];
+				Usage dst = usedVariables[1];
 
-			Usage u = usedVariables[0];
-			fprintf(output, "\tfinal = v%03d_%02d;\n", u.variable, variables[u.variable].index);
+				fprintf(output, "\tv%03d_%02d = ", couple(dst));
+
+				if (src.offset < 0) {
+					fprintf(output, "v%03d_%02d;\n", couple(src));
+				} else {
+					trline_t size = (line >> 10) & 0x3;
+
+					switch (size) {
+					case 1: 
+						fprintf(output, " *((uint8_t *)(v%03d_%02d + %d));\n", couple(src), src.offset);	
+						break;
+
+					case 2:
+						fprintf(output, "*((uint16_t*)(v%03d_%02d + %d));\n", couple(src), src.offset);	
+						break;
+
+					case 4:
+						fprintf(output, "*((uint32_t*)(v%03d_%02d + %d));\n", couple(src), src.offset);	
+						break;
+
+					case 8:
+						fprintf(output, "*((uint64_t*)(v%03d_%02d + %d));\n", couple(src), src.offset);	
+						break;
+
+					default:
+						raiseError("[Intern] size error in transpilation");
+						return;
+					}
+				}
+
+			}
 			break;
 		}
 
@@ -5143,10 +5214,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 			Usage dst = usedVariables[0];
 			if (dst.offset < 0) {
-				fprintf(output, "\tv%03d_%02d = ", dst.variable, variables[dst.variable].index);
+				fprintf(output, "\tv%03d_%02d = ", couple(dst));
 			} else {
 				fprintf(output, "\t*(uint64_t*)(v%03d_%02d + %d) = ",
-					dst.variable, variables[dst.variable].index, dst.offset);
+					couple(dst), dst.offset);
 			}
 
 			if (offset == 0) {
@@ -5180,8 +5251,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 	free(usedVariables);
 	fprintf(output, "}\n");
-	#undef move
-	#undef writePrimitive
+
 	#undef printImmediate
+	#undef writePrimitive
+	#undef move
+	#undef couple
 }
 

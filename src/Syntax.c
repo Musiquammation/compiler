@@ -316,7 +316,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 				fn->args_len = argLen;
 				fn->settings = NULL;
 				fn->settings_len = 0;
-
+				fn->flags = FUNCTIONFLAGS_THIS;
 
 				// Fill return type
 				Prototype* returnType = originFn->returnType;
@@ -357,7 +357,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 		};
 
 
-		Syntax_functionDefinition(&scope->scope, &parser, fn, subDefinedClass);
+		Syntax_functionDefinition(&scope->scope, &parser, fn, subDefinedClass->meta);
 
 		if (originFn) {
 			originFn->metaDefinitionState = DEFINITIONSTATE_DONE;
@@ -375,7 +375,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 
 
 
-Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoot) {
+Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoot, bool finishByAngle) {
 	Parser_read(parser, &_labelPool);
 	if (
 		isExpressionRoot &&
@@ -490,7 +490,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		// open parenthesis
 		case 3:
 		{
-			Expression* target = Syntax_expression(parser, scope, 0);
+			Expression* target = Syntax_expression(parser, scope, 0, false);
 			Expression* e = Array_push(Expression, &lineArr);
 
 			int targetType = target->type;
@@ -549,13 +549,30 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		case 20:
 		case 21:
 		case 22:
-		case 23:
 		case 24:
 		{
 			Expression* e = Array_push(Expression, &lineArr);
 			e->type = syntaxIndex + (EXPRESSION_ADDITION-7);
 			break;
 		}
+
+		// rangle
+		case 23:
+		{
+			if (finishByAngle) {
+				if (isExpressionRoot) {
+					Parser_saveToken(parser);
+				}
+	
+				goto processExpressions;
+
+			} else {
+				Expression* e = Array_push(Expression, &lineArr);
+				e->type = EXPRESSION_GREATER;
+				break;
+			}
+		}
+
 
 		// bit not
 		case 25:
@@ -1507,7 +1524,7 @@ Function* Syntax_functionDeclaration(
 	int flags,
 	const Syntax_FunctionDeclarationArg* defaultData
 ) {
-	int fnflags = 0;
+	int fnFlags = flags & SYNTAXDATAFLAG_FNDCL_THIS ? FUNCTIONFLAGS_THIS : 0;
 	label_t name = LABEL_NULL;
 	int syntaxIndex = -1;
 	char noMeta = flags & SYNTAXDATAFLAG_FNDCL_NO_META;
@@ -1621,11 +1638,13 @@ Function* Syntax_functionDeclaration(
 
 			// Read settings
 			while (true) {
-				// Name (or right angle meaning end)
+				// Name (or right angle meaning end)				
 				Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_FN_SETTING, 0)) {
 					break;
 				}
+
+				label_t varName = parser->token.label;
 
 				// Colon (for syntax)
 				Parser_read(parser, &_labelPool);
@@ -1634,13 +1653,10 @@ Function* Syntax_functionDeclaration(
 
 				Prototype* proto = Syntax_proto(parser, scope);
 
-				label_t varName = parser->token.label;
 				Variable* variable = malloc(sizeof(Variable));
 				Variable_create(variable);
 				variable->name = varName;
 				variable->proto = proto;
-
-				/// TODO: use real ids ?
 				variable->id = -1;
 
 				*Array_push(Variable*, &settingsArr) = variable;
@@ -1661,8 +1677,7 @@ Function* Syntax_functionDeclaration(
 				raiseError("[Architecture] argument list already defined");
 				break;
 			}
-			arguments = Syntax_functionArgumentsDecl(scope, parser,
-				flags & SYNTAXDATAFLAG_FNDCL_THIS ? 1 : 0);
+			arguments = Syntax_functionArgumentsDecl(scope, parser);
 			break;
 
 		// Type
@@ -1801,7 +1816,7 @@ Function* Syntax_functionDeclaration(
 		fn->arguments = args;
 		fn->args_len = arguments.length;
 		fn->returnType = returnType;
-		fn->flags = fnflags;
+		fn->flags = fnFlags;
 
 		if (settings_len <= 0) {
 			fn->settings = NULL;
@@ -1815,6 +1830,8 @@ Function* Syntax_functionDeclaration(
 	}
 
 
+
+	// Read defintion
 	if (definitionToRead) {
 		Syntax_functionDefinition(scope, parser, fn, definedClass);
 	}
@@ -1831,7 +1848,7 @@ Function* Syntax_functionDeclaration(
 }
 
 
-Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser, char thisDecalage) {
+Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 	Array arguments;
 	Array_create(&arguments, sizeof(Variable*));
 
@@ -1857,7 +1874,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser, char thisDecala
 			*Array_push(Variable*, &arguments) = variable;
 
 			variable->name = name;
-			variable->id = position = thisDecalage;
+			variable->id = -1;
 
 			variable->proto = Syntax_proto(parser, scope);
 
@@ -1887,29 +1904,31 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser, char thisDecala
 	return arguments;
 }
 
-Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Function* fn, Expression* thisExpr) {
-	ScopeSearchArgs searchArg;
-
+static void functionArgumentsCall(
+	Scope* scopePtr,
+	Parser* parser,
+	Function* fn,
+	Expression* thisExpr,
+	Array* args
+) {
 	union {
 		ScopeClass cl;
 	} subScope;
 
 	
 	/// TODO: create a subscope to handle words (of enums)
-	Array args; // type: Expression*
-	Array_create(&args, sizeof(Expression*));
-	
 	if (thisExpr) {
 		Expression* thisPtr = malloc(sizeof(Expression));
 		thisPtr->type = EXPRESSION_ADDR_OF;
-		thisPtr->data.operand = thisExpr;
-		*Array_push(Expression*, &args) = thisPtr;
+		thisPtr->data.operand.op = thisExpr;
+		thisPtr->data.operand.toFree = true;
+		*Array_push(Expression*, args) = thisPtr;
 	}
 
 	while (true) {
-		Expression* expr = Syntax_expression(parser, scopePtr, 2);
+		Expression* expr = Syntax_expression(parser, scopePtr, 2, false);
 		if (expr) {
-			*Array_push(Expression*, &args) = expr;
+			*Array_push(Expression*, args) = expr;
 		}
 
 		Parser_read(parser, &_labelPool);
@@ -1917,24 +1936,30 @@ Expression* Syntax_functionArgumentsCall(Scope* scopePtr, Parser* parser, Functi
 			break;
 		}
 	}
+}
 
-	Expression* expr = malloc(sizeof(Expression));
-
-	if (args.length) {
-		size_t size = sizeof(Expression*) * args.length;
-		Expression** ae = malloc(size);
-		memcpy(ae, args.data, size);
-		expr->data.fncall.argsLength = args.length;
-		expr->data.fncall.args = ae;
-		free(args.data);
+static void functionSettingsCall(
+	Scope* scopePtr,
+	Parser* parser,
+	Array* args
+) {	
+	/// TODO: create a subscope to handle words (of enums)
+	while (true) {
+		// Read the expression
 		
-	} else {
-		expr->data.fncall.argsLength = 0;
-	}
+		Expression* expr = Syntax_expression(parser, scopePtr, 2, true);
 
-	expr->type = EXPRESSION_FNCALL;
-	expr->data.fncall.fn = fn;
-	return expr;
+
+		// Push expression
+		if (expr) {
+			*Array_push(Expression*, args) = expr;
+		}
+
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SETTINGSDECL_SEPARATOR, 0) == 1) {
+			break;
+		}
+	}
 }
 
 
@@ -2006,7 +2031,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						accessorProto = proto;
 
 
-            			proto = Prototype_reachProto(accessor->returnType, proto);
+						proto = Prototype_reachProto(accessor->returnType, proto);
 
 						subScopePtr = Prototype_reachSubScope(
 							proto,
@@ -2103,16 +2128,49 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 		if (searchArg.resultType == SCOPESEARCH_FUNCTION) {
 			Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
+			int subSyntaxIndex = TokenCompare(SYNTAXLIST_FNCALL, SYNTAXFLAG_UNFOUND);
+			if (subSyntaxIndex != 0 && subSyntaxIndex != 1) {
 				raiseError("[TODO] fn references not handled");
-				continue;
 			}
 
 
-			// Function call
+			int argsStartIndex;
 			Function* fn = object;
-			last = Syntax_functionArgumentsCall(subScopePtr, parser, fn, last);
+			Array args;
+			Array_create(&args, sizeof(Expression*));
+			if (subSyntaxIndex == 0) {
+				argsStartIndex = 0;
+				functionArgumentsCall(scope, parser, fn, last, &args);
+			} else {
+				functionSettingsCall(scope, parser, &args);
+				argsStartIndex = args.length;
+				
+				Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0)) {
+					return NULL;
+				}
 
+				functionArgumentsCall(scope, parser, fn, last, &args);
+			}
+
+			last = malloc(sizeof(Expression));			
+			if (args.length) {
+				size_t size = sizeof(Expression*) * args.length;
+				Expression** ae = malloc(size);
+				memcpy(ae, args.data, size);
+				last->data.fncall.length = args.length;
+				last->data.fncall.args = ae;
+				free(args.data);
+				
+			} else {
+				last->data.fncall.length = 0;
+			}
+
+			last->type = EXPRESSION_FNCALL;
+			last->data.fncall.fn = fn;
+			last->data.fncall.argsStartIndex = argsStartIndex;
+
+			
 			// Check for next
 			Parser_read(parser, &_labelPool);
 			int syntaxIndex = TokenCompare(SYNTAXLIST_PATH, SYNTAXFLAG_UNFOUND);
@@ -2269,7 +2327,7 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	}
 	
 	if (exprType == EXPRESSION_ADDR_OF) {
-		Expression* reference = Expression_cross(valueExpr->data.operand);
+		Expression* reference = Expression_cross(valueExpr->data.operand.op);
 		if (reference->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] Can only get the address of a variable");
 			return (protoAndType_t){};
@@ -2474,7 +2532,7 @@ static void placeExpression(
 
 
 	} else if (sourceExprType == EXPRESSION_ADDR_OF) {
-		Expression* reference = Expression_cross(sourceExpr->data.operand);
+		Expression* reference = Expression_cross(sourceExpr->data.operand.op);
 		if (reference->type != EXPRESSION_PROPERTY) {
 			raiseError("[Syntax] Can only get the address of a variable");
 			return;
@@ -2564,7 +2622,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 		// Value
 		case 1:
 			/// TODO: handle this expression
-			valueExpr = Syntax_expression(parser, &scope->scope, 1);
+			valueExpr = Syntax_expression(parser, &scope->scope, 1, false);
 			break;
 
 		// end
@@ -2623,7 +2681,7 @@ void Syntax_functionScope_freeLabel(
 	label_t firstLabel,
 	Trace* trace
 ) {
-	Expression* destExpression = Syntax_readPath(firstLabel, parser, &scope->scope);
+	Expression* const destExpression = Syntax_readPath(firstLabel, parser, &scope->scope);
 	int destExpressionType = destExpression->type;
 
 	// Analyze 
@@ -2653,7 +2711,7 @@ void Syntax_functionScope_freeLabel(
 		// raiseError("[TODO]: update the type (using a copy method)");
 
 		
-		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1);
+		Expression* valueExpr = Syntax_expression(parser, &scope->scope, 1, false);
 		int valueExprType = valueExpr->type;
 
 		// End operand
@@ -2759,7 +2817,7 @@ void Syntax_functionScope_freeLabel(
 			trace,
 			destExpression,
 			TRACE_VARIABLE_NONE,
-			0,
+			-1,
 			0,
 			EXPRESSION_FNCALL
 		);
@@ -2803,7 +2861,7 @@ static void Syntax_functionScope_if(
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
 		return;
 
-	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
+	Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 	// Require right parenthesis
 	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
@@ -2890,7 +2948,7 @@ static void Syntax_functionScope_while(
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
 		return;
 
-	Expression* expr = Syntax_expression(parser, &scope->scope, 1);
+	Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 	// Require right parenthesis
 	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0) != 0)
@@ -2998,7 +3056,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		// return
 		case 5:
 		{
-			Expression* expr = Syntax_expression(parser, &scope->scope, 1);
+			Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 			int exprType = expr->type;
 			int signedSize = Prototype_getSignedSize(scope->fn->returnType);
 			int size = signedSize >= 0 ? signedSize : -signedSize;
@@ -3058,10 +3116,6 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 	// Remove variable traces
 	finishScope:
-	Array_loop(TypeDefinition, scope->types, td) {
-		Trace_popVariable(trace, td->variable->id);
-	}
-
 	trace->deep--;
 	Stack_pop(int, &trace->scopeIdStack);
 	trace->scopeId = previousScopeId;
@@ -3113,6 +3167,7 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 	// Add arguments
 	Trace_pushArgs(&trace, fn->arguments, fn->args_len);
+	Trace_pushArgs(&trace, fn->settings, fn->settings_len);
 	
 
 	// Function procedure
@@ -3150,6 +3205,7 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 		FunctionAssembly_create(&fnAsm, &fnScope);
 		Trace_generateTranspiled(&trace, &fnAsm, thisclass ? true : false);
 		FunctionAssembly_delete(&fnAsm);
+		Trace_popArgs(&trace, fn->settings, fn->settings_len);
 		Trace_popArgs(&trace, fn->arguments, fn->args_len);
 
 		if (fnScope.thisvar)

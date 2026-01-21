@@ -417,12 +417,21 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 		char* binFolder = module->binFolder;
 		char* filepath = file->filepath;
 
-		size_t len = strlen(binFolder) + strlen(filepath) + 6;
-
-		char* path = malloc(len);
-
-		sprintf(path, "%s/%s.asm", binFolder, filepath);
-		mkdir_p(path);
+		
+		char* path;
+		
+		bool compile = module->compile;
+		if (compile) {
+			size_t len = strlen(binFolder) + strlen(filepath) + 6;
+			path = malloc(len);
+			sprintf(path, "%s/%s.asm", binFolder, filepath);
+			mkdir_p(path);
+		} else {
+			size_t len = strlen(binFolder) + strlen(filepath) + 4;
+			path = malloc(len);
+			sprintf(path, "%s/%s.c", binFolder, filepath);
+			mkdir_p(path);
+		}
 
 		FILE* f = fopen(path, "w");
 		free(path);
@@ -435,7 +444,7 @@ FILE* ScopeFile_requireAssembly(ScopeFile* file, char generationState) {
 
 		// Write text section
 		/// TODO: check if transpile ?
-		if (module->compile) {
+		if (compile) {
 			fprintf(f, "section .text\n\n\n");
 		} else {
 			fprintf(f, "#include <stdint.h>\n\n");

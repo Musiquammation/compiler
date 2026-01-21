@@ -1,4 +1,4 @@
 function put {
-	let x: int;
-	this.value = 32;
+	this.value = value;
+    return value;
 }

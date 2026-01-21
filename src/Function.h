@@ -15,7 +15,8 @@ extern long functionNextId;
 
 
 enum {
-	FONCTIONFLAGS_SEPARATED
+	FUNCTIONFLAGS_SEPARATED = 1,
+	FUNCTIONFLAGS_THIS = 2
 };
 
 
