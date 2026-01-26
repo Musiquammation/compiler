@@ -316,7 +316,7 @@ ExtendedPrototypeSize Prototype_getSizes(Prototype* proto) {
 	case PROTO_MODE_PRIMITIVE:
 	{
 		int size = proto->primitive.size;
-		return (ExtendedPrototypeSize){size, size, true};
+		return (ExtendedPrototypeSize){size, size, proto->primitive.sizeCode};
 	}
 	case PROTO_MODE_VOID:
 		return (ExtendedPrototypeSize){0, 0, true};

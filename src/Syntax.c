@@ -2736,7 +2736,11 @@ void Syntax_functionScope_freeLabel(
 			ExtendedPrototypeSize eps = Prototype_getSizes(last->proto);
 			uint tmpId = Trace_ins_create(trace, NULL, eps.size, 0, eps.primitiveSizeCode);
 			// Put source in tmp variable
-			Trace_set(trace, valueExpr, tmpId, -1, eps.size, valueExprType);
+			Trace_set(
+				trace, valueExpr, tmpId, -1,
+				eps.primitiveSizeCode ? eps.primitiveSizeCode : eps.size,
+				valueExprType
+			);
 
 			switch (origin->type) {
 			case EXPRESSION_FAST_ACCESS:

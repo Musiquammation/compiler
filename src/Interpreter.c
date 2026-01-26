@@ -1941,8 +1941,7 @@ static void irun_jmp(Cursor* c, trline_t line) {
 }
 
 static void irun_cast(Cursor* c, trline_t line) {
-	printf("TODO: cast");
-	// raiseError("[TODO] eval irun_cast");
+	raiseError("[TODO] eval irun_cast");
 }
 
 static void irun_stackPtr(Cursor* c, trline_t line) {
