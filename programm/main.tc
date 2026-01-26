@@ -1,11 +1,9 @@
 function main {
 	let integer: Integer;
-	integer.value = 991;
-	let testReturns = integer.put(323);
+	let ptr = &integer;
 
-	integer.define<73>();
+	integer.define<70>();
 
-	return testReturns;
 }
 
 

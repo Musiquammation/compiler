@@ -264,3 +264,34 @@ void* Array_getAt(Array* array, ushort index) {
 	return array->data + array->size * index;
 }
 
+
+
+
+void Array_sort(Array* array, Array_SortComparator_t* comparator) {
+    if (!array || array->length <= 1) return;
+    qsort(array->data, array->length, array->size, comparator);
+}
+
+void Array_sortAndRemoveDoublons(Array* array, Array_SortComparator_t* comparator) {
+    if (!array || array->length <= 1) return;
+
+    qsort(array->data, array->length, array->size, comparator);
+
+    char* base = (char*)array->data;
+    ushort write = 0;
+
+    for (ushort read = 0; read < array->length; read++) {
+        if (write == 0) {
+            memcpy(base + (write * array->size), base + (read * array->size), array->size);
+            write++;
+        } else {
+            if (comparator(base + (write-1) * array->size,
+                           base + (read) * array->size) != 0) {
+                memcpy(base + (write * array->size), base + (read * array->size), array->size);
+                write++;
+            }
+        }
+    }
+
+    array->length = write;
+}

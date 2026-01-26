@@ -1,8 +1,10 @@
 #include "Function.h"
 
+#include "Type.h"
 #include "Variable.h"
 #include "Scope.h"
 #include "Class.h"
+#include "Interpreter.h"
 
 #include "helper.h"
 
@@ -13,6 +15,7 @@ long functionNextId = 0;
 void Function_create(Function* fn) {
 	fn->stdBehavior = -1;
 	fn->traceId = functionNextId;
+	fn->interpreter = NULL;
 	functionNextId++;
 }
 
@@ -43,6 +46,11 @@ void Function_delete(Function* fn) {
 			free(v);
 		}
 		free(fn->settings);
+	}
+
+	if (fn->interpreter) {
+		Interpreter_delete(fn->interpreter);
+		free(fn->interpreter);
 	}
 }
 

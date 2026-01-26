@@ -169,7 +169,7 @@ void Trace_ins_def(Trace* trace, int variable, int offset, int signedSize, casta
 void Trace_ins_move(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
 void Trace_ins_loadSrc(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
 void Trace_ins_loadDst(Trace* trace, int destVar, int srcVar, int destOffset, int srcOffset, int size, char isRegistrable);
-trline_t* Trace_ins_if(Trace* trace, uint destVar);
+trline_t* Trace_ins_if(Trace* trace, uint destVar, int size);
 void Trace_ins_jmp(Trace* trace, uint instruction);
 void Trace_ins_placeReg(Trace* trace, int srcVariable, int dstVariable, int reg, int packedSize);
 void Trace_ins_placeVar(Trace* trace, int dstVariable, int reg, int packedSize);
@@ -274,6 +274,7 @@ enum {
 	 * ACTION=10: open shadow placements
 	 * ACTION=11: trival usages
 	 * ACTION=12: fncall return dst variable (for transpiler)
+	 * ACTION=13: remember size of next variable
 	 */
 	TRACECODE_STAR = TRACE_USAGE_LIMIT+1,
 

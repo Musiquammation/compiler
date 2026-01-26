@@ -191,8 +191,6 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 			int settingsToDefineCount = settingLength;
 
 			ProtoSetting* settings = malloc(settingLength * sizeof(ProtoSetting));
-			char okFlag[settingLength];
-			memset(okFlag, 0, sizeof(okFlag));
 
 			// Copy settings
 			for (int i = 0; i < settingLength; i++) {

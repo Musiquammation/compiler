@@ -1,5 +1,6 @@
 #include "Syntax.h"
 
+#include "Interpreter.h"
 #include "ScopeBuffer.h"
 #include "Scope.h"
 #include "Parser.h"
@@ -316,7 +317,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 				fn->args_len = argLen;
 				fn->settings = NULL;
 				fn->settings_len = 0;
-				fn->flags = FUNCTIONFLAGS_THIS;
+				fn->flags = FUNCTIONFLAGS_THIS | FUNCTIONFLAGS_INTERPRET;
 
 				// Fill return type
 				Prototype* returnType = originFn->returnType;
@@ -1404,7 +1405,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		}
 
 		Prototype* proto = Prototype_create_reference(
-			expression->data.property.variableArr, expression->data.property.length);
+			expression->data.property.variableArr, expression->data.property.args_len);
 
 		free(expression);
 		
@@ -2099,7 +2100,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			Expression* expr = malloc(sizeof(Expression));
 			expr->type = EXPRESSION_PROPERTY;
 			expr->data.property.variableArr = currentVarPath.data;
-			expr->data.property.length = currentVarPath.length;
+			expr->data.property.args_len = currentVarPath.length;
 			expr->data.property.origin = last;
 			expr->data.property.freeVariableArr = true;
 			last = expr;
@@ -2158,12 +2159,12 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				size_t size = sizeof(Expression*) * args.length;
 				Expression** ae = malloc(size);
 				memcpy(ae, args.data, size);
-				last->data.fncall.length = args.length;
+				last->data.fncall.args_len = args.length;
 				last->data.fncall.args = ae;
 				free(args.data);
 				
 			} else {
-				last->data.fncall.length = 0;
+				last->data.fncall.args_len = 0;
 			}
 
 			last->type = EXPRESSION_FNCALL;
@@ -2245,6 +2246,9 @@ static int giveIdToVariable(Variable* variable, Trace* trace, int size, bool isR
 
 
 
+
+
+
 static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope) {
 	valueExpr = Expression_cross(valueExpr);
 	int exprType = valueExpr->type;
@@ -2252,7 +2256,7 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	if (exprType == EXPRESSION_PROPERTY) {
 		Expression* origin = valueExpr->data.property.origin;
 		Variable** varr = valueExpr->data.property.variableArr;
-		int varr_len = valueExpr->data.property.length;
+		int varr_len = valueExpr->data.property.args_len;
 
 		Type* rootType;
 		if (origin) {
@@ -2283,7 +2287,8 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	
 	if (exprType == EXPRESSION_FNCALL) {
 		protoAndType_t pat = {.proto = valueExpr->data.fncall.fn->returnType};
-		pat.type = Prototype_generateType(pat.proto, scope);
+		/// TODO: define useThis as true or false
+		pat.type = Intrepret_call(valueExpr, scope);
 		return pat;
 	}
 	
@@ -2337,7 +2342,7 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 		reference->data.property.freeVariableArr = false;
 
 		protoAndType_t pat;
-		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.length);
+		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.args_len);
 		pat.type = Prototype_generateType(pat.proto, scope);
 		return pat;
 
@@ -2345,6 +2350,9 @@ static protoAndType_t generateExpressionType(Expression* valueExpr, Scope* scope
 	
 	raiseError("[TODO]: this expression is not handled");
 }
+
+
+
 
 /**
  * @warning The prototypes of varrDest must be defined
@@ -2369,7 +2377,7 @@ static void placeExpression(
 			signedSize = Prototype_getSignedSize(last->proto);
 
 		} else {
-			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.length-1];
+			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.args_len-1];
 			Prototype* lvp = lv->proto;
 
 			switch (Prototype_mode(*lvp)) {
@@ -2538,7 +2546,7 @@ static void placeExpression(
 			return;
 		}
 		
-		int refArrLength = reference->data.property.length;
+		int refArrLength = reference->data.property.args_len;
 		Variable** refVarArr = reference->data.property.variableArr;
 		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
 
@@ -2720,7 +2728,7 @@ void Syntax_functionScope_freeLabel(
 			return;
 
 		Variable** varr = destExpression->data.property.variableArr;
-		int length = destExpression->data.property.length;
+		int length = destExpression->data.property.args_len;
 		Expression* origin = destExpression->data.property.origin;
 
 		if (origin) {
@@ -2754,7 +2762,7 @@ void Syntax_functionScope_freeLabel(
 					case EXPRESSION_PROPERTY:
 					{
 						Variable** varr = base->data.property.variableArr;
-						int length = base->data.property.length;
+						int length = base->data.property.args_len;
 						int offset = Prototype_getVariableOffset(varr, length);
 						
 						if (offset >= 0) {
@@ -2813,6 +2821,14 @@ void Syntax_functionScope_freeLabel(
 
 	case EXPRESSION_FNCALL:
 	{
+		Type* shadowType = Intrepret_call(destExpression, &scope->scope);
+
+		if (shadowType) {
+			Type_free(shadowType);
+		}
+
+		// destExpression->data.fncall.args
+
 		Trace_set(
 			trace,
 			destExpression,
@@ -2882,16 +2898,17 @@ static void Syntax_functionScope_if(
 
 
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, 4);
+	int conditionSize = 4;
+	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, conditionSize);
 	
 	/// TODO: handle size
-	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -conditionSize, exprType);
 
 	Expression_free(exprType, expr);
 	free(expr);
 
 	
-	trline_t* ifLine = Trace_ins_if(trace, dest);
+	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
 	Trace_ins_savePlacement(trace);
@@ -2975,13 +2992,14 @@ static void Syntax_functionScope_while(
 	/// TODO: handle size
 	// Collect test value
 	int exprType = expr->type;
-	uint dest = Trace_ins_create(trace, NULL, 4, 0, 4);
-	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -4, exprType);
+	int conditionSize = 4;
+	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, conditionSize);
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -conditionSize, exprType);
 	Expression_free(exprType, expr);
 	free(expr);
 
 	// Add ifline
-	trline_t* ifLine = Trace_ins_if(trace, dest);
+	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
 	Trace_ins_saveShadowPlacement(trace);
@@ -3180,6 +3198,8 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	*Trace_push(&trace, 1) = TRACECODE_STAR;
 	
 
+	// Print pack
+	printf("Pack: %s\n", fn->name);
 	TracePack* pack = trace.first;
 	int position = 0;
 	while (pack) {
@@ -3187,6 +3207,14 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 		position += pack->completion+1;
 		pack = pack->next;
 	}
+	printf("\n");
+
+
+	// Produce interpret
+	if (fn->flags & FUNCTIONFLAGS_INTERPRET) {
+		fn->interpreter = Interpreter_build(&trace);
+	}
+	
 
 
 	if (Scope_reachModule(scope)->compile) {
@@ -3212,6 +3240,17 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 			Trace_popVariable(&trace, thisvar.id);
 		
 		Trace_delete(&trace, false);
+	}
+
+
+	// Delete pack
+	if ((fn->flags & FUNCTIONFLAGS_INTERPRET) == 0) {
+		TracePack* p = trace.first;
+		while (p) {
+			TracePack* next = p->next;
+			free(p);
+			p = next;
+		}
 	}
 	
 	

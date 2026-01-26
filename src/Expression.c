@@ -42,7 +42,7 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_FNCALL:
 	{
-		int argLength = e->data.fncall.length;
+		int argLength = e->data.fncall.args_len;
 		if (argLength) {
 			typedef Expression* ptr_t;
 			Array_for(ptr_t, e->data.fncall.args, argLength, ptr) {
@@ -714,7 +714,7 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 
 	case EXPRESSION_PROPERTY:
 	{
-		int subLength = expr->data.property.length - 1;
+		int subLength = expr->data.property.args_len - 1;
 		return Prototype_getSignedSize(expr->data.property.variableArr[subLength]->proto);
 	}
 

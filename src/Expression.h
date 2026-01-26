@@ -36,14 +36,14 @@ struct Expression {
 		struct {
 			Expression** args;
 			Function* fn;
-			int length;
+			int args_len;
 			int argsStartIndex;
 		} fncall;
 
 		struct {
 			Variable** variableArr;
 			Expression* origin;
-			int length;
+			int args_len;
 			bool freeVariableArr;
 		} property;
 

@@ -3,10 +3,8 @@
 
 #include "declarations.h"
 #include "label_t.h"
-#include "Prototype.h"
 #include "definitionState_t.h"
 #include "Scope.h"
-#include "Type.h"
 
 #include <stdio.h>
 #include "tools/Array.h"
@@ -16,7 +14,8 @@ extern long functionNextId;
 
 enum {
 	FUNCTIONFLAGS_SEPARATED = 1,
-	FUNCTIONFLAGS_THIS = 2
+	FUNCTIONFLAGS_THIS = 2,
+	FUNCTIONFLAGS_INTERPRET = 4
 };
 
 
@@ -32,6 +31,7 @@ struct Function {
 	int args_len;
 	int settings_len;
 	Prototype* returnType;
+	Interpreter* interpreter;
 	
 	
 	long traceId;

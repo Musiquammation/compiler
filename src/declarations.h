@@ -39,6 +39,6 @@ structdef(Type);
 structdef(ScopeType);
 structdef(TypeFollower);
 
-
+structdef(Interpreter);
 
 #endif

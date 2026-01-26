@@ -50,5 +50,7 @@ void* Array_reach(Array* array, ushort index, const void* emptyValue);
 void* Array_getAt(Array* array, ushort index);
 #define Array_get(Type, array, index) ((Type*)((array).data) + (index))
 
+void Array_sort(Array* array, Array_SortComparator_t* comparator);
+void Array_sortAndRemoveDoublons(Array* array, Array_SortComparator_t* comparator);
 
 #endif
