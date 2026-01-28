@@ -1,5 +1,9 @@
 class Vector {
-    x: int;
-    y: int;
-    z: int;
+	x: int;
+	y: int;
+	z: int;
+
+
+	@constructor
+	function();
 }

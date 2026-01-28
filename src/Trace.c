@@ -308,7 +308,6 @@ void Trace_pushArgs(Trace* trace, Variable** args, int arglen) {
 void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
 	for (int i = 0; i < arglen; i++) {
 		Variable* v = args[i];
-		printf("pop %d\n", v->id);
 		Trace_popVariable(trace, v->id);
 		v->id = -1;
 	}
@@ -693,7 +692,6 @@ static Write* reachWrite(int idx, int deep, int usageCapacity, VariableTrace* vt
 
 	int nextCapacity = usageCapacity*2 + 4;
 	Write* nextWrites = malloc(nextCapacity * sizeof(Write));
-	printf("%p %d\n", nextWrites, usageCapacity);
 	if (usageCapacity > 0) {
 		Write* oldWrites = vt->writes;
 		memcpy(nextWrites, oldWrites, usageCapacity * sizeof(Write));
@@ -1728,7 +1726,6 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
 		int srcVar = refVarArr[0]->id;
 		
-		printf("ds %d %d\n", destVar, srcVar);
 		Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
 		return;
 	}	

@@ -119,6 +119,7 @@ void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
 	def(stdFastAccess);
 	def(noMeta);
 	def(separation);
+	def(constructor);
 
 
 

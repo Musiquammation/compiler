@@ -4,6 +4,7 @@
 	@langstd class Pointer;
 
 
+	class Vector;
 	class Integer;
 
 	function main(): int;

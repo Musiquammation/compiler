@@ -299,7 +299,11 @@ void Module_addClass(Module* module, Class* cl) {
 	*Array_push(Class*, &module->classes) = cl;
 }
 
-void Module_addFunction(Module* module, Function* fn) {
+void Module_addFunction(Module* module, Function* fn, int addFlag) {
+	if (addFlag != SCOPEADDFN_OP_DEFAULT) {
+		raiseError("[Syntax] Cannot define a constructor in module");
+	}
+
 	*Array_push(Function*, &module->functions) = fn;
 }
 

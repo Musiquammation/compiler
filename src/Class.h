@@ -26,6 +26,7 @@ enum {
 struct Class {
 	Array variables; // type: Variable*
 	Array methods; // type: Function*
+	Array constructors; // type: Function*
 
 	Class* meta;
 	label_t name;
@@ -71,7 +72,7 @@ Function* ScopeClass_searchFunction(ScopeClass* scope, label_t name, ScopeSearch
 
 void ScopeClass_addVariable(ScopeClass* scope, Variable* v);
 void ScopeClass_addClass(ScopeClass* scope, Class* cl);
-void ScopeClass_addFunction(ScopeClass* scope, Function* fn);
+void ScopeClass_addFunction(ScopeClass* scope, Function* fn, int addFlag);
 
 
 

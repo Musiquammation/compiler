@@ -286,7 +286,10 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 		}
 		break;
 
-	
+	case EXPRESSION_TYPE:
+		slot->ptr = expr->data.type->data;
+		return true;
+
 
 	default:
 		raiseError("[Expression] Invalid expression in argument");
@@ -442,13 +445,11 @@ Type* Intrepret_interpret(
 		.usedVariablesCount = 0,
 	};
 
-	printf("RUNTIME:\n");
 	while (true) {
 		trline_t line;
 		move();
 
 		int code = line & 0x3ff;
-		printf("rcode: %d\n", code);
 
 		// Handle usages
 		if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {

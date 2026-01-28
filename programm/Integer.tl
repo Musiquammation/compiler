@@ -7,8 +7,11 @@ function define {
 	if (value >= 0) {
 		this.positive = 1;
 	}
+}
 
-	if (value < 0) {
-		this.positive = 2;
-	}
+@constructor
+@separation
+function {
+	this.isValueKnown = 0;
+	this.positive = 2;
 }

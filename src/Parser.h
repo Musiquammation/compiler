@@ -27,15 +27,6 @@ typedef struct {
 	};
 } Token;
 
-struct Annotation {
-	int type;
-
-	union {
-		struct {
-			int stdBehavior;
-		} stdFastAccess;
-	};
-};
 
 
 struct Parser {
@@ -176,15 +167,6 @@ enum {
 	TOKEN_OPERATORINDEX_1 = 25,
 };
 
-enum {
-	ANNOTATION_MAIN,
-	ANNOTATION_CONTROL,
-	ANNOTATION_LANGSTD,
-	ANNOTATION_FAST_ACCESS,
-	ANNOTATION_STD_FAST_ACCESS,
-	ANNOTATION_NO_META,
-	ANNOTATION_SEPARATION,
-};
 
 
 extern const char PARSER_OPERATOR_CHARS[];

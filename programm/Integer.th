@@ -11,6 +11,10 @@ class {
 
 	define<value: int>();
 
+	@constructor
+	function();
+
+
 	put(value: int): int;
 }
 

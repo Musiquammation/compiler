@@ -276,18 +276,18 @@ void Scope_addClass(Scope* scope, int scopeType, Class* cl) {
 	}
 }
 
-void Scope_addFunction(Scope* scope, int scopeType, Function* fn) {
+void Scope_addFunction(Scope* scope, int scopeType, int addFlag, Function* fn) {
 	switch (scopeType) {
 	case SCOPE_MODULE:
-		Module_addFunction((Module*)scope, fn);
+		Module_addFunction((Module*)scope, fn, addFlag);
 		break;
 	
 	case SCOPE_FILE:
-		ScopeFile_addFunction((ScopeFile*)scope, fn);
+		ScopeFile_addFunction((ScopeFile*)scope, fn, addFlag);
 		break;
 
 	case SCOPE_CLASS:
-		ScopeClass_addFunction((ScopeClass*)scope, fn);
+		ScopeClass_addFunction((ScopeClass*)scope, fn, addFlag);
 		break;
 
 	}
@@ -516,7 +516,7 @@ void ScopeFile_addClass(ScopeFile* file, Class* cl) {
 	*Array_push(Class*, &file->classes) = cl;
 }
 
-void ScopeFile_addFunction(ScopeFile* file, Function* fn) {
+void ScopeFile_addFunction(ScopeFile* file, Function* fn, int addFlag) {
 	*Array_push(Function*, &file->functions) = fn;
 }
 
@@ -588,11 +588,11 @@ void ScopePool_addClass(ScopePool* scope, Class* cl) {
 	}
 }
 
-void ScopePool_addFunction(ScopePool* scope, Function* fn) {
+void ScopePool_addFunction(ScopePool* scope, Function* fn, int flags) {
 	typedef Scope* ptr_t;
 	Array_for(ptr_t, scope->scopes, SCOPE_POOL_NUM, sptr) {
 		Scope* s = *sptr;
-		Scope_addFunction(s, s->type, fn);
+		Scope_addFunction(s, s->type, flags, fn);
 	}
 }
 

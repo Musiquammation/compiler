@@ -1,9 +1,11 @@
+
 function main {
-	let integer: Integer;
-	let ptr = &integer;
+	let integer = Integer {
+		value: 129
+	} ();
 
 	integer.define<70>();
 
+
+	return integer.value;
 }
-
-

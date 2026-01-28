@@ -12,6 +12,7 @@
 void Class_create(Class* cl) {
 	Array_create(&cl->variables, sizeof(Variable*));
 	Array_create(&cl->methods, sizeof(Function*));
+	Array_create(&cl->constructors, sizeof(Function*));
 	cl->definitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	cl->size = CLASSSIZE_UNDEFINED; // size is undefined
@@ -42,6 +43,16 @@ void Class_delete(Class* cl) {
 	}
 
 	Array_free(cl->methods);
+
+	Array_loopPtr(Function, cl->constructors, ptr) {
+		Function* i = *ptr;
+		Function_delete(i);
+		free(i);
+	}
+
+	Array_free(cl->constructors);
+
+	
 
 	if (cl->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Class_delete(cl->meta);
@@ -316,7 +327,15 @@ void ScopeClass_addClass(ScopeClass* scope, Class* cl) {
 
 }
 
-void ScopeClass_addFunction(ScopeClass* scope, Function* fn) {
-	*Array_push(Function*, &scope->cl->methods) = fn;
+void ScopeClass_addFunction(ScopeClass* scope, Function* fn, int addFlag) {
+	switch (addFlag) {
+	case SCOPEADDFN_OP_DEFAULT:
+		*Array_push(Function*, &scope->cl->methods) = fn;
+		break;
+
+	case SCOPEADDFN_OP_CONSTRUCTOR:
+		*Array_push(Function*, &scope->cl->constructors) = fn;
+		break;
+	}
 }
 

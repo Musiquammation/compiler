@@ -70,7 +70,6 @@ void Type_defaultConstructors(
 			Variable* variable = ProtoSetting_getVariable(setting, meta);
 			Type* stype = Prototype_generateType(proto, scope);
 			*((size_t*) (data + variable->offset)) = (size_t)stype;
-			printf("gave at %d\n", variable->offset);
 		}
 	}
 
@@ -123,7 +122,6 @@ void Type_defaultDestructors(mblock_t data, Class* cl) {
 
 		mblock_t dataPtr = data+variable->offset;
 		if (vcl == _langstd.type) {
-			printf("typeat %p inside %p [var=%s]\n", *(Type**)dataPtr, data, variable->name);
 			Type_free(*(Type**)dataPtr);
 			continue;
 		}

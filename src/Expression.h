@@ -7,6 +7,17 @@
 
 
 
+typedef struct {
+	Variable* variable;
+	Expression* expr;
+} constructorDefinition_t;
+
+
+typedef struct {
+	Prototype* proto;
+	Function* fn;
+} constructorOrigin_t;
+
 struct Expression {
 	int type;
 
@@ -52,7 +63,15 @@ struct Expression {
 			Expression* origin;
 		} fastAccess;
 
+		struct {
+			constructorOrigin_t* origin;
+			constructorDefinition_t* members; // last has .variable == NULL
+			Expression** args; // last equals NULL
+		} constructor;
+
 		Expression* linked;
+
+		Type* type;
 	} data;
 };
 
@@ -124,6 +143,8 @@ enum {
 	
 	EXPRESSION_ADDR_OF,         // &a
 	EXPRESSION_VALUE_AT,        // *a
+	EXPRESSION_CONSTRUCTOR,     // constructor
+	EXPRESSION_TYPE,            // type
 };
 
 enum {
@@ -169,5 +190,24 @@ Prototype* Expression_getPrimitiveProtoFromType(int type);
 Type* Expression_getPrimitiveTypeFromType(int type);
 Prototype* Expression_getPrimitiveProtoFromSize(int type);
 
+
+
+
+typedef struct {
+	Prototype* proto;
+	Type* type;
+} protoAndType_t;
+
+protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope);
+
+/**
+ * @warning The prototypes of varrDest must be defined
+ */
+void Expression_place(
+	Trace* trace,
+	Expression* valueExpr,
+	Variable** varrDest,
+	int varrDest_len
+);
 
 #endif

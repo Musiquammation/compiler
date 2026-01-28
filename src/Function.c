@@ -56,6 +56,9 @@ void Function_delete(Function* fn) {
 
 
 label_t Function_generateMetaName(label_t name, char addChar) {
+	if (name == NULL)
+		return NULL;
+
 	size_t length = strlen(name);
 	char* dest = malloc(length+2);
 	memcpy(dest, name, length);

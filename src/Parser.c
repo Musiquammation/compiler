@@ -1,5 +1,6 @@
 #include "Parser.h"
 
+#include "Annotation.h"
 #include "LabelPool.h"
 #include "globalLabelPool.h"
 

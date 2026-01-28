@@ -24,6 +24,11 @@ enum {
 	SCOPEFILEDEFFLAGS_TC = 4,
 };
 
+enum {
+	SCOPEADDFN_OP_DEFAULT = 0,
+	SCOPEADDFN_OP_CONSTRUCTOR = 1,
+};
+
 
 
 struct ScopeFile {
@@ -108,7 +113,7 @@ Type* Scope_searchType(Scope* scope, Variable* variable);
 
 void Scope_addVariable(Scope* scope, int scopeType, Variable* v);
 void Scope_addClass(Scope* scope, int scopeType, Class* cl);
-void Scope_addFunction(Scope* scope, int scopeType, Function* fn);
+void Scope_addFunction(Scope* scope, int scopeType, int flags, Function* fn);
 
 
 
@@ -125,7 +130,7 @@ Function* ScopeFile_searchFunction(ScopeFile* module, label_t name, ScopeSearchA
 
 void ScopeFile_addVariable(ScopeFile* file, Variable* v);
 void ScopeFile_addClass(ScopeFile* file, Class* cl);
-void ScopeFile_addFunction(ScopeFile* file, Function* fn);
+void ScopeFile_addFunction(ScopeFile* file, Function* fn, int flags);
 
 
 
@@ -135,7 +140,7 @@ Function* ScopePool_searchFunction(ScopePool* file, label_t namen, ScopeSearchAr
 
 void ScopePool_addVariable(ScopePool* file, Variable* v);
 void ScopePool_addClass(ScopePool* file, Class* cl);
-void ScopePool_addFunction(ScopePool* file, Function* fn);
+void ScopePool_addFunction(ScopePool* file, Function* fn, int flags);
 
 
 

@@ -37,7 +37,7 @@ Function* Module_searchFunction(Module* module, label_t name, ScopeSearchArgs* a
 
 void Module_addVariable(Module* module, Variable* v);
 void Module_addClass(Module* module, Class* cl);
-void Module_addFunction(Module* module, Function* fn);
+void Module_addFunction(Module* module, Function* fn, int addFlag);
 
 
 

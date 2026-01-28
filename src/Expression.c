@@ -1,4 +1,5 @@
 #include "Expression.h"
+#include "Interpreter.h"
 
 #include "chooseSign.h"
 #include "declarations.h"
@@ -155,6 +156,24 @@ void Expression_free(int type, Expression* e) {
 		free(target);
 		break;
 	}
+
+	case EXPRESSION_CONSTRUCTOR:
+		for (constructorDefinition_t* m = e->data.constructor.members; m->variable; m++) {
+			Expression_free(m->expr->type, m->expr);
+			free(m->expr);
+		}
+
+		for (Expression** ptr = e->data.constructor.args; *ptr; ptr++) {
+			Expression* arg = *ptr;
+			Expression_free(arg->type, arg);
+			free(arg);
+		}
+
+		free(e->data.constructor.members);
+		free(e->data.constructor.args);
+		Prototype_free(e->data.constructor.origin->proto, true);
+		free(e->data.constructor.origin);
+		break;
 	}
 }
 
@@ -913,3 +932,434 @@ Prototype* Expression_getPrimitiveProtoFromSize(int signedSize) {
 	
 	}
 }
+
+
+
+protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope) {
+	value = Expression_cross(value);
+	int exprType = value->type;
+
+	if (exprType == EXPRESSION_PROPERTY) {
+		Expression* origin = value->data.property.origin;
+		Variable** varr = value->data.property.variableArr;
+		int varr_len = value->data.property.args_len;
+
+		Type* rootType;
+		if (origin) {
+			protoAndType_t pat = Expression_generateExpressionType(origin, scope);
+			rootType = pat.type;
+			Prototype_free(pat.proto, false);
+		} else {
+			rootType = Scope_searchType(scope, varr[0]);
+			if (!rootType) {
+				raiseError("[Intern] Cannot find type of variable");
+			}
+		}
+
+
+		Variable* subVarr[varr_len];
+		memcpy(subVarr, varr, sizeof(subVarr));
+		Type* type = Type_deepCopy(rootType, subVarr[varr_len-1]->proto, subVarr, varr_len);
+
+		if (origin) {
+			Type_free(rootType);
+		}
+		
+		// Prototype* proto = varr[varr_len - 1]->proto;
+		Prototype* proto = type->proto;
+		Prototype_addUsage(*proto);
+		return (protoAndType_t){proto, type};
+	}
+	
+	if (exprType == EXPRESSION_FNCALL) {
+		protoAndType_t pat = {.proto = value->data.fncall.fn->returnType};
+		/// TODO: define useThis as true or false
+		pat.type = Intrepret_call(value, scope);
+		return pat;
+	}
+	
+	if (exprType == EXPRESSION_VALUE) {
+		raiseError("[TODO]: handle value read/edits");
+	}
+
+	if (exprType == EXPRESSION_FAST_ACCESS) {
+		protoAndType_t origin = Expression_generateExpressionType(value->data.fastAccess.origin, scope);
+		int stdBehavior = value->data.fastAccess.accessor->stdBehavior;
+		if (stdBehavior < 0) {
+			raiseError("[TODO]: perform real std behavior");
+		}
+
+		switch (stdBehavior) {
+		// pointer
+		case 0:
+		{
+			return origin;
+		}
+
+		default:
+			raiseError("[BadId]: Invalid id for standard fast access");
+		}
+	}
+
+	
+	if (exprType >= EXPRESSION_ADDITION && exprType <= EXPRESSION_L_DECREMENT) {
+		int signedSize = Expression_reachSignedSize(exprType, value);
+		protoAndType_t pat;
+		pat.proto = Expression_getPrimitiveProtoFromSize(signedSize);
+		pat.type = primitives_getType(pat.proto->primitive.cl);
+		return pat;
+	}
+	
+	if (exprType >= EXPRESSION_U8 && exprType <= EXPRESSION_FLOATING) {
+		protoAndType_t pat;
+		pat.proto = Expression_getPrimitiveProtoFromType(exprType);
+		pat.type = Expression_getPrimitiveTypeFromType(exprType);
+		return pat;
+	}
+	
+	if (exprType == EXPRESSION_ADDR_OF) {
+		Expression* reference = Expression_cross(value->data.operand.op);
+		if (reference->type != EXPRESSION_PROPERTY) {
+			raiseError("[Syntax] Can only get the address of a variable");
+			return (protoAndType_t){};
+		}
+
+		Variable** refVarArr = reference->data.property.variableArr;
+		reference->data.property.freeVariableArr = false;
+
+		protoAndType_t pat;
+		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.args_len);
+		pat.type = Prototype_generateType(pat.proto, scope);
+		return pat;
+	}
+
+	if (exprType == EXPRESSION_CONSTRUCTOR) {
+		protoAndType_t pat;
+		pat.proto = value->data.constructor.origin->proto;
+		pat.type = Prototype_generateType(pat.proto, scope);
+
+
+		Expression** args = value->data.constructor.args;
+		int argLen = 1;
+		for (; args[argLen]; argLen++){} // get length
+
+		Expression thisArg = {
+			.type = EXPRESSION_TYPE,
+			.data = {.type = pat.type}
+		};
+		args[0] = &thisArg;
+
+		/// TODO: choose argsStartIndex
+		Expression fncall = {
+			.type = EXPRESSION_FNCALL,
+			.data = {.fncall = {
+				.args = args,
+				.fn = value->data.constructor.origin->fn,
+				.args_len = argLen,
+				.argsStartIndex = 0	
+			}}
+		};
+
+		Intrepret_call(&fncall, scope);
+
+		args[0] = NULL;
+		return pat;
+	}
+
+
+	
+	raiseError("[TODO]: this expression is not handled");
+}
+
+
+
+void Expression_place(
+	Trace* trace,
+	Expression* valueExpr,
+	Variable** varrDest,
+	int varrDest_len
+) {
+	// Read targetExpr
+	Expression* sourceExpr = Expression_cross(valueExpr);
+	int sourceExprType = sourceExpr->type;
+
+	if (sourceExprType == EXPRESSION_PROPERTY) {
+		Variable* first = varrDest[0];
+		Variable* last = varrDest[varrDest_len-1];
+		int id;
+		int signedSize;
+		id = first->id;
+		if (id >= 0) {
+			signedSize = Prototype_getSignedSize(last->proto);
+
+		} else {
+			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.args_len-1];
+			Prototype* lvp = lv->proto;
+
+			switch (Prototype_mode(*lvp)) {
+			case PROTO_MODE_REFERENCE:
+			{
+
+				break;
+			}
+
+			case PROTO_MODE_DIRECT:
+			{
+				signedSize = Prototype_getSignedSize(lvp);
+
+				char psc = lvp->direct.primitiveSizeCode;
+				if (psc) {
+					id = Trace_ins_create(trace, lv, psc < 0 ? -psc : psc, 0, psc);
+				} else {
+					id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, 0);
+				}
+				first->id = id;
+				break;
+			}
+
+			case PROTO_MODE_VARIADIC:
+			{
+
+				break;
+			}
+
+			case PROTO_MODE_PRIMITIVE:
+			{
+				signedSize = lvp->primitive.sizeCode;
+				id = Trace_ins_create(trace, lv, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				first->id = id;
+				break;
+			}
+
+			case PROTO_MODE_VOID:
+			{
+				raiseError("[Intern] Cannot set a variable to void");
+				return;
+			}
+
+
+			}
+		}
+		// int firstId = giveIdToVariable(varrDest);
+
+		Trace_set(
+			trace,
+			sourceExpr,
+			id,
+			Prototype_getVariableOffset(varrDest, varrDest_len),
+			signedSize,	
+			EXPRESSION_PROPERTY
+		);
+
+	} else if (sourceExprType == EXPRESSION_FNCALL) {
+		/// TODO: handle null id
+		Trace_set(
+			trace,
+			sourceExpr,
+			varrDest[0]->id,
+			Prototype_getVariableOffset(varrDest, varrDest_len),
+			Prototype_getSignedSize(varrDest[varrDest_len-1]->proto),
+			EXPRESSION_FNCALL
+		);
+
+
+	} else if (sourceExprType == EXPRESSION_VALUE) {
+		raiseError("[TODO]: handle value read/edits");
+	
+	
+	} else if (sourceExprType >= EXPRESSION_ADDITION && sourceExprType <= EXPRESSION_L_DECREMENT) {
+		Prototype* vproto = varrDest[varrDest_len-1]->proto;
+
+		if (vproto) {
+			Trace_set(
+				trace,
+				sourceExpr,
+				varrDest[0]->id,
+				Prototype_getVariableOffset(varrDest, varrDest_len),
+				Prototype_getSignedSize(varrDest[varrDest_len-1]->proto),
+				sourceExprType
+			);
+		
+		} else if (varrDest_len == 1) {
+			Variable* v = varrDest[0];
+			int signedSize = Expression_reachSignedSize(sourceExprType, sourceExpr);
+			Prototype* p = Expression_getPrimitiveProtoFromSize(signedSize);
+
+			int id = v->id;
+			if (id < 0) {
+				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				v->id = id;
+			}
+
+
+			Trace_set(
+				trace,
+				sourceExpr,
+				id,
+				-1,
+				signedSize,
+				sourceExprType
+			);
+
+
+		} else {
+			raiseError("[Intern] No prototype to place expression");
+		}
+
+
+
+	} else if (sourceExprType >= EXPRESSION_U8 && sourceExprType <= EXPRESSION_FLOATING) {
+		int subLength = varrDest_len - 1;
+		/// TODO: check sizes
+
+		Prototype* vproto = varrDest[subLength]->proto;
+
+		if (vproto) {
+			int signedSize = Prototype_getSignedSize(vproto);
+	
+			Trace_ins_def(
+				trace,
+				varrDest[0]->id,
+				Prototype_getVariableOffset(varrDest, varrDest_len),
+				signedSize,
+				castable_cast(
+					Expression_getSignedSize(sourceExprType),
+					signedSize,
+					sourceExpr->data.num
+				)
+			);
+
+		} else if (subLength == 0) {
+			Variable* v = varrDest[0];
+			int signedSize = Expression_getSignedSize(sourceExprType);
+
+			int id = v->id;
+			if (id < 0) {
+				id = Trace_ins_create(trace, v, signedSize < 0 ? -signedSize : signedSize, 0, true);
+				v->id = id;
+			}
+
+			Trace_ins_def(
+				trace,
+				id,
+				-1,
+				signedSize,
+				castable_cast(
+					Expression_getSignedSize(sourceExprType),
+					signedSize,
+					sourceExpr->data.num
+				)
+			);
+		} else {
+			raiseError("[Intern] No prototype to place expression");
+		}
+
+
+	} else if (sourceExprType == EXPRESSION_ADDR_OF) {
+		Expression* reference = Expression_cross(sourceExpr->data.operand.op);
+		if (reference->type != EXPRESSION_PROPERTY) {
+			raiseError("[Syntax] Can only get the address of a variable");
+			return;
+		}
+		
+		int refArrLength = reference->data.property.args_len;
+		Variable** refVarArr = reference->data.property.variableArr;
+		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
+
+		int srcVar = refVarArr[0]->id;
+
+		int destVar = varrDest[0]->id;
+		int destOffset;
+		if (destVar < 0) {
+			destVar = Trace_ins_create(trace, varrDest[0], 8, 0, true);
+			varrDest[0]->id = destVar;
+			destOffset = -1;
+		} else {
+			destOffset = Prototype_getVariableOffset(varrDest, varrDest_len);
+		}
+
+
+		if (varrDest[varrDest_len-1]->proto == NULL) {
+			if (varrDest_len != 1) {
+				raiseError("[Intern] No prototype to place expression");
+			}
+
+			reference->data.property.freeVariableArr = false;
+		}
+		
+
+		Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
+		
+		
+
+
+
+	} else if (sourceExprType == EXPRESSION_CONSTRUCTOR) {
+		int id = varrDest[0]->id;
+			int offsetBase = Prototype_getPrimitiveSizeCode(varrDest[varrDest_len-1]->proto)
+			? -1 : Prototype_getVariableOffset(varrDest, varrDest_len);
+
+		// Define members
+		for (constructorDefinition_t* d = sourceExpr->data.constructor.members; true; d++) {
+			Variable* v = d->variable;
+			if (!v)
+				break;
+
+			Expression* expr = d->expr;
+			Trace_set(
+				trace,
+				expr,
+				id,
+				offsetBase == -1 ? -1 : offsetBase + v->offset,
+				Prototype_getSignedSize(v->proto),
+				expr->type
+			);
+		}
+
+		Expression** args = sourceExpr->data.constructor.args;
+		int argLen = 1;
+		for (; args[argLen]; argLen++){} // get length
+
+		
+		if (args[0] == NULL) {
+			Expression* thisArg = malloc(sizeof(Expression));
+			thisArg->type = EXPRESSION_PROPERTY,
+			thisArg->data.property.origin = NULL;
+			thisArg->data.property.variableArr = varrDest;
+			thisArg->data.property.args_len = varrDest_len;
+			thisArg->data.property.freeVariableArr = false;
+		
+			Expression* thisAddrArg = malloc(sizeof(Expression));
+			thisAddrArg->type = EXPRESSION_ADDR_OF;
+			thisAddrArg->data.operand.op = thisArg;
+			args[0] = thisAddrArg;
+		}
+
+		// Call constructor
+		Expression tmpExpr = {
+			.type = EXPRESSION_FNCALL,
+			.data = {.fncall = {
+				.args = args,
+				.fn = sourceExpr->data.constructor.origin->fn,
+				.argsStartIndex = 0,
+				.args_len = argLen
+			}}
+		};
+
+		Trace_set(
+			trace,
+			&tmpExpr,
+			TRACE_VARIABLE_NONE,
+			Prototype_getVariableOffset(varrDest, varrDest_len),
+			Prototype_getSignedSize(varrDest[varrDest_len-1]->proto),
+			EXPRESSION_FNCALL
+		);
+
+
+	} else {
+		raiseError("[TODO]: this expression is not handled");
+	}
+}
+
+
+
