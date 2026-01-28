@@ -1,6 +1,6 @@
 
 function main {
-	let integer = Integer {
+	let integer = Integer:def {
 		value: 129
 	} ();
 

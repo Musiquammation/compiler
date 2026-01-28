@@ -518,7 +518,7 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 		{
 			Expression* target = Syntax_expression(parser, scope, 0, false);
 			Expression* e = Array_push(Expression, &lineArr);
-
+			
 			int targetType = target->type;
 			if (targetType >= EXPRESSION_U8 && targetType <= EXPRESSION_FLOATING) {
 				*e = *target;
@@ -647,7 +647,6 @@ Expression* Syntax_expression(Parser* parser, Scope* scope, char isExpressionRoo
 	if (lineArr.length == 0) {
 		return NULL; // no expression
 	}
-
 
 
 	Expression* result = Expression_processLine(lineArr.data, lineArr.length);
@@ -1214,7 +1213,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			case 2:
 			{
 				runMethod:
-				if (annotationFlags & (ANNOTATION_FAST_ACCESS | ANNOTATION_STD_FAST_ACCESS)) {
+				if (annotationFlags & (ANNOTFLAG_FAST_ACCESS | ANNOTFLAG_STD_FAST_ACCESS)) {
 					raiseError("[Syntax] With fastAccess annotation, "
 						"you must use function keyword");
 				}
@@ -2030,62 +2029,44 @@ static void functionSettingsCall(
 
 
 
-static Expression* readConstructor(Parser* parser, Prototype* proto, Class* cl, Scope* scope) {
+static Expression* readConstructor(Parser* parser,
+	Prototype* proto,
+	Class* cl,
+	Scope* scope,
+	label_t constructorName
+) {
 	typedef Variable* var_t;
 	typedef Function* fn_t;
 	Array definitions; // type: constructorDefinition_t
 	Array_create(&definitions, sizeof(constructorDefinition_t));
 
+	// Read fn call
+	Function* constructor;
+	Array_loop(fn_t, cl->constructors, fptr) {
+		Function* fn = *fptr;
+		if (fn->name == NULL) {
+			constructor = fn;
+			goto constructorFound;
+		}
+	}
+
+	raiseError("[Unfound] Cannot find constructor");
+
+	constructorFound:
 	Parser_read(parser, &_labelPool);
-	if (TokenCompare(SYNTAXLIST_MEMBER_DEF, 0) == 1) {
-		finish:
-
-		// Read fn call
-		Function* constructor;
-		Parser_read(parser, &_labelPool);
-
-		switch (TokenCompare(SYNTAXLIST_CONSTRUCTOR_NAME, 0)) {
-		case 0: // call directly
-		{
-			Array_loop(fn_t, cl->constructors, fptr) {
-				Function* fn = *fptr;
-				if (fn->name == NULL) {
-					constructor = fn;
-					goto constructorFound;
-				}
-			}
-			break;
-		}
-		
-		case 1: // search by name
-		{
-			Parser_read(parser, &_labelPool);
-			if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
-				return NULL;
-
-			label_t name = parser->token.label;
-			Array_loop(fn_t, cl->constructors, fptr) {
-				Function* fn = *fptr;
-				if (fn->name == name) {
-					constructor = fn;
-					Parser_read(parser, &_labelPool);
-					if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
-						return NULL;
-					
-					goto constructorFound;
-				}
-			}
-			break;
-		}
-		}
-
-		raiseError("[Unfound] Cannot find constructor");
-	
-		constructorFound:
+	Token_println(&parser->token);
+	if (TokenCompare(SYNTAXLIST_CONSTRUCTOR_START, 0) == 1) {
+		finish:	
 		Array args;
 		Array_create(&args, sizeof(Expression*));
 		*Array_push(Expression*, &args) = NULL; // later, will be defined for 'this'
-		functionArgumentsCall(scope, parser, constructor, NULL, &args);
+
+		
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
+			raiseError("[TODO] No fncall");
+		} else {
+			functionArgumentsCall(scope, parser, constructor, NULL, &args);
+		}
 		*Array_push(Expression*, &args) = NULL; // mark the end
 
 		
@@ -2130,6 +2111,7 @@ static Expression* readConstructor(Parser* parser, Prototype* proto, Class* cl, 
 		found:
 		Parser_read(parser, &_labelPool);
 		if (TokenCompare(SYNTAXLIST_MEMBER_DEF_ENDING, 0) == 1) {
+			Parser_read(parser, &_labelPool);
 			goto finish;
 		}
 
@@ -2313,15 +2295,38 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			
 
 			Parser_read(parser, &_labelPool);
-			int syntaxIndex = TokenCompare(SYNTAXLIST_CONSTRUCTOR, 0);
-
-			// Constructor
-			if (syntaxIndex == 0) {
+			// Constructor name
+			switch (TokenCompare(SYNTAXLIST_CONSTRUCTOR, 0)) {
+			case 0:
+			{
 				if (last) {
 					raiseError("[Syntax] Cannot append an expression before a constructor");
 				}
 
-				last = readConstructor(parser, proto, cl, scope);
+				last = readConstructor(parser, proto, cl, scope, NULL);
+				break;
+			}
+				
+			case 1:
+			{
+				if (last) {
+					raiseError("[Syntax] Cannot append an expression before a constructor");
+				}
+
+				Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+					return NULL;
+
+				label_t name = parser->token.label;
+
+				Parser_read(parser, &_labelPool);
+				if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0))
+					return NULL;
+
+				last = readConstructor(parser, proto, cl, scope, name);
+				break;
+			}
+
 			}
 			
 			Parser_read(parser, &_labelPool);
