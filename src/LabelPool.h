@@ -73,6 +73,6 @@ label_t LabelPool_push(LabelPool* pool, const char* text);
 label_t LabelPool_search(const LabelPool* pool, const char* text);
 
 
-void CommonLabels_generate(CommonLabels* labels, LabelPool* pool);
+void CommonLabels_init(CommonLabels* labels, LabelPool* pool);
 
 #endif

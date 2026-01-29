@@ -71,7 +71,7 @@ label_t LabelPool_search(const LabelPool* pool, const char* text) {
 
 
 
-void CommonLabels_generate(CommonLabels* labels, LabelPool* pool) {
+void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	#define def(n) labels->_ ##n = LabelPool_push(pool, #n);
 
 	def(let);

@@ -15,7 +15,7 @@ class {
 	function();
 
 	@constructor
-	def();
+	def<value: int>();
 
 	put(value: int): int;
 }

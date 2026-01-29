@@ -1035,19 +1035,20 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 
 	if (exprType == EXPRESSION_CONSTRUCTOR) {
 		protoAndType_t pat;
+		int argsStartIndex = value->data.constructor.origin->argsStartIndex;
 		pat.proto = value->data.constructor.origin->proto;
 		pat.type = Prototype_generateType(pat.proto, scope);
 
 
 		Expression** args = value->data.constructor.args;
-		int argLen = 1;
+		int argLen = argsStartIndex+1;
 		for (; args[argLen]; argLen++){} // get length
 
 		Expression thisArg = {
 			.type = EXPRESSION_TYPE,
 			.data = {.type = pat.type}
 		};
-		args[0] = &thisArg;
+		args[argsStartIndex] = &thisArg;
 
 		/// TODO: choose argsStartIndex
 		Expression fncall = {
@@ -1056,13 +1057,14 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 				.args = args,
 				.fn = value->data.constructor.origin->fn,
 				.args_len = argLen,
-				.argsStartIndex = 0	
+				.argsStartIndex = argsStartIndex	
 			}}
 		};
 
+		printf("call %s\n", fncall.data.fncall.fn->name);
 		Intrepret_call(&fncall, scope);
 
-		args[0] = NULL;
+		args[argsStartIndex] = NULL;
 		return pat;
 	}
 
@@ -1317,11 +1319,12 @@ void Expression_place(
 		}
 
 		Expression** args = sourceExpr->data.constructor.args;
-		int argLen = 1;
+		int argsStartIndex = sourceExpr->data.constructor.origin->argsStartIndex;
+		int argLen = argsStartIndex+1;
 		for (; args[argLen]; argLen++){} // get length
 
 		
-		if (args[0] == NULL) {
+		if (args[argsStartIndex] == NULL) {
 			Expression* thisArg = malloc(sizeof(Expression));
 			thisArg->type = EXPRESSION_PROPERTY,
 			thisArg->data.property.origin = NULL;
@@ -1332,7 +1335,7 @@ void Expression_place(
 			Expression* thisAddrArg = malloc(sizeof(Expression));
 			thisAddrArg->type = EXPRESSION_ADDR_OF;
 			thisAddrArg->data.operand.op = thisArg;
-			args[0] = thisAddrArg;
+			args[argsStartIndex] = thisAddrArg;
 		}
 
 		// Call constructor
@@ -1341,7 +1344,7 @@ void Expression_place(
 			.data = {.fncall = {
 				.args = args,
 				.fn = sourceExpr->data.constructor.origin->fn,
-				.argsStartIndex = 0,
+				.argsStartIndex = argsStartIndex,
 				.args_len = argLen
 			}}
 		};

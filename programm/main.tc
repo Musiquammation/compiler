@@ -1,10 +1,6 @@
 
 function main {
-	let integer = Integer:def {
-		value: 129
-	} ();
-
-	integer.define<70>();
+	let integer = Integer:def<22>{}();
 
 
 	return integer.value;

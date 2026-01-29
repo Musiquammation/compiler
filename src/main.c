@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
 	LabelPool_create(&_labelPool);
 	
 	Module_create(&module);
-	CommonLabels_generate(&_commonLabels, &_labelPool);
+	CommonLabels_init(&_commonLabels, &_labelPool);
 	syntaxList_init();
 
 	primitives_init();

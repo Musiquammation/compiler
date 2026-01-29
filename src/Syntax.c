@@ -115,12 +115,17 @@ void Syntax_tcFile(ScopeFile* scope) {
 	Parser_open(&parser, filepath);
 	free(filepath);
 	
+	enum {
+		FLAG_CONSTRUCTOR = 1
+	};
+
 	scope->state_tc = DEFINITIONSTATE_READING;
 
 	Class* definedClass = Module_searchClass(Scope_reachModule(&scope->scope), scope->name, NULL);
 
 	
 	while (true) {
+		int flags = 0;
 		Parser_readAnnotated(&parser, &_labelPool);
 		Class* subDefinedClass = definedClass;
 
@@ -137,6 +142,10 @@ void Syntax_tcFile(ScopeFile* scope) {
 				}
 				break;
 			}
+
+			case ANNOTATION_CONSTRUCTOR:
+				flags |= FLAG_CONSTRUCTOR;
+				break;
 
 			default:
 			{
@@ -155,12 +164,22 @@ void Syntax_tcFile(ScopeFile* scope) {
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
-				.defaultName = scope->name,
+				.defaultName = NULL,
 				.definedClass = subDefinedClass
 			};
 
-			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser,
-				subDefinedClass ? SYNTAXDATAFLAG_FNDCL_THIS : 0, &defaultData);
+			int fnFlag = 0;
+			if (subDefinedClass) {
+				fnFlag |= SYNTAXDATAFLAG_FNDCL_THIS;
+			}
+
+			if (flags & FLAG_CONSTRUCTOR) {
+				fnFlag |= SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR;
+			}
+
+
+			Syntax_functionDeclaration(
+				&scope->scope, &noneScope, &parser, fnFlag, &defaultData);
 
 			break;
 		}
@@ -1807,15 +1826,28 @@ Function* Syntax_functionDeclaration(
 	// Search function in scope
 	/// TODO: this search
 	Function* fn;
+	typedef Function* fn_t;
 	Class* definedClass = defaultData->definedClass;
-	if (defaultData->definedClass) {
-		ScopeClass sc = {
-			.scope = {.type=SCOPE_CLASS, .parent=NULL},
-			.allowThis = false,
-			.cl = definedClass
-		};
-
-		fn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
+	if (definedClass) {		
+		if (flags & SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR) {
+			Array_loop(fn_t, definedClass->constructors, fptr) {
+				Function* f = *fptr;
+				if (f->name == name) {
+					fn = f;
+					goto constructorFound;
+				}
+			}
+			
+			fn = NULL;
+			constructorFound:
+		} else {
+			ScopeClass sc = {
+				.scope = {.type=SCOPE_CLASS, .parent=NULL},
+				.allowThis = false,
+				.cl = definedClass
+			};
+			fn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
+		}
 
 		if (!fn) {
 			fn = Scope_search(scope, name, NULL, SCOPESEARCH_FUNCTION);
@@ -2044,7 +2076,7 @@ static Expression* readConstructor(Parser* parser,
 	Function* constructor;
 	Array_loop(fn_t, cl->constructors, fptr) {
 		Function* fn = *fptr;
-		if (fn->name == NULL) {
+		if (fn->name == constructorName) {
 			constructor = fn;
 			goto constructorFound;
 		}
@@ -2053,12 +2085,31 @@ static Expression* readConstructor(Parser* parser,
 	raiseError("[Unfound] Cannot find constructor");
 
 	constructorFound:
+	// Read settings
+	Array args;
+	int argsStartIndex;
+	Array_create(&args, sizeof(Expression*));
 	Parser_read(parser, &_labelPool);
-	Token_println(&parser->token);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LANGLE, SYNTAXFLAG_UNFOUND) == 0) {
+		functionSettingsCall(scope, parser, &args);
+		argsStartIndex = args.length;
+		Parser_read(parser, &_labelPool);
+		Token_println(&parser->token);
+	} else {
+		argsStartIndex = 0;
+	}
+	
+	// Require left brace
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0))
+		return NULL;
+	
+	Parser_read(parser, &_labelPool);
+
+	// Read arg defintions
 	if (TokenCompare(SYNTAXLIST_CONSTRUCTOR_START, 0) == 1) {
+		Parser_read(parser, &_labelPool);
+
 		finish:	
-		Array args;
-		Array_create(&args, sizeof(Expression*));
 		*Array_push(Expression*, &args) = NULL; // later, will be defined for 'this'
 
 		
@@ -2076,6 +2127,7 @@ static Expression* readConstructor(Parser* parser,
 		Prototype_addUsage(*proto);
 		origin->proto = proto;
 		origin->fn = constructor;
+		origin->argsStartIndex = argsStartIndex;
 
 		ret->type = EXPRESSION_CONSTRUCTOR;
 		ret->data.constructor.origin = origin;
@@ -2295,7 +2347,8 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			
 
 			Parser_read(parser, &_labelPool);
-			// Constructor name
+			
+			// Call readConstructor
 			switch (TokenCompare(SYNTAXLIST_CONSTRUCTOR, 0)) {
 			case 0:
 			{
@@ -2303,6 +2356,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 					raiseError("[Syntax] Cannot append an expression before a constructor");
 				}
 
+				Parser_saveToken(parser);
 				last = readConstructor(parser, proto, cl, scope, NULL);
 				break;
 			}
@@ -2317,13 +2371,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 					return NULL;
 
-				label_t name = parser->token.label;
-
-				Parser_read(parser, &_labelPool);
-				if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0))
-					return NULL;
-
-				last = readConstructor(parser, proto, cl, scope, name);
+				last = readConstructor(parser, proto, cl, scope, parser->token.label);
 				break;
 			}
 

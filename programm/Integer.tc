@@ -2,3 +2,13 @@ function put {
 	this.value = value;
     return value;
 }
+
+@constructor
+function {
+
+}
+
+@constructor
+function def {
+
+}
