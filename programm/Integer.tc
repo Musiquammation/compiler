@@ -5,10 +5,10 @@ function put {
 
 @constructor
 function {
-
+    this.value = this.value + 21;
 }
 
 @constructor
 function def {
-
+    
 }

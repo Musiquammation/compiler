@@ -1,7 +1,5 @@
 
 function main {
-	let integer = Integer:def<22>{}();
-
-
+	let integer = Integer{value: 58}();
 	return integer.value;
 }

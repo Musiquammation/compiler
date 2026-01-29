@@ -62,6 +62,12 @@ struct CommonLabels {
 	label_t _noMeta;
 	label_t _separation;
 	label_t _constructor;
+
+
+	label_t _DEBUG_PRINT_CHAR;
+	label_t _DEBUG_PRINT_SHORT;
+	label_t _DEBUG_PRINT_INT;
+	label_t _DEBUG_PRINT_LONG;
 	
 };
 

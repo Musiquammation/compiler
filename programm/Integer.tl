@@ -12,8 +12,10 @@ function define {
 @constructor
 @separation
 function {
-	this.isValueKnown = 0;
-	this.positive = 2;
+	let u: int;
+	u = this.val;	
+	DEBUG_PRINT_INT u
+
 }
 
 @constructor

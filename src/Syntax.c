@@ -2670,21 +2670,11 @@ void Syntax_functionScope_freeLabel(
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
 
-		Variable** varr = destExpression->data.property.variableArr;
-		int length = destExpression->data.property.args_len;
+		Variable** destVarr = destExpression->data.property.variableArr;
+		int destLength = destExpression->data.property.args_len;
+		
 		Expression* origin = destExpression->data.property.origin;
-
 		if (origin) {
-			Variable* last = varr[length-1];
-			ExtendedPrototypeSize eps = Prototype_getSizes(last->proto);
-			uint tmpId = Trace_ins_create(trace, NULL, eps.size, 0, eps.primitiveSizeCode);
-			// Put source in tmp variable
-			Trace_set(
-				trace, valueExpr, tmpId, -1,
-				eps.primitiveSizeCode ? eps.primitiveSizeCode : eps.size,
-				valueExprType
-			);
-
 			switch (origin->type) {
 			case EXPRESSION_FAST_ACCESS:
 			{
@@ -2699,19 +2689,29 @@ void Syntax_functionScope_freeLabel(
 				// pointer
 				case 0:
 				{
+					Variable* last = destVarr[destLength-1];
+					ExtendedPrototypeSize eps = Prototype_getSizes(last->proto);
+					uint valueVar = Trace_ins_create(trace, NULL, eps.size, 0, eps.primitiveSizeCode);
+
+					// Put source in tmp variable
+					Trace_set(
+						trace, valueExpr, valueVar, -1,
+						eps.primitiveSizeCode ? eps.primitiveSizeCode : eps.size,
+						valueExprType
+					);
+
+
 					Expression* base = origin->data.fastAccess.origin;
-					int originType = base->type;
+					int baseType = base->type;
 					uint ptrVariable = Trace_ins_create(trace, NULL, 8, 0, true);
-					Trace_set(trace, base, ptrVariable, -1, 8, originType); // base should be a pointer
+					Trace_set(trace, base, ptrVariable, -1, 8, baseType); // base should be a pointer
 
 					// Get pointer
-					switch (originType) {
+					switch (baseType) {
 					case EXPRESSION_PROPERTY:
 					{
-						Variable** varr = base->data.property.variableArr;
-						int length = base->data.property.args_len;
-						int offset = Prototype_getVariableOffset(varr, length);
-						
+						int offset = Prototype_getGlobalVariableOffset(destVarr[0]->proto, destVarr, destLength);
+
 						if (offset >= 0) {
 							Trace_addUsage(trace, ptrVariable, -1, true);
 							Trace_addUsage(trace, ptrVariable, -1, false);
@@ -2726,17 +2726,16 @@ void Syntax_functionScope_freeLabel(
 
 						break;
 					}
-
+					
 					default:
 						raiseError("[Intern] Unfound type in handleOrigin");
-						return;
-
 					}
 
-					// Move
-					Trace_ins_loadDst(trace, ptrVariable, tmpId, -1, -1, eps.size, eps.primitiveSizeCode);
 
+					// Move
+					Trace_ins_loadDst(trace, ptrVariable, valueVar, -1, -1, eps.size, eps.primitiveSizeCode);
 					Trace_popVariable(trace, ptrVariable);
+					Trace_popVariable(trace, valueVar);
 					break;
 				}
 				}
@@ -2745,18 +2744,16 @@ void Syntax_functionScope_freeLabel(
 			}
 
 
+
 			default:
-				raiseError("[Syntax] Cannot use this origin for a destination");
+				raiseError("[Syntax] Cannot use this expression for origin");
 				return;
 			}
 
-			Trace_popVariable(trace, tmpId);
 
 		} else {
-			Expression_place(trace, valueExpr, varr, length);
+			Expression_place(trace, valueExpr, destVarr, destLength);
 		}
-
-
 
 		// Free expression
 		Expression_free(valueExprType, valueExpr);
@@ -2765,6 +2762,7 @@ void Syntax_functionScope_freeLabel(
 
 		break;
 	}
+
 
 	case EXPRESSION_FNCALL:
 	{
@@ -2803,8 +2801,8 @@ void Syntax_functionScope_freeLabel(
 	default:
 		raiseError("[Syntax] invalid expression type in free label");
 		break;
-	}
 
+	}
 
 	freeData:
 	Expression_free(destExpressionType, destExpression);
@@ -3063,15 +3061,33 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 			break;
 		}
 
+		// debug
+		#define debug(value)\
+			Parser_read(parser, &_labelPool);\
+			Trace_addUsage(\
+				trace,\
+				((Variable*)Scope_search(&scope->scope, parser->token.label,\
+					NULL, SCOPESEARCH_VARIABLE))->id,\
+				-1, true\
+			);\
+			*Trace_push(trace, 1) = TRACECODE_MEMORY | (1<<10) | (2<<11) | (value<<13);
+
+		case 7: debug(0); break;
+		case 8: debug(1); break;
+		case 9: debug(2); break;
+		case 10: debug(3); break;
+
+		#undef debug
+
 		// free label
-		case 7:
+		case 11:
 		{
 			Syntax_functionScope_freeLabel(scope, parser, parser->token.label, trace);
 			break;
 		}
 
 		// finish scope
-		case 8:
+		case 12:
 		{
 			goto finishScope;
 		}

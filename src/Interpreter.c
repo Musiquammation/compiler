@@ -401,6 +401,7 @@ static void irun_if(Cursor* c, trline_t line);
 static void irun_jmp(Cursor* c, trline_t line);
 static void irun_cast(Cursor* c, trline_t line);
 static void irun_stackPtr(Cursor* c, trline_t line);
+static void irun_memory(Cursor* c, trline_t line);
 
 
 Type* Intrepret_interpret(
@@ -563,6 +564,10 @@ Type* Intrepret_interpret(
 
 		case TRACECODE_STACK_PTR:
 			irun_stackPtr(&c, line);
+			break;
+
+		case TRACECODE_MEMORY:
+			irun_memory(&c, line);
 			break;
 
 		}
@@ -1951,5 +1956,47 @@ static void irun_stackPtr(Cursor* c, trline_t line) {
 	
 	*eval64(c->slots, c->vars[0]) = (uint64_t)((void*)&c->slots[variable]) + line;
 }
+
+static void irun_memory(Cursor* c, trline_t line) {
+	if (line & (1<<10)) {
+		trline_t action = (line >> 11) & 0x3;
+
+		if (action == 0) {
+			raiseError("[TODO] malloc");
+			return;
+		}
+
+		if (action == 1) {
+			raiseError("[TODO] free");
+			return;
+		}
+
+		// debug print
+		if (action == 2) {
+			switch (line >> 13) {
+			case 0:
+				printf("runtime08: %d\n", (int)*eval8(c->slots, c->vars[0]));
+				break;
+
+			case 1:
+				printf("runtime16: %d\n", (int)*eval16(c->slots, c->vars[0]));
+				break;
+
+			case 2:
+				printf("runtime32: %d\n", *eval32(c->slots, c->vars[0]));
+				break;
+
+			case 3:
+				printf("runtime64: %ld\n", *eval64(c->slots, c->vars[0]));
+				break;
+			}
+		}
+
+		return;
+	}
+
+	raiseError("[TODO] fixed malloc");
+}
+
 
 #undef move

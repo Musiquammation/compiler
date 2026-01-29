@@ -634,6 +634,10 @@ void TracePack_print(const TracePack* pack, int position) {
 					break;
 				}
 
+				case TRACECODE_MEMORY:
+					printf("[%04d] MEMORY\n", i);
+					break;
+
 				default:
 					printf("[%04d] UNKNOWN INSTRUCTION code=%d\n", i+position, next);
 					break;
@@ -2733,6 +2737,12 @@ void Trace_placeRegisters(Trace* trace) {
 			break;
 		}
 
+		case TRACECODE_MEMORY:
+		{
+			raiseError("[TODO] TRACECODE_MEMORY");
+			break;
+		}
+
 		}
 	
 		continueWhile:
@@ -4345,6 +4355,12 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 			break;
 		}
 
+		case TRACECODE_MEMORY:
+		{
+			raiseError("[TODO] memory");
+			break;
+		}
+
 
 
 		}
@@ -5222,11 +5238,34 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 			break;
 		}
 
-		case TRACECODE_LOAD:
+
+		case TRACECODE_MEMORY:
 		{
+			if (line & (1<<10)) {
+				trline_t action = (line >> 11) & 0x3;
+				if (action == 0) {
+					raiseError("[TODO] TRACECODE_MEMORY");
+					break;
+				}
+
+				if (action == 1) {
+					raiseError("[TODO] TRACECODE_MEMORY");
+					break;
+				}
+
+				// debug print
+				if (action == 2) {
+					// skip
+					break;
+				}
+				break;
+			}
+			
+			// fixed malloc
+			trline_t size = line >> 11;
+			raiseError("[TODO] TRACECODE_MEMORY fixed malloc");
 			break;
 		}
-
 
 		}
 

@@ -217,6 +217,10 @@ Token SYNTAXLIST_FUNCTION[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_while},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_return},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = k_switch},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_CHAR"},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_SHORT"},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_INT"},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_LONG"},
 	{.type = TOKEN_CTYPE_LABEL},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RBRACE},
 };

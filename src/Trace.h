@@ -455,13 +455,34 @@ enum {
 
 	/**
 	 * +00: CODE
-	 * +10: 1 => src is loaded ; 0 => dst is edited
-	 * +16: DECALAGE
-	 * 
-	 * +00: SIZE
+	 * +10: 0 => fixed malloc ; 1 => other
+	 * +11: [?]
 	 * +32
+	 * 
+	 * in case of fixed malloc:
+	 * +11: SIZE {22bits, ie. 2Mo of fixed size}
+	 * +32
+	 * 
+	 * else:
+	 * +11: ACTION
+	 * +13: [?]
+	 * +32
+	 * 
+	 * ACTION=0:
+	 * malloc with variable size (in first variable, output is for the dst)
+	 * +13: [blank]
+	 * +32
+	 * 
+	 * ACTION=1: 
+	 * free (ptr is in the unique given variable)
+	 * 
+	 * ACTION=2
+	 * print
+	 * +13: packed size
+	 * +15
+	 * 
 	 */
-	TRACECODE_LOAD,
+	TRACECODE_MEMORY
 };
 
 

@@ -120,9 +120,13 @@ void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	def(noMeta);
 	def(separation);
 	def(constructor);
-
-
-
+	
+	
+	
+	def(DEBUG_PRINT_CHAR);
+	def(DEBUG_PRINT_SHORT);
+	def(DEBUG_PRINT_INT);
+	def(DEBUG_PRINT_LONG);
 
 	#undef def
 }
