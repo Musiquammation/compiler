@@ -114,9 +114,12 @@ void Syntax_tcFile(ScopeFile* scope) {
 	Parser parser;
 	Parser_open(&parser, filepath);
 	free(filepath);
+
+	label_t defaultName = NULL;
 	
 	enum {
-		FLAG_CONSTRUCTOR = 1
+		FLAG_CONSTRUCTOR = 1,
+		FLAG_ARGUMENT_CONSTRUCTOR = 2
 	};
 
 	scope->state_tc = DEFINITIONSTATE_READING;
@@ -147,6 +150,10 @@ void Syntax_tcFile(ScopeFile* scope) {
 				flags |= FLAG_CONSTRUCTOR;
 				break;
 
+			case ANNOTATION_ARGUMENT_CONSTRUCTOR:
+				flags |= FLAG_CONSTRUCTOR | FLAG_ARGUMENT_CONSTRUCTOR;
+				break;
+
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
@@ -164,7 +171,7 @@ void Syntax_tcFile(ScopeFile* scope) {
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
-				.defaultName = NULL,
+				.defaultName = defaultName,
 				.definedClass = subDefinedClass
 			};
 
@@ -175,6 +182,9 @@ void Syntax_tcFile(ScopeFile* scope) {
 
 			if (flags & FLAG_CONSTRUCTOR) {
 				fnFlag |= SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR;
+				if (defaultName) {
+					fnFlag |= SYNTAXDATAFLAG_FNDCL_FORBID_NAME;
+				}
 			}
 
 
@@ -234,6 +244,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 	
 		bool separation = false;
 		bool constructor = false;
+		bool argumentConstructor = false;
 
 		Class* subDefinedClass = definedClass;
 
@@ -258,6 +269,13 @@ void Syntax_tlFile(ScopeFile* scope) {
 				constructor = true;
 				break;
 
+			case ANNOTATION_ARGUMENT_CONSTRUCTOR:
+				constructor = true;
+				argumentConstructor = true;
+				break;
+
+				default:
+				raiseError("[Syntax] Illegal annotation\n");
 			}
 		}
 
@@ -271,7 +289,16 @@ void Syntax_tlFile(ScopeFile* scope) {
 			// Name is not specified
 			Parser_saveToken(&parser);
 
-			if (constructor) {
+			if (argumentConstructor) {
+				Array_loop(fn_t, subDefinedClass->constructors, fnptr) {
+					Function* subfn = *fnptr;
+					if (subfn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+						originFn = subfn;
+						break;
+					}
+				}
+
+			} else if (constructor) {
 				Array_loop(fn_t, subDefinedClass->constructors, fnptr) {
 					Function* subfn = *fnptr;
 					if (subfn->name == NULL) {
@@ -282,6 +309,10 @@ void Syntax_tlFile(ScopeFile* scope) {
 			}
 		} else {
 			label_t name = parser.token.label;
+			if (argumentConstructor) {
+				raiseError("[Syntax] Name already specified");
+				return;
+			}
 
 			if (constructor) {
 				Array_loop(fn_t, subDefinedClass->constructors, fnptr) {
@@ -375,6 +406,9 @@ void Syntax_tlFile(ScopeFile* scope) {
 			fn->settings = NULL;
 			fn->settings_len = 0;
 			fn->flags = FUNCTIONFLAGS_THIS | FUNCTIONFLAGS_INTERPRET;
+			if (originFn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+				fn->flags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+			}
 
 			// Fill return type
 			Prototype* returnType = originFn->returnType;
@@ -403,7 +437,28 @@ void Syntax_tlFile(ScopeFile* scope) {
 			}
 
 		} else {
-			raiseError("[TODO] handle separation false");
+			parser.annotations.length = 0;
+
+			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
+			/// TODO: definition required ?
+			const Syntax_FunctionDeclarationArg defaultData = {
+				.defaultName = NULL,
+				.definedClass = subDefinedClass
+			};
+
+
+			originFn->flags |= FUNCTIONFLAGS_INTERPRET;
+			if (subDefinedClass) {
+				originFn->flags |= FUNCTIONFLAGS_THIS;
+			}
+
+			if (argumentConstructor) {
+				originFn->flags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+			}
+
+			originFn->definitionState = DEFINITIONSTATE_READING;
+			Syntax_functionDefinition(&scope->scope, &parser, originFn, subDefinedClass);
+			originFn->definitionState = DEFINITIONSTATE_DONE;
 		}
 
 		parser.annotations.length = 0;
@@ -977,11 +1032,11 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 	int annotationFlags = 0;
 	int stdBehavior = -1;
-	label_t constructorName = NULL;
 	enum {
 		ANNOTFLAG_FAST_ACCESS = 1,
 		ANNOTFLAG_STD_FAST_ACCESS = 2,
 		ANNOTFLAG_CONSTRUCTOR = 4,
+		ANNOTFLAG_ARGUMENT_CONSTRUCTOR = 8,
 	};
 
 	metaControlFunctions.reserved = 0; // to prevent Array_free
@@ -1052,6 +1107,10 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				annotationFlags |= ANNOTFLAG_CONSTRUCTOR;
 				break;
 
+			case ANNOTATION_ARGUMENT_CONSTRUCTOR:
+				annotationFlags |= ANNOTFLAG_CONSTRUCTOR | ANNOTFLAG_ARGUMENT_CONSTRUCTOR;
+				break;
+
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
@@ -1076,15 +1135,15 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				return;
 			}
 
-			if (cl->std_methods.fastAccess) {
-				raiseError("[Architecture] This class has already a fast access method");
-				return;
-			}
-
 			if (annotationFlags & ANNOTFLAG_FAST_ACCESS) {
+				if (cl->std_methods.fastAccess) {
+					raiseError("[Architecture] This class has already a fast access method");
+					return;
+				}
+
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL,
+					.definedClass = cl,
 					.stdBehavior = -1
 				};
 
@@ -1104,9 +1163,14 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				cl->std_methods.fastAccess = fn;
 			
 			} else if (annotationFlags & ANNOTFLAG_STD_FAST_ACCESS) {
+				if (cl->std_methods.fastAccess) {
+					raiseError("[Architecture] This class has already a fast access method");
+					return;
+				}
+
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL,
+					.definedClass = cl,
 					.stdBehavior = stdBehavior
 				};
 
@@ -1126,25 +1190,29 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				cl->std_methods.fastAccess = fn;
 
 			} else {
+				// Constructor
 				Syntax_FunctionDeclarationArg declData = {
-					.defaultName = LABEL_NULL,
-					.definedClass = NULL,
+					.defaultName = NULL,
+					.definedClass = cl,
 					.stdBehavior = stdBehavior
 				};
+
+				int sf = (SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+						SYNTAXDATAFLAG_FNDCL_THIS |
+						SYNTAXDATAFLAG_FNDCL_FORBID_RETURN |
+						SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR);
+
+				if (annotationFlags & ANNOTFLAG_ARGUMENT_CONSTRUCTOR) {
+					sf |= SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR;
+				}
 
 				Function* fn = Syntax_functionDeclaration(
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
-					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-						SYNTAXDATAFLAG_FNDCL_THIS |
-						SYNTAXDATAFLAG_FNDCL_FORBID_RETURN |
-						SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR),
-
+					sf,
 					&declData
 				);
-			
-
 			}
 			
 
@@ -1482,7 +1550,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		}
 
 		Prototype* proto = Prototype_create_reference(
-			expression->data.property.variableArr, expression->data.property.args_len);
+			expression->data.property.varr, expression->data.property.varr_len);
 
 		free(expression);
 		
@@ -1660,6 +1728,9 @@ Function* Syntax_functionDeclaration(
 
 	parser->annotations.length = 0; // clear annotations
 
+	if (flags & SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR) {
+		fnFlags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+	}
 
 	if (flags & SYNTAXDATAFLAG_FNDCL_FAST_ACCESS) {
 		Variable* arg = malloc(sizeof(Variable));
@@ -1829,7 +1900,18 @@ Function* Syntax_functionDeclaration(
 	typedef Function* fn_t;
 	Class* definedClass = defaultData->definedClass;
 	if (definedClass) {		
-		if (flags & SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR) {
+		if (flags & SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR) {
+			Array_loop(fn_t, definedClass->constructors, fptr) {
+				Function* f = *fptr;
+				if (f->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+					fn = f;
+					goto argumentConstructorFound;
+				}
+			}
+			
+			fn = NULL;
+			argumentConstructorFound:
+		} else if (flags & SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR) {
 			Array_loop(fn_t, definedClass->constructors, fptr) {
 				Function* f = *fptr;
 				if (f->name == name) {
@@ -1848,11 +1930,6 @@ Function* Syntax_functionDeclaration(
 			};
 			fn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
 		}
-
-		if (!fn) {
-			fn = Scope_search(scope, name, NULL, SCOPESEARCH_FUNCTION);
-		}
-
 	} else {
 		fn = Scope_search(scope, name, NULL, SCOPESEARCH_FUNCTION);
 	}
@@ -2311,8 +2388,8 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 			generatePathExpr:
 			Expression* expr = malloc(sizeof(Expression));
 			expr->type = EXPRESSION_PROPERTY;
-			expr->data.property.variableArr = currentVarPath.data;
-			expr->data.property.args_len = currentVarPath.length;
+			expr->data.property.varr = currentVarPath.data;
+			expr->data.property.varr_len = currentVarPath.length;
 			expr->data.property.origin = last;
 			expr->data.property.freeVariableArr = true;
 			last = expr;
@@ -2431,12 +2508,12 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				size_t size = sizeof(Expression*) * args.length;
 				Expression** ae = malloc(size);
 				memcpy(ae, args.data, size);
-				last->data.fncall.args_len = args.length;
+				last->data.fncall.varr_len = args.length;
 				last->data.fncall.args = ae;
 				free(args.data);
 				
 			} else {
-				last->data.fncall.args_len = 0;
+				last->data.fncall.varr_len = 0;
 			}
 
 			last->type = EXPRESSION_FNCALL;
@@ -2613,7 +2690,7 @@ void Syntax_functionScope_varDecl(ScopeFunction* scope, Trace* trace, Parser* pa
 
 
 	} else {
-		type = Prototype_generateType(proto, &scope->scope);
+		type = Prototype_generateType(proto, &scope->scope, TYPE_CWAY_DEFAULT);
 	}
 	
 	ScopeFunction_pushVariable(scope, variable, proto, type);
@@ -2670,8 +2747,8 @@ void Syntax_functionScope_freeLabel(
 		if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
 			return;
 
-		Variable** destVarr = destExpression->data.property.variableArr;
-		int destLength = destExpression->data.property.args_len;
+		Variable** destVarr = destExpression->data.property.varr;
+		int destLength = destExpression->data.property.varr_len;
 		
 		Expression* origin = destExpression->data.property.origin;
 		if (origin) {
@@ -3104,6 +3181,9 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 }
 
 
+
+
+
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass) {
 	fn->definitionState = DEFINITIONSTATE_READING;
 
@@ -3146,24 +3226,39 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 		};
 	}
 
+
 	// Add arguments
 	Trace_pushArgs(&trace, fn->arguments, fn->args_len);
 	Trace_pushArgs(&trace, fn->settings, fn->settings_len);
 	
+	if (fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+		Trace_pushArgumentTypeConstructorCalls(&trace, &thisvar, thisclass);
+	}
 
-	// Function procedure
+
+	// Fill args
 	ScopeFunction_create(&fnScope);	
 
+
+	// Read content
 	Syntax_functionScope(&fnScope, &trace, parser);
-	
+
+	// Free scope
 	ScopeFunction_delete(&fnScope);
 	
+	// Finish trace
 	*Trace_push(&trace, 1) = TRACECODE_STAR;
 	
 
 	// Print pack
 	if (PRINT_PACK) {
-		printf("Pack: %s\n", fn->name);
+		printf("Pack: %s", fn->name);
+		if (thisclass) {
+			printf(" of %s", thisclass->name);
+		}
+
+		printf(" [fn: %p]\n", fn);
+
 		TracePack* pack = trace.first;
 		int position = 0;
 		while (pack) {
@@ -3290,6 +3385,11 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 
 	if (parser->token.label == _commonLabels._constructor) {
 		annotation->type = ANNOTATION_CONSTRUCTOR;
+		return;
+	} 
+
+	if (parser->token.label == _commonLabels._argumentConstructor) {
+		annotation->type = ANNOTATION_ARGUMENT_CONSTRUCTOR;
 		return;
 	} 
 

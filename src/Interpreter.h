@@ -26,6 +26,7 @@ void Interpreter_delete(Interpreter* itp);
 
 Type* Intrepret_call(Expression* fncallExpr, Scope* scope);
 
+
 Type* Intrepret_interpret(
 	const Interpreter* interpreter,
 	Scope* scope,

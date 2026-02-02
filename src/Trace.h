@@ -149,8 +149,10 @@ uint Trace_pushVariable(Trace* trace);
 void Trace_popVariable(Trace* trace, uint index);
 int Trace_reachFunction(Trace* trace, Function* fn);
 Function* Trace_getFunction(Trace* trace, int index);
+
 void Trace_pushArgs(Trace* trace, Variable** args, int arglen);
 void Trace_popArgs(Trace* trace, Variable** args, int arglen);
+void Trace_pushArgumentTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass);
 
 int Trace_packSize(int size);
 int Trace_unpackSize(int psize);

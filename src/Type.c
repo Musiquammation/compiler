@@ -1,5 +1,7 @@
 #include "Type.h"
 
+#include "Interpreter.h"
+#include "Expression.h"
 #include "Class.h"
 #include "Prototype.h"
 #include "Function.h"
@@ -61,14 +63,17 @@ void Type_defaultConstructors(
 	Class* meta,
 	ProtoSetting* settings,
 	int settingLength,
+	int way,
 	Scope* scope
 ) {
+	typedef Function* fn_t;
+
 	// Fill settings
 	Array_for(ProtoSetting, settings, settingLength, setting) {
 		if (setting->useProto) {
 			Prototype* proto = setting->proto;
 			Variable* variable = ProtoSetting_getVariable(setting, meta);
-			Type* stype = Prototype_generateType(proto, scope);
+			Type* stype = Prototype_generateType(proto, scope, way);
 			*((size_t*) (data + variable->offset)) = (size_t)stype;
 		}
 	}
@@ -104,12 +109,67 @@ void Type_defaultConstructors(
 			subSettingLength = 0;
 		}
 
-		Type_defaultConstructors(
-			data + variable->offset,
-			Prototype_getClass(proto),
-			subSettings, subSettingLength,
-			&subScope.scope
-		);	
+		switch (way) {
+		case TYPE_CWAY_DEFAULT:
+			Type_defaultConstructors(data + variable->offset, Prototype_getClass(proto),
+				subSettings, subSettingLength, TYPE_CWAY_DEFAULT, &subScope.scope);
+			break;
+
+		case TYPE_CWAY_ARGUMENT:
+			Type_defaultConstructors(data + variable->offset, Prototype_getClass(proto),
+				subSettings, subSettingLength, TYPE_CWAY_ARGUMENT, &subScope.scope);
+			break;
+		}
+	}
+
+	// Handle way to construct
+	switch (way) {
+	case TYPE_CWAY_DEFAULT:
+		break;
+
+	case TYPE_CWAY_ARGUMENT:
+		Array_loop(fn_t, meta->constructors, cptr) {
+			// Call constructor
+			Function* fn = *cptr;
+			if ((fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) == 0)
+				continue;
+
+			switch (fn->definitionState) {
+			case DEFINITIONSTATE_UNDEFINED:
+				printf("which %s\n", meta->name);
+				raiseError("[Undefined] Interpret status is undefined for this function");
+				return;
+
+			case DEFINITIONSTATE_READING:
+				raiseError("[Intern] Interpret status is reading for this function");
+				return;
+
+			case DEFINITIONSTATE_NOEXIST:
+				goto finishArgumentConstruction;
+			}
+
+			printf("construct %s\n", meta->name);
+
+			Expression expr = {.type = EXPRESSION_MBLOCK, .data = {
+				.mblock = data
+			}};
+			Expression* args[] = {&expr};
+
+			/// TODO: check argsStartIndex
+			Intrepret_interpret(
+				fn->interpreter,
+				scope,
+				args,
+				1,
+				0,
+				true
+			);
+			break;
+		}
+
+		finishArgumentConstruction:
+		break;
+
 	}
 }
 

@@ -103,7 +103,7 @@ Prototype* Prototype_create_variadic(Variable* ref);
 void Prototype_free(Prototype* proto, bool deep);
 
 
-Type* Prototype_generateType(Prototype* proto, Scope* scope);
+Type* Prototype_generateType(Prototype* proto, Scope* scope, int way);
 
 bool Prototype_accepts(const Prototype* proto, const Type* type);
 

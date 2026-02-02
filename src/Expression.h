@@ -2,6 +2,7 @@
 #define COMPILER_EXPRESSION_H_
 
 #include "declarations.h"
+#include "mblock_t.h"
 #include "label_t.h"
 #include "castable_t.h"
 
@@ -48,14 +49,14 @@ struct Expression {
 		struct {
 			Expression** args;
 			Function* fn;
-			int args_len;
+			int varr_len;
 			int argsStartIndex;
 		} fncall;
 
 		struct {
-			Variable** variableArr;
+			Variable** varr;
 			Expression* origin;
-			int args_len;
+			int varr_len;
 			bool freeVariableArr;
 		} property;
 
@@ -73,6 +74,8 @@ struct Expression {
 		Expression* linked;
 
 		Type* type;
+
+		mblock_t mblock;
 	} data;
 };
 
@@ -146,6 +149,7 @@ enum {
 	EXPRESSION_VALUE_AT,        // *a
 	EXPRESSION_CONSTRUCTOR,     // constructor
 	EXPRESSION_TYPE,            // type
+	EXPRESSION_MBLOCK,          // mblock
 };
 
 enum {

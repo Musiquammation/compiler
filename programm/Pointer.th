@@ -8,11 +8,16 @@ class {
 		isOwner: bool;
 		isReadable: bool;
 		isWritable: bool;
+	
+		@argumentConstructor
+		function();
 	}
 
 	address: size_t;
 
 	@stdFastAccess(0)
 	function: T;
+	
+
 }
 

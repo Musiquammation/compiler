@@ -5,6 +5,8 @@ class {
 		positive: char; // 0: no, 1: yes, 2: unknown
 
 		isPositive(): bool;
+		@argumentConstructor
+		function();
 	}
 
 	value: int;
@@ -17,7 +19,10 @@ class {
 	@constructor
 	def<value: int>();
 
+
+
 	put(value: int): int;
+	
 }
 
 

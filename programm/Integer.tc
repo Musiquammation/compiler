@@ -1,14 +1,16 @@
+
+
 function put {
 	this.value = value;
-    return value;
+	return value;
 }
 
 @constructor
 function {
-    this.value = this.value + 21;
+	this.value = this.value + 21;
 }
 
 @constructor
 function def {
-    
+	
 }

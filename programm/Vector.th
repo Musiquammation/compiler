@@ -1,4 +1,8 @@
 class Vector {
+	for {
+		isNull: char; // 0: no, 1: yes, 2: unknown
+	}
+
 	x: int;
 	y: int;
 	z: int;

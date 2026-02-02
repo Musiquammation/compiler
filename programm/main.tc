@@ -3,3 +3,7 @@ function main {
 	let integer = Integer{value: 58}();
 	return integer.value;
 }
+
+function provoque(i: Integer) {
+	
+}

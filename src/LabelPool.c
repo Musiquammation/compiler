@@ -120,6 +120,7 @@ void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	def(noMeta);
 	def(separation);
 	def(constructor);
+	def(argumentConstructor);
 	
 	
 	

@@ -1,11 +1,17 @@
 #ifndef COMPILER_TYPE_H_
 #define COMPILER_TYPE_H_
 
+#include "mblock_t.h"
+
 #include "Scope.h"
 #include "declarations.h"
 #include "tools/Array.h"
 
-typedef void* mblock_t;
+enum {
+	TYPE_CWAY_DEFAULT,
+	TYPE_CWAY_ARGUMENT,
+};
+
 
 struct Type {
 	Prototype* proto;
@@ -26,7 +32,7 @@ void Type_free(Type* type);
 
 void Type_defaultConstructors(
 	mblock_t data, Class* meta, ProtoSetting* settings,
-	int settingLength, Scope* scope);
+	int settingLength, int way, Scope* scope);
 
 void Type_defaultDestructors(mblock_t data, Class* cl);
 

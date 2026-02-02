@@ -1,3 +1,11 @@
+@control
+@argumentConstructor
+function {
+	let u = 10012002;
+	DEBUG_PRINT_INT u
+}
+
+
 @separation
 function define {
 	this.val = value;
@@ -12,11 +20,11 @@ function define {
 @constructor
 @separation
 function {
-	let u: int;
-	u = this.val;	
+	this.val = 94700;
+	let u = this.val;
 	DEBUG_PRINT_INT u
-
 }
+
 
 @constructor
 @separation
@@ -29,3 +37,4 @@ function def {
 		this.positive = 1;
 	}
 }
+

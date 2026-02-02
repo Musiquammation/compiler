@@ -15,7 +15,8 @@ extern long functionNextId;
 enum {
 	FUNCTIONFLAGS_SEPARATED = 1,
 	FUNCTIONFLAGS_THIS = 2,
-	FUNCTIONFLAGS_INTERPRET = 4
+	FUNCTIONFLAGS_INTERPRET = 4,
+	FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR = 8,
 };
 
 
@@ -39,7 +40,6 @@ struct Function {
 	int flags;
 };
 
-/// TODO: init defnodes
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
@@ -67,6 +67,7 @@ label_t Function_generateMetaName(label_t name, char addChar);
 
 
 
+
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 void FunctionAssembly_delete(FunctionAssembly* fa);
 
@@ -89,6 +90,7 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable);
+
 
 #endif
 

@@ -1,5 +1,6 @@
 #include "Function.h"
 
+#include "Expression.h"
 #include "Type.h"
 #include "Variable.h"
 #include "Scope.h"
@@ -86,29 +87,91 @@ void FunctionAssembly_delete(FunctionAssembly* fa) {
 
 
 
+
+static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
+	TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
+	Prototype* proto = variable->proto;
+	Prototype_reachMetaSizes(proto, &scope->scope, true);
+
+	Type* type = Prototype_generateType(proto, &scope->scope, way);
+	def->variable = variable;
+	def->type = type;
+
+	// call constructor on the type
+	typedef Function* fn_t;
+	Class* cl = Prototype_getClass(proto);
+
+	/*Array_loop(fn_t, cl->constructors, cptr) {
+		// Fill members
+		
+
+
+		// Call constructor
+		Function* fn = *cptr;
+		if ((fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR))
+			continue;
+
+		Expression arg = {
+			.type = EXPRESSION_TYPE,
+			.data = {.type = type}
+		};
+
+		Expression* argsList[] = {&arg};
+
+		Expression fncallExpr = { .type = EXPRESSION_FNCALL, .data = {
+			.fncall = {
+				.args = argsList,
+				.fn = fn,
+				.varr_len = 1,
+				.argsStartIndex = 0
+			}
+		}};
+
+		
+		Intrepret_call(&fncallExpr, &scope->scope);
+		break;
+	}*/
+}
+
 void ScopeFunction_create(ScopeFunction* scope) {
-	// Add defintions
-	int argLength = scope->fn->args_len;
 	Array_create(&scope->types, sizeof(TypeDefinition));
 
-	Variable** arguments = scope->fn->arguments;
-	for (int i = 0; i < argLength; i++) {
-		Variable* v = arguments[i];
-		TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
-		Prototype_reachMetaSizes(v->proto, &scope->scope, true);
-
-		Type* type = Prototype_generateType(v->proto, &scope->scope);
-		def->variable = v;
-		def->type = type;
+	if (scope->thisvar) {
+		int way = scope->fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR ?
+			TYPE_CWAY_DEFAULT : TYPE_CWAY_ARGUMENT;
+			
+		fillArgument(scope, scope->thisvar, way);
 	}
+
+	if (scope->fn) {
+		int argLength = scope->fn->args_len;
+	
+		// Fill variables
+		Variable** arguments = scope->fn->arguments;
+		for (int i = 0; i < argLength; i++) {
+			Variable* v = arguments[i];
+			fillArgument(scope, v, TYPE_CWAY_ARGUMENT);
+		}
+	}
+
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
 	int arglen = scope->fn->args_len;
 	int typelen = scope->types.length;
 	TypeDefinition* types = scope->types.data;
+
+	int i;
+	if (scope->thisvar) {
+		i = 1;
+		arglen++;
+
+		Type_free(types[0].type);
+	} else {
+		i = 0;
+	}
 	
-	for (int i = 0; i < typelen; i++) {
+	for (; i < typelen; i++) {
 		TypeDefinition* td = &types[i];
 		Type_free(td->type);
 		
@@ -118,6 +181,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 			free(v);
 		}
 	}
+
 	
 	Array_free(scope->types);
 	

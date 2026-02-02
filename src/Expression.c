@@ -29,7 +29,7 @@ void Expression_free(int type, Expression* e) {
 	case EXPRESSION_PROPERTY:
 	{
 		if (e->data.property.freeVariableArr) {
-			free(e->data.property.variableArr);
+			free(e->data.property.varr);
 		}
 		
 		Expression* o = e->data.property.origin;
@@ -43,7 +43,7 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_FNCALL:
 	{
-		int argLength = e->data.fncall.args_len;
+		int argLength = e->data.fncall.varr_len;
 		if (argLength) {
 			typedef Expression* ptr_t;
 			Array_for(ptr_t, e->data.fncall.args, argLength, ptr) {
@@ -733,8 +733,8 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 
 	case EXPRESSION_PROPERTY:
 	{
-		int subLength = expr->data.property.args_len - 1;
-		return Prototype_getSignedSize(expr->data.property.variableArr[subLength]->proto);
+		int subLength = expr->data.property.varr_len - 1;
+		return Prototype_getSignedSize(expr->data.property.varr[subLength]->proto);
 	}
 
 	case EXPRESSION_LINK:
@@ -941,8 +941,8 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 
 	if (exprType == EXPRESSION_PROPERTY) {
 		Expression* origin = value->data.property.origin;
-		Variable** varr = value->data.property.variableArr;
-		int varr_len = value->data.property.args_len;
+		Variable** varr = value->data.property.varr;
+		int varr_len = value->data.property.varr_len;
 
 		Type* rootType;
 		if (origin) {
@@ -1024,12 +1024,12 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 			return (protoAndType_t){};
 		}
 
-		Variable** refVarArr = reference->data.property.variableArr;
+		Variable** refVarArr = reference->data.property.varr;
 		reference->data.property.freeVariableArr = false;
 
 		protoAndType_t pat;
-		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.args_len);
-		pat.type = Prototype_generateType(pat.proto, scope);
+		pat.proto = Prototype_generateStackPointer(refVarArr, reference->data.property.varr_len);
+		pat.type = Prototype_generateType(pat.proto, scope, TYPE_CWAY_DEFAULT);
 		return pat;
 	}
 
@@ -1037,7 +1037,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 		protoAndType_t pat;
 		int argsStartIndex = value->data.constructor.origin->argsStartIndex;
 		pat.proto = value->data.constructor.origin->proto;
-		pat.type = Prototype_generateType(pat.proto, scope);
+		pat.type = Prototype_generateType(pat.proto, scope, TYPE_CWAY_DEFAULT);
 
 
 		Expression** args = value->data.constructor.args;
@@ -1056,7 +1056,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 			.data = {.fncall = {
 				.args = args,
 				.fn = value->data.constructor.origin->fn,
-				.args_len = argLen,
+				.varr_len = argLen,
 				.argsStartIndex = argsStartIndex	
 			}}
 		};
@@ -1095,7 +1095,7 @@ void Expression_place(
 			signedSize = Prototype_getSignedSize(last->proto);
 
 		} else {
-			Variable* lv = sourceExpr->data.property.variableArr[sourceExpr->data.property.args_len-1];
+			Variable* lv = sourceExpr->data.property.varr[sourceExpr->data.property.varr_len-1];
 			Prototype* lvp = lv->proto;
 
 			switch (Prototype_mode(*lvp)) {
@@ -1264,8 +1264,8 @@ void Expression_place(
 			return;
 		}
 		
-		int refArrLength = reference->data.property.args_len;
-		Variable** refVarArr = reference->data.property.variableArr;
+		int refArrLength = reference->data.property.varr_len;
+		Variable** refVarArr = reference->data.property.varr;
 		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
 
 		int srcVar = refVarArr[0]->id;
@@ -1328,8 +1328,8 @@ void Expression_place(
 			Expression* thisArg = malloc(sizeof(Expression));
 			thisArg->type = EXPRESSION_PROPERTY,
 			thisArg->data.property.origin = NULL;
-			thisArg->data.property.variableArr = varrDest;
-			thisArg->data.property.args_len = varrDest_len;
+			thisArg->data.property.varr = varrDest;
+			thisArg->data.property.varr_len = varrDest_len;
 			thisArg->data.property.freeVariableArr = false;
 		
 			Expression* thisAddrArg = malloc(sizeof(Expression));
@@ -1345,7 +1345,7 @@ void Expression_place(
 				.args = args,
 				.fn = sourceExpr->data.constructor.origin->fn,
 				.argsStartIndex = argsStartIndex,
-				.args_len = argLen
+				.varr_len = argLen
 			}}
 		};
 

@@ -8,6 +8,7 @@
 #include "Class.h"
 #include "Expression.h"
 
+
 #include "helper.h"
 
 
@@ -310,6 +311,48 @@ void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
 		Variable* v = args[i];
 		Trace_popVariable(trace, v->id);
 		v->id = -1;
+	}
+}
+
+void Trace_pushArgumentTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass) {
+	/// TODO: check argsStartIndex 
+	Variable* currentArg;
+	Expression varExpr = {.type = EXPRESSION_PROPERTY, .data = {.property = {
+		.varr = &currentArg,
+		.origin = NULL,
+		.varr_len = 1,
+		.freeVariableArr = false
+	}}};
+
+
+	Expression* varExprList[] = {&varExpr};
+	Expression expr = {.type = EXPRESSION_FNCALL};
+	expr.data.fncall.args = varExprList;
+	expr.data.fncall.varr_len = 0;
+	expr.data.fncall.argsStartIndex = 0;
+	
+	typedef Variable* var_t;
+	typedef Function* fn_t;
+	
+
+	
+	Array_loop(var_t, thisclass->variables, vptr) {
+		Variable* v = *vptr;
+		Class* cl = Prototype_getClass(v->proto);
+		
+
+		// Search and call constructor
+		Array_loop(fn_t, cl->constructors, fptr) {
+			Function* fn = *fptr;
+			if (fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+				// constructor found
+				currentArg = v;
+				expr.data.fncall.fn = fn;
+
+				Trace_set(trace, &expr, TRACE_VARIABLE_NONE, -1, 0, EXPRESSION_FNCALL);
+				break;
+			}
+		}
 	}
 }
 
@@ -1132,8 +1175,8 @@ static void handleOrigin(Trace* trace, Expression* origin,
 			switch (nextType) {
 			case EXPRESSION_PROPERTY:
 			{
-				Variable** varr = next->data.property.variableArr;
-				int length = next->data.property.args_len;
+				Variable** varr = next->data.property.varr;
+				int length = next->data.property.varr_len;
 				int offset = Prototype_getGlobalVariableOffset(NULL, varr, length);
 				trline_t* arr = Trace_push(trace, 3);
 				arr[0] = TRACECODE_ARITHMETIC_IMM |
@@ -1187,8 +1230,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		}
 
 
-		int length = expr->data.property.args_len;
-		Variable** varr = expr->data.property.variableArr;
+		int length = expr->data.property.varr_len;
+		Variable** varr = expr->data.property.varr;
 		char primitiveSizeCode = Prototype_getPrimitiveSizeCode(varr[length-1]->proto);
 		int signedObjSize;
 		if (primitiveSizeCode) {
@@ -1258,7 +1301,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 	case EXPRESSION_FNCALL:
 	{
-		int argsLength = expr->data.fncall.args_len;
+		int argsLength = expr->data.fncall.varr_len;
 		int argsStartIndex = expr->data.fncall.argsStartIndex;
 		Expression** args = expr->data.fncall.args;
 
@@ -1725,8 +1768,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			raiseError("[TODO] Handle origin in addrOf (this)");
 		}
 		
-		int refArrLength = reference->data.property.args_len;
-		Variable** refVarArr = reference->data.property.variableArr;
+		int refArrLength = reference->data.property.varr_len;
+		Variable** refVarArr = reference->data.property.varr;
 		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
 		int srcVar = refVarArr[0]->id;
 		

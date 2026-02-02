@@ -169,7 +169,7 @@ char Prototype_directHasMeta(Prototype* proto) {
 	return hasMeta;
 }
 
-Type* Prototype_generateType(Prototype* proto, Scope* scope) {
+Type* Prototype_generateType(Prototype* proto, Scope* scope, int way) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
 	{
@@ -235,7 +235,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 		}
 
 		Prototype* meta = proto->direct.meta;
-		Type *metaType = Prototype_generateType(meta, scope);
+		Type* metaType = Prototype_generateType(meta, scope, way);
 		type->meta = metaType;
 
 		ExtendedPrototypeSize sizes = Prototype_getSizes(meta);
@@ -250,6 +250,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope) {
 				meta->direct.cl,
 				proto->direct.settings,
 				proto->direct.settingLength,
+				way,
 				scope);
 		} else {
 			type->data = NULL;

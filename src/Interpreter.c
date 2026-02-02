@@ -222,8 +222,6 @@ void Interpreter_delete(Interpreter* itp) {
 }
 
 
-
-
 Type* Intrepret_call(Expression* fncallExpr, Scope* scope) {
 	Function* fn = fncallExpr->data.fncall.fn;
 	switch (fn->metaDefinitionState) {
@@ -240,7 +238,7 @@ Type* Intrepret_call(Expression* fncallExpr, Scope* scope) {
 			fn->meta->interpreter,
 			scope,
 			fncallExpr->data.fncall.args,
-			fncallExpr->data.fncall.args_len,
+			fncallExpr->data.fncall.varr_len,
 			fncallExpr->data.fncall.argsStartIndex,
 			fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS
 		);
@@ -271,9 +269,9 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 				raiseError("[TODO] Handle origin case");
 			}
 
-			Variable** path = expr->data.property.variableArr;
+			Variable** path = expr->data.property.varr;
 			Type* type = Scope_searchType(scope, path[0]);
-			int offset = Prototype_getVariableOffset(path, expr->data.property.args_len);
+			int offset = Prototype_getVariableOffset(path, expr->data.property.varr_len);
 			if (offset < 0) {offset = 0;}
 			slot->ptr = type->data + offset;
 
@@ -290,6 +288,9 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 		slot->ptr = expr->data.type->data;
 		return true;
 
+	case EXPRESSION_MBLOCK:
+		slot->ptr = expr->data.mblock;
+		return true;
 
 	default:
 		raiseError("[Expression] Invalid expression in argument");
