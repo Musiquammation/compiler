@@ -41,8 +41,8 @@ void Function_delete(Function* fn) {
 		free(fn->arguments);
 	}
 
-	if (fn->returnType) {
-		Prototype_free(fn->returnType, true);
+	if (fn->returnPrototype) {
+		Prototype_free(fn->returnPrototype, true);
 	}
 
 	if (fn->settings) {
@@ -85,7 +85,6 @@ void Function_makeRequiresReal(Function* fn, Class* thisclass) {
 	
 	fn->flags |= FUNCTIONFLAGS_REAL_REQUIRES;
 
-	printf("make %s\n", fn->name);
 	int requires_len = fn->requires_len;
 	if (requires_len == 0)
 		return;

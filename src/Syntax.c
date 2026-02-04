@@ -416,15 +416,15 @@ void Syntax_tlFile(ScopeFile* scope) {
 			}
 
 			// Fill return type
-			Prototype* returnType = originFn->returnType;
+			Prototype* returnType = originFn->returnPrototype;
 			if (returnType) {
 				returnType = Prototype_reachMeta(returnType);
-				fn->returnType = returnType;
+				fn->returnPrototype = returnType;
 				if (returnType) {
 					Prototype_addUsage(*returnType);
 				}
 			} else {
-				fn->returnType = NULL;
+				fn->returnPrototype = NULL;
 			}
 
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
@@ -2106,7 +2106,7 @@ Function* Syntax_functionDeclaration(
 		Array_free(arguments);
 		fn->arguments = args;
 		fn->args_len = arguments.length;
-		fn->returnType = returnType;
+		fn->returnPrototype = returnType;
 		fn->flags = fnFlags;
 
 		if (settings_len <= 0) {
@@ -2314,7 +2314,6 @@ static Expression* readConstructor(Parser* parser,
 		functionSettingsCall(scope, parser, &args);
 		argsStartIndex = args.length;
 		Parser_read(parser, &_labelPool);
-		Token_println(&parser->token);
 	} else {
 		argsStartIndex = 0;
 	}
@@ -2464,7 +2463,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						accessorProto = proto;
 
 
-						proto = Prototype_reachProto(accessor->returnType, proto);
+						proto = Prototype_reachProto(accessor->returnPrototype, proto);
 
 						subScopePtr = Prototype_reachSubScope(
 							proto,
@@ -2539,7 +2538,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 
 			while (accessorFn) {
-				accessorProto = Prototype_reachProto(accessorFn->returnType, accessorProto);
+				accessorProto = Prototype_reachProto(accessorFn->returnPrototype, accessorProto);
 				Class* cl = Prototype_getClass(accessorProto);
 				
 				// Generate fastAccess expr
@@ -2673,13 +2672,13 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				goto returnResult;
 			}
 
-			if (!fn->returnType) {
+			if (!fn->returnPrototype) {
 				raiseError("[Architecture] Cannot get property from void return result");
 				return NULL;
 			}
 
 			/// TODO: handle .# syntax
-			subScopePtr = Prototype_reachSubScope(fn->returnType, &subScope);
+			subScopePtr = Prototype_reachSubScope(fn->returnPrototype, &subScope);
 
 			switch (syntaxIndex) {
 			// Member
@@ -3063,16 +3062,23 @@ static void Syntax_functionScope_if(
 
 
 	int exprType = expr->type;
-	int conditionSize = 4;
-	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, conditionSize);
+	int signedConditionSize = Expression_reachSignedSize(exprType, expr);
+	if (signedConditionSize == EXPRSIZE_INTEGER) {
+		signedConditionSize = -4;
+	} else if (signedConditionSize == EXPRSIZE_FLOATING) {
+		raiseError("[TODO] float in if");
+	}
+	int conditionSize = signedConditionSize < 0 ? -signedConditionSize : signedConditionSize;
+	uint dest = Trace_ins_create(trace, NULL, signedConditionSize, 0, signedConditionSize);
 	
 	/// TODO: handle size
-	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, -conditionSize, exprType);
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, signedConditionSize, exprType);
 
 	Expression_free(exprType, expr);
 	free(expr);
 
 	
+	printf("ifr %d\n", signedConditionSize);
 	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
@@ -3241,14 +3247,14 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		{
 			Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 			int exprType = expr->type;
-			int signedSize = Prototype_getSignedSize(scope->fn->returnType);
+			int signedSize = Prototype_getSignedSize(scope->fn->returnPrototype);
 			int size = signedSize >= 0 ? signedSize : -signedSize;
 
-			if (!scope->fn->returnType) {
+			if (!scope->fn->returnPrototype) {
 				raiseError("[Architecture] Tried to return void");
 				return -1;
 			}
-			char isRegistrable = Prototype_getPrimitiveSizeCode(scope->fn->returnType);
+			char isRegistrable = Prototype_getPrimitiveSizeCode(scope->fn->returnPrototype);
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
 
 			
@@ -3417,45 +3423,58 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	if (fn->flags & FUNCTIONFLAGS_INTERPRET) {
 		Interpreter* itp = Interpreter_build(&trace);
 		fn->interpreter = itp;
+		
+		Trace_popArgs(&trace, fn->settings, fn->settings_len);
+		Trace_popArgs(&trace, fn->arguments, fn->args_len);
+	
+		if (fnScope.thisvar)
+			Trace_popVariable(&trace, thisvar.id);
+			
+		Trace_delete(&trace, false);
+
+	
+	} else {
+		// Compile or transpile
+		if (Scope_reachModule(scope)->compile) {
+			Trace_placeRegisters(&trace);
+			
+			FunctionAssembly fnAsm;
+			FunctionAssembly_create(&fnAsm, &fnScope);
+			
+			/// TODO: enable this line
+			Trace_generateAssembly(&trace, &fnAsm);
+			FunctionAssembly_delete(&fnAsm);
+			Trace_delete(&trace, true);	
+	
+		} else {
+			FunctionAssembly fnAsm;
+			FunctionAssembly_create(&fnAsm, &fnScope);
+			Trace_generateTranspiled(&trace, &fnAsm, thisclass ? true : false);
+			FunctionAssembly_delete(&fnAsm);
+			Trace_popArgs(&trace, fn->settings, fn->settings_len);
+			Trace_popArgs(&trace, fn->arguments, fn->args_len);
+	
+			if (fnScope.thisvar)
+				Trace_popVariable(&trace, thisvar.id);
+			
+			Trace_delete(&trace, false);
+		}
+
+		// Delete pack
+		if ((fn->flags & FUNCTIONFLAGS_INTERPRET) == 0) {
+			TracePack* p = trace.first;
+			while (p) {
+				TracePack* next = p->next;
+				free(p);
+				p = next;
+			}
+		}
 	}
 	
 
 
-	if (Scope_reachModule(scope)->compile) {
-		Trace_placeRegisters(&trace);
-		
-		FunctionAssembly fnAsm;
-		FunctionAssembly_create(&fnAsm, &fnScope);
-		
-		/// TODO: enable this line
-		Trace_generateAssembly(&trace, &fnAsm);
-		FunctionAssembly_delete(&fnAsm);
-		Trace_delete(&trace, true);		
-
-	} else {
-		FunctionAssembly fnAsm;
-		FunctionAssembly_create(&fnAsm, &fnScope);
-		Trace_generateTranspiled(&trace, &fnAsm, thisclass ? true : false);
-		FunctionAssembly_delete(&fnAsm);
-		Trace_popArgs(&trace, fn->settings, fn->settings_len);
-		Trace_popArgs(&trace, fn->arguments, fn->args_len);
-
-		if (fnScope.thisvar)
-			Trace_popVariable(&trace, thisvar.id);
-		
-		Trace_delete(&trace, false);
-	}
 
 
-	// Delete pack
-	if ((fn->flags & FUNCTIONFLAGS_INTERPRET) == 0) {
-		TracePack* p = trace.first;
-		while (p) {
-			TracePack* next = p->next;
-			free(p);
-			p = next;
-		}
-	}
 	
 	
 	

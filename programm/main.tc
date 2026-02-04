@@ -1,6 +1,6 @@
 
 function main {
-	let integer = Integer{value: 58}();
+	let integer = Integer:def<58>{}();
 	integer.getSqrt();
 
 	return integer.value;

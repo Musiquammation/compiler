@@ -43,7 +43,7 @@ struct Function {
 	Variable** settings;
 	int args_len;
 	int settings_len;
-	Prototype* returnType;
+	Prototype* returnPrototype;
 	Interpreter* interpreter;
 	
 	struct {

@@ -729,7 +729,7 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 		goto restart;
 
 	case EXPRESSION_FNCALL:
-		return Prototype_getSignedSize(expr->data.fncall.fn->returnType);
+		return Prototype_getSignedSize(expr->data.fncall.fn->returnPrototype);
 
 	case EXPRESSION_PROPERTY:
 	{
@@ -783,6 +783,28 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 	}
 
 
+	case EXPRESSION_LOGICAL_AND:
+	case EXPRESSION_LOGICAL_OR:
+	case EXPRESSION_EQUAL:
+	case EXPRESSION_NOT_EQUAL:
+	case EXPRESSION_LESS:
+	case EXPRESSION_LESS_EQUAL:
+	case EXPRESSION_GREATER:
+	case EXPRESSION_GREATER_EQUAL:
+		int signedLeft = Expression_reachSignedSize(
+			expr->data.operands.left->type,
+			expr->data.operands.left
+		);
+
+		int signedRight = Expression_reachSignedSize(
+			expr->data.operands.right->type,
+			expr->data.operands.right
+		);
+
+		/// TODO: raise floatings
+
+		printf("choose cmp %d %d\n", signedLeft, signedRight);
+		return chooseSign(signedLeft, signedRight);
 	/// TODO: logical operations (max of operands)
 
 
@@ -972,7 +994,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 	}
 	
 	if (exprType == EXPRESSION_FNCALL) {
-		protoAndType_t pat = {.proto = value->data.fncall.fn->returnType};
+		protoAndType_t pat = {.proto = value->data.fncall.fn->returnPrototype};
 		/// TODO: define useThis as true or false
 		pat.type = Interpret_call(value, scope);
 		return pat;
@@ -1061,7 +1083,6 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 			}}
 		};
 
-		printf("call %s\n", fncall.data.fncall.fn->name);
 		Interpret_call(&fncall, scope);
 
 		args[argsStartIndex] = NULL;

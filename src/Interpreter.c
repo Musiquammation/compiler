@@ -224,6 +224,8 @@ void Interpreter_delete(Interpreter* itp) {
 
 Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 	Function* fn = fncallExpr->data.fncall.fn;
+
+	// Check metaDefinitionState
 	switch (fn->metaDefinitionState) {
 	case DEFINITIONSTATE_UNDEFINED:
 		raiseError("[Undefined] Interpret status is undefined for this function");
@@ -234,28 +236,87 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 		return NULL;
 
 	case DEFINITIONSTATE_DONE:
-		return Interpret_interpret(
-			fn->meta->interpreter,
-			scope,
-			fncallExpr->data.fncall.args,
-			fncallExpr->data.fncall.varr_len,
-			fncallExpr->data.fncall.argsStartIndex,
-			fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS
-		);
+		break;
 
 	case DEFINITIONSTATE_NOEXIST:
 		return NULL;
+
 	}
+
+	Expression** exprArgs = fncallExpr->data.fncall.args;
+
+	// Check for requires
+	Function_makeRequiresReal(fn, NULL);
+	Array_for(realRequireCouple_t, fn->realRequires, fn->requires_len, require) {
+		Function* testfn = require->fn;
+
+		// Check definitionState
+		switch (testfn->definitionState) {
+		case DEFINITIONSTATE_UNDEFINED:
+			raiseError("[Undefined] Interpret status is undefined for this function");
+			return NULL;
+
+		case DEFINITIONSTATE_READING:
+			raiseError("[Intern] Interpret status is reading for this function");
+			return NULL;
+			
+			case DEFINITIONSTATE_DONE:
+			break;
+			
+		case DEFINITIONSTATE_NOEXIST:
+			raiseError("[Intern] Interpret does not exists for this function");
+		}
+		
+		/// TODO: always use this and no argStartIndex=0?
+		if ((fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS) == 0) 
+			raiseError("[TODO] Interpret_call: no this");
+
+		if (fncallExpr->data.fncall.argsStartIndex != 0) 
+			raiseError("[TODO] Interpret_call: argsStartIndex");
+		
+
+		// Define mblock
+		Expression* arg = exprArgs[require->position];
+		interpreterSlot_t result = Interpret_interpret(
+			testfn->interpreter,
+			scope, &arg, 0, 0, true, true
+		);
+
+		if (result.u8 == 0) {
+			raiseError("[Runtime] Require failed");
+			return NULL;
+		}
+	}
+
+	// Run final code
+	Function* meta = fn->meta;
+	interpreterSlot_t result = Interpret_interpret(
+		meta->interpreter,
+		scope,
+		exprArgs,
+		fncallExpr->data.fncall.varr_len,
+		fncallExpr->data.fncall.argsStartIndex,
+		fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS,
+		meta->returnPrototype ? true:false
+	);
+
+	// Produce a type from the result
+	Prototype* returnPrototype = fn->returnPrototype;
+	if (returnPrototype == NULL) {
+		return NULL;
+	}
+
+	Prototype* mproto = meta->returnPrototype;
+	if (mproto == NULL) {
+		return NULL;
+	}
+
+	Type* type = Prototype_generateType(returnPrototype, scope, TYPE_CWAY_DEFAULT);
+
 
 }
 
-typedef union {
-	uint8_t u8;
-	uint16_t u16;
-	uint32_t u32;
-	uint64_t u64;
-	void* ptr;
-} slot_t;
+typedef interpreterSlot_t slot_t;
 
 
 static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
@@ -405,17 +466,18 @@ static void irun_stackPtr(Cursor* c, trline_t line);
 static void irun_memory(Cursor* c, trline_t line);
 
 
-Type* Interpret_interpret(
+interpreterSlot_t Interpret_interpret(
    	const Interpreter* itp,
 	Scope* scope,
 	Expression** args,
 	int argsLen,
 	int startArgIndex,
-	bool useThis
+	bool useThis,
+	bool shouldReturn
 ) {
    	if (!itp) {
 		raiseError("[Undefined] Interpreter not defined for this function");
-		return NULL;
+		return (interpreterSlot_t){};
 	}
 
 	// Slots
@@ -490,7 +552,12 @@ Type* Interpret_interpret(
 				break;
 
 			case 1: // quick skip
+				break;
+
 			case 2: // return
+				goto finishMainWhile;
+				break;
+
 			case 3: // forbid moves
 			case 4: // protect RAX for fncall
 			case 5: // protect RAX and RDX for fncall
@@ -581,6 +648,21 @@ Type* Interpret_interpret(
 
 	finishMainWhile:
 
+	interpreterSlot_t result;
+	// Take rax (if we need to return)
+	int skippedRemovedVariable;
+	if (shouldReturn) {
+		int variable = registers[TRACE_REG_RAX];
+		if (varMalloced[variable / 32] & (1u << (variable % 32))) {
+			skippedRemovedVariable = variable;
+		}
+
+		result = slots[variable];
+
+	} else {
+		skippedRemovedVariable = -1;
+	}
+	
 	// Clean unmalloced variables
 	free(c.vars);
 	for (int variable = 0; variable < varCount; variable++) {
@@ -590,8 +672,9 @@ Type* Interpret_interpret(
 	}
 	free(slots);
 
+	return result;
 
-	return NULL;
+	
 	#undef move
 }
 
@@ -1356,6 +1439,189 @@ static void irun_logic(Cursor* c, trline_t line) {
 
 
 	case 1:
+		switch (operation) {
+			case TRACEOP_BITWISE_AND:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) &
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_OR:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) |
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_XOR:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ^
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LEFT_SHIFT:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <<
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_RIGHT_SHIFT:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >>
+					*eval16(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_LOGICAL_AND:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) &&
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LOGICAL_OR:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ||
+					*eval16(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_EQUAL:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ==
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_NOT_EQUAL:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) !=
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS_EQUAL:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <=
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >
+					*eval16(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER_EQUAL:
+				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >=
+					*eval16(c->slots, c->vars[2]); break;
+
+
+			}
+
+			break;
+
+
+		case 2:
+			switch (operation) {
+			case TRACEOP_BITWISE_AND:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) &
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_OR:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) |
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_XOR:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ^
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LEFT_SHIFT:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <<
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_RIGHT_SHIFT:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >>
+					*eval32(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_LOGICAL_AND:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) &&
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LOGICAL_OR:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ||
+					*eval32(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_EQUAL:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ==
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_NOT_EQUAL:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) !=
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS_EQUAL:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <=
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >
+					*eval32(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER_EQUAL:
+				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >=
+					*eval32(c->slots, c->vars[2]); break;
+
+
+			}
+
+			break;
+
+
+		case 3:
+			switch (operation) {
+			case TRACEOP_BITWISE_AND:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) &
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_OR:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) |
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_BITWISE_XOR:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ^
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LEFT_SHIFT:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <<
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_RIGHT_SHIFT:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >>
+					*eval64(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_LOGICAL_AND:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) &&
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LOGICAL_OR:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ||
+					*eval64(c->slots, c->vars[2]); break;
+
+
+			case TRACEOP_EQUAL:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ==
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_NOT_EQUAL:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) !=
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_LESS_EQUAL:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <=
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >
+					*eval64(c->slots, c->vars[2]); break;
+
+			case TRACEOP_GREATER_EQUAL:
+				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >=
+					*eval64(c->slots, c->vars[2]); break;
+
+
+			}
+
+			break;
 	}
 }
 
@@ -1916,6 +2182,7 @@ static void jumpTo(Cursor* c, int destination) {
 }
 
 static void irun_if(Cursor* c, trline_t line) {
+	printf("rmbSize=%d ", c->rememberedSize);
 	switch (c->rememberedSize) {
 	case 1:
 		if (*eval8(c->slots, c->vars[0]))
@@ -1948,6 +2215,15 @@ static void irun_jmp(Cursor* c, trline_t line) {
 }
 
 static void irun_cast(Cursor* c, trline_t line) {
+	trline_t srcSigned = line & (1<<10);
+	trline_t srcFloat  = line & (1<<11);
+	trline_t dstSigned = line & (1<<12);
+	trline_t dstFloat  = line & (1<<13);
+	trline_t srcSize   = (line>>16) & 0x3;
+	trline_t dstSize   = (line>>18) & 0x3;
+
+	printf("got %d %d %d %d %d %d\n", srcSigned, srcFloat, dstSigned, dstFloat, srcSize, dstSize);
+
 	raiseError("[TODO] eval irun_cast");
 }
 

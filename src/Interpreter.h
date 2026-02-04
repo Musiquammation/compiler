@@ -3,7 +3,18 @@
 #include "declarations.h"
 #include "Trace.h"
 
+#include <stdint.h>
+
 structdef(TracePack);
+
+
+typedef union {
+	uint8_t u8;
+	uint16_t u16;
+	uint32_t u32;
+	uint64_t u64;
+	void* ptr;
+} interpreterSlot_t;
 
 
 typedef struct {
@@ -26,13 +37,13 @@ void Interpreter_delete(Interpreter* itp);
 
 Type* Interpret_call(Expression* fncallExpr, Scope* scope);
 
-
-Type* Interpret_interpret(
+interpreterSlot_t Interpret_interpret(
 	const Interpreter* interpreter,
 	Scope* scope,
 	Expression** args,
 	int argsLen,
 	int startArgIndex,
-	bool useThis
+	bool useThis,
+	bool shouldReturn
 );
 

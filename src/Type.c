@@ -162,7 +162,8 @@ void Type_defaultConstructors(
 				args,
 				1,
 				0,
-				true
+				true,
+				false
 			);
 			break;
 		}
@@ -278,7 +279,6 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 					if (s->useVariable && s->useProto) {
 						Prototype* origin = s->proto;
 						Prototype* p = origin;
-						printf("def %p\n", p);
 						while (true) {
 							Prototype* res = Prototype_reachProto(p, (*(vptr-1))->proto);
 							if (res == NULL || p == res) {

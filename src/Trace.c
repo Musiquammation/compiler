@@ -1438,7 +1438,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		// Output
 		if (destVar != TRACE_VARIABLE_NONE) {
-			int signedOutputSize = Prototype_getSignedSize(fn->returnType);
+			int signedOutputSize = Prototype_getSignedSize(fn->returnPrototype);
 			if (signedOutputSize == signedSize) {
 				Trace_ins_placeVar(trace, destVar, TRACE_REG_RAX, Trace_packSize(destSize));
 
@@ -1446,7 +1446,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				int outputSize = signedOutputSize >= 0 ? signedOutputSize : -signedOutputSize;
 				uint temp = Trace_ins_create(
 					trace, NULL, outputSize, 0,
-					Prototype_getPrimitiveSizeCode(fn->returnType)
+					Prototype_getPrimitiveSizeCode(fn->returnPrototype)
 				);
 
 				// Put output in temp variable
@@ -1890,11 +1890,11 @@ void Trace_ins_loadDst(Trace* trace, int destVar, int srcVar,
 
 
 trline_t* Trace_ins_if(Trace* trace, uint destVar, int varSize) {
+	*Trace_push(trace, 1) = TRACECODE_STAR | (13<<10) | (varSize<<16);
 	Trace_addUsage(trace, destVar, TRACE_OFFSET_NONE, true);
-	trline_t* line = Trace_push(trace, 2);
-	line[0] = TRACECODE_STAR | (13<<10) | (varSize<<16);
-	line[1] = TRACECODE_IF;
-	return &line[1];
+	trline_t* line = Trace_push(trace, 1);
+	*line = TRACECODE_IF;
+	return line;
 }
 
 void Trace_ins_jmp(Trace* trace, uint instruction) {
@@ -3385,10 +3385,10 @@ void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm) {
 
 	TraceStackHandler_create(&trace->stackHandler, trace->stackId);
 
-	if (fnAsm->fn->returnType) {
+	if (fnAsm->fn->returnPrototype) {
 		fprintf(output, "fn_%016lx: ; %s(...) -> %s;\n",
 			fnAsm->fn->traceId, fnAsm->fn->name, 
-			fnAsm->fn->returnType->direct.cl->c_name);
+			fnAsm->fn->returnPrototype->direct.cl->c_name);
 	} else {
 		fprintf(output, "fn_%016lx: ; %s(...);\n", fnAsm->fn->traceId, fnAsm->fn->name);
 	}
@@ -4514,10 +4514,10 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 	// Write function signature (return type and name)
 	Function* currentFunction = fnAsm->fn;
-	if (currentFunction->returnType) {
+	if (currentFunction->returnPrototype) {
 		fprintf(output, "// %s()\n%s fn_%016lx(",
 			currentFunction->name,
-			currentFunction->returnType->direct.cl->c_name,
+			currentFunction->returnPrototype->direct.cl->c_name,
 			currentFunction->traceId
 		);
 	} else {
@@ -4554,9 +4554,9 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 
 	// Create final variable
 	bool finalDefined;
-	if (currentFunction->returnType) {
+	if (currentFunction->returnPrototype) {
 		finalDefined = true;
-		int size = Prototype_getSignedSize(currentFunction->returnType);
+		int size = Prototype_getSignedSize(currentFunction->returnPrototype);
 		switch (size) {
 			case 1:
 			case -1:

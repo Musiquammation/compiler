@@ -11,8 +11,11 @@ class {
 		passRuntimePositive();
 		missRuntimePositive();
 
+
 		@condition(passRuntimePositive, missRuntimePositive)
 		cndPositive: bool;
+
+
 	}
 
 	value: int;
