@@ -1,5 +1,4 @@
-#ifndef COMPILER_EXPRESSION_H_
-#define COMPILER_EXPRESSION_H_
+#pragma once
 
 #include "declarations.h"
 #include "mblock_t.h"
@@ -215,4 +214,3 @@ void Expression_place(
 	int varrDest_len
 );
 
-#endif

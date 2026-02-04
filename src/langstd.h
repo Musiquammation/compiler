@@ -1,5 +1,4 @@
-#ifndef COMPILER_LANGSTD_H_
-#define COMPILER_LANGSTD_H_
+#pragma once
 
 #include "declarations.h"
 
@@ -14,4 +13,3 @@ typedef struct {
 extern langstd_t _langstd;
 
 
-#endif

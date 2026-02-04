@@ -1,5 +1,4 @@
-#ifndef COMPILER_SCOPE_H_
-#define COMPILER_SCOPE_H_
+#pragma once
 
 #include "declarations.h"
 #include "globalLabelPool.h"
@@ -145,4 +144,3 @@ void ScopePool_addFunction(ScopePool* file, Function* fn, int flags);
 
 
 
-#endif

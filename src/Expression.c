@@ -974,7 +974,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 	if (exprType == EXPRESSION_FNCALL) {
 		protoAndType_t pat = {.proto = value->data.fncall.fn->returnType};
 		/// TODO: define useThis as true or false
-		pat.type = Intrepret_call(value, scope);
+		pat.type = Interpret_call(value, scope);
 		return pat;
 	}
 	
@@ -1062,7 +1062,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 		};
 
 		printf("call %s\n", fncall.data.fncall.fn->name);
-		Intrepret_call(&fncall, scope);
+		Interpret_call(&fncall, scope);
 
 		args[argsStartIndex] = NULL;
 		return pat;

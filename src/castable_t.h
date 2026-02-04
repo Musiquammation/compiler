@@ -1,5 +1,4 @@
-#ifndef COMPILER_CASTABLE_T_H_
-#define COMPILER_CASTABLE_T_H_
+#pragma once
 
 typedef union {
 	char i8;
@@ -27,4 +26,3 @@ enum {
 castable_t castable_cast(int srcType, int destType, castable_t value);
 
 
-#endif

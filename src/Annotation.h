@@ -8,6 +8,21 @@ struct Annotation {
 		struct {
 			int stdBehavior;
 		} stdFastAccess;
+
+		struct {
+			label_t pass;
+			label_t miss;
+		} condition;
+
+		struct {
+			label_t pass;
+			label_t miss;
+		} test;
+
+		struct {
+			label_t object;
+			label_t fn;
+		} require;
 	};
 };
 
@@ -21,5 +36,8 @@ enum {
 	ANNOTATION_NO_META,
 	ANNOTATION_SEPARATION,
 	ANNOTATION_CONSTRUCTOR,
-	ANNOTATION_ARGUMENT_CONSTRUCTOR
+	ANNOTATION_ARGUMENT_CONSTRUCTOR,
+	ANNOTATION_CONDITION,
+	ANNOTATION_TEST,
+	ANNOTATION_REQUIRE,
 };

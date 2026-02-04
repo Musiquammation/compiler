@@ -73,7 +73,10 @@ void Syntax_thFile(ScopeFile* scope) {
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
-				.definedClass = NULL
+				.definedClass = NULL,
+				.stdBehavior = -1,
+				.args_len = -1,
+				.requireList = NULL
 			};
 
 			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser, 0, &defaultData);
@@ -172,7 +175,9 @@ void Syntax_tcFile(ScopeFile* scope) {
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = defaultName,
-				.definedClass = subDefinedClass
+				.definedClass = subDefinedClass,
+				.args_len = -1,
+				.requireList = NULL
 			};
 
 			int fnFlag = 0;
@@ -330,8 +335,8 @@ void Syntax_tlFile(ScopeFile* scope) {
 					.cl = subDefinedClass
 				};
 				originFn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
-
 			}
+
 			if (originFn == NULL) {
 				raiseError("[Unknown] Cannot find function");
 				return;
@@ -425,7 +430,9 @@ void Syntax_tlFile(ScopeFile* scope) {
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
-				.definedClass = subDefinedClass
+				.definedClass = subDefinedClass,
+				.args_len = -1,
+				.requireList = NULL
 			};
 
 
@@ -443,7 +450,9 @@ void Syntax_tlFile(ScopeFile* scope) {
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = NULL,
-				.definedClass = subDefinedClass
+				.definedClass = subDefinedClass,
+				.args_len = -1,
+				.requireList = NULL
 			};
 
 
@@ -810,7 +819,9 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 			{
 				const Syntax_FunctionDeclarationArg defaultData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL
+					.definedClass = NULL,
+					.args_len = -1,
+					.requireList = NULL
 				};
 
 				Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
@@ -996,6 +1007,8 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 		// Define metas
 		Class_appendMetas(cl);
 		Class_acheiveDefinition(cl);
+
+		Class_makeMethodsRequiresReal(cl);
 	}
 }
 
@@ -1032,14 +1045,22 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 	int annotationFlags = 0;
 	int stdBehavior = -1;
+	label_t testOrCond_pass;
+	label_t testOrCond_miss;
+
 	enum {
 		ANNOTFLAG_FAST_ACCESS = 1,
 		ANNOTFLAG_STD_FAST_ACCESS = 2,
 		ANNOTFLAG_CONSTRUCTOR = 4,
 		ANNOTFLAG_ARGUMENT_CONSTRUCTOR = 8,
+		ANNOTFLAG_TEST = 16,
+		ANNOTFLAG_CONDITION = 32,
 	};
 
 	metaControlFunctions.reserved = 0; // to prevent Array_free
+
+	Array requireList; // type: labelRequireCouple_t
+	Array_create(&requireList, sizeof(labelRequireCouple_t));
 	
 	// Read content
 	while (true) {
@@ -1111,6 +1132,28 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				annotationFlags |= ANNOTFLAG_CONSTRUCTOR | ANNOTFLAG_ARGUMENT_CONSTRUCTOR;
 				break;
 
+			case ANNOTATION_CONDITION:
+				check(ANNOTFLAG_CONDITION | ANNOTFLAG_TEST);
+				annotationFlags |= ANNOTFLAG_CONDITION;
+				testOrCond_pass = annotation->test.pass;
+				testOrCond_miss = annotation->test.miss;
+				break;
+				
+			case ANNOTATION_TEST:
+				check(ANNOTFLAG_CONDITION | ANNOTFLAG_TEST);
+				annotationFlags |= ANNOTFLAG_TEST;
+				testOrCond_pass = annotation->test.pass;
+				testOrCond_miss = annotation->test.miss;
+				break;
+
+			case ANNOTATION_REQUIRE:
+			{
+				labelRequireCouple_t* l = Array_push(labelRequireCouple_t, &requireList);
+				l->object = annotation->require.object;
+				l->fn = annotation->require.fn;
+				break;
+			}
+
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
@@ -1144,7 +1187,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
 					.definedClass = cl,
-					.stdBehavior = -1
+					.stdBehavior = -1,
+					.args_len = -1,
+					.requireList = &requireList
 				};
 
 
@@ -1171,7 +1216,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
 					.definedClass = cl,
-					.stdBehavior = stdBehavior
+					.stdBehavior = stdBehavior,
+					.args_len = -1,
+					.requireList = NULL
 				};
 
 
@@ -1194,7 +1241,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = NULL,
 					.definedClass = cl,
-					.stdBehavior = stdBehavior
+					.stdBehavior = stdBehavior,
+					.args_len = -1,
+					.requireList = NULL
 				};
 
 				int sf = (SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
@@ -1253,13 +1302,61 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		case 3:
 		{
 			const label_t name = parser->token.label;
-			Parser_read(parser, &_labelPool);
 
-			Syntax_FunctionDeclarationArg fnDeclData = {
-				.defaultName = name,
-				.stdBehavior = -1,
-				.definedClass = NULL,
-			};
+			// Guess using annotation flags
+			if (annotationFlags & ANNOTFLAG_TEST) {
+				Syntax_FunctionDeclarationArg fnDeclData = {
+					.defaultName = name,
+					.stdBehavior = -1,
+					.definedClass = NULL,
+					.args_len = 0,
+					.requireList = &requireList
+				};
+
+				Function* fn = Syntax_functionDeclaration(
+					&outsideScope.scope,
+					&variadicScope.scope,
+					parser,
+					SYNTAXDATAFLAG_FNDCL_TEST | SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+					SYNTAXDATAFLAG_FNDCL_THIS,
+					&fnDeclData
+				);
+
+				fn->testOrCond.pass = testOrCond_pass;
+				fn->testOrCond.miss = testOrCond_miss;
+				break;
+			}
+
+			if (annotationFlags & ANNOTFLAG_CONDITION) {
+				Syntax_FunctionDeclarationArg fnDeclData = {
+					.defaultName = name,
+					.stdBehavior = -1,
+					.definedClass = NULL,
+					.args_len = 0,
+					.requireList = &requireList
+				};
+
+				Function* fn = Syntax_functionDeclaration(
+					&outsideScope.scope,
+					&variadicScope.scope,
+					parser,
+					SYNTAXDATAFLAG_FNDCL_CONDITION | SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
+					SYNTAXDATAFLAG_FNDCL_THIS,
+					&fnDeclData
+				);
+
+				fn->testOrCond.pass = testOrCond_pass;
+				fn->testOrCond.miss = testOrCond_miss;
+				break;
+			}
+
+			
+
+
+
+			// Read syntax to guess the kind of the object
+			Parser_read(parser, &_labelPool);
+			
 
 			switch (TokenCompare(SYNTAXLIST_CLASS_ABSTRACT_MEMBER, 0)) {
 			// variable
@@ -1299,12 +1396,19 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 			case 1:
 			case 2:
 			{
-				runMethod:
 				if (annotationFlags & (ANNOTFLAG_FAST_ACCESS | ANNOTFLAG_STD_FAST_ACCESS)) {
 					raiseError("[Syntax] With fastAccess annotation, "
 						"you must use function keyword");
 				}
-
+					
+				Syntax_FunctionDeclarationArg fnDeclData = {
+					.defaultName = name,
+					.stdBehavior = -1,
+					.definedClass = NULL,
+					.args_len = -1,
+					.requireList = &requireList
+				};
+				
 				/// TODO: pass annotation flag
 				int subFlags = SYNTAXDATAFLAG_FNDCL_THIS | SYNTAXDATAFLAG_FNDCL_FORBID_NAME;
 				if (noMeta) {
@@ -1369,6 +1473,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		/// TODO: handle metaControlFunctions
 		Array_free(metaControlFunctions);
 	}
+
+	Array_free(requireList);
 }
 
 
@@ -1676,10 +1782,19 @@ Function* Syntax_functionDeclaration(
 	char noMeta = flags & SYNTAXDATAFLAG_FNDCL_NO_META;
 	bool definitionToRead;
 	bool returnTypeAlreadyRead = false;
-	Array arguments = {.length = 0xffff}; // no args read ; type: Variable*
 	Variable** settings;
 	int settings_len = -1;
 	Prototype* returnType = NULL;
+
+	Array arguments; // type: Variable*
+	if (defaultData->args_len < 0) {
+		arguments.length = 0xffff; // no args read 
+	} else {
+		arguments.data = defaultData->args;
+		arguments.size = sizeof(Variable*);
+		arguments.length = defaultData->args_len;
+		arguments.reserved = defaultData->args_len;
+	}
 
 	
 	// Handle annotations
@@ -1727,6 +1842,14 @@ Function* Syntax_functionDeclaration(
 	}
 
 	parser->annotations.length = 0; // clear annotations
+
+	if (flags & SYNTAXDATAFLAG_FNDCL_TEST) {
+		fnFlags |= FUNCTIONFLAGS_TEST;
+	}
+
+	if (flags & SYNTAXDATAFLAG_FNDCL_CONDITION) {
+		fnFlags |= FUNCTIONFLAGS_CONDITION;
+	}
 
 	if (flags & SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR) {
 		fnFlags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
@@ -2000,7 +2123,29 @@ Function* Syntax_functionDeclaration(
 		} else {
 			fnAddCode = SCOPEADDFN_OP_DEFAULT;
 		}
+
 		Scope_addFunction(scope, scope->type, fnAddCode, fn);
+
+		// Add label requirelist
+		Array* rqs = defaultData->requireList;
+		if (rqs) {
+			int length = rqs->length;
+			
+			if (length) {
+				fn->requires_len = length;
+				labelRequireCouple_t* data = malloc(sizeof(labelRequireCouple_t) * length);
+				memcpy(data, rqs->data, sizeof(labelRequireCouple_t) * length);
+				fn->labelRequires = data;
+				rqs->length = 0; // empty array
+			} else {
+				fn->requires_len = 0;
+			}
+
+		} else {
+			fn->requires_len = 0;
+		}
+
+		
 	}
 
 
@@ -2017,8 +2162,6 @@ Function* Syntax_functionDeclaration(
 
 
 	return fn;
-	/// TODO: define module.mainFunction
-
 }
 
 
@@ -2843,7 +2986,7 @@ void Syntax_functionScope_freeLabel(
 
 	case EXPRESSION_FNCALL:
 	{
-		Type* shadowType = Intrepret_call(destExpression, &scope->scope);
+		Type* shadowType = Interpret_call(destExpression, &scope->scope);
 
 		if (shadowType) {
 			Type_free(shadowType);
@@ -3272,7 +3415,8 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 	// Produce interpret
 	if (fn->flags & FUNCTIONFLAGS_INTERPRET) {
-		fn->interpreter = Interpreter_build(&trace);
+		Interpreter* itp = Interpreter_build(&trace);
+		fn->interpreter = itp;
 	}
 	
 
@@ -3332,27 +3476,29 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 		return;
 
-	if (parser->token.label == _commonLabels._main) {
+	const label_t annotationLabel = parser->token.label;
+
+	if (annotationLabel == _commonLabels._main) {
 		annotation->type = ANNOTATION_MAIN;
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._control) {
+	if (annotationLabel == _commonLabels._control) {
 		annotation->type = ANNOTATION_CONTROL;
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._langstd) {
+	if (annotationLabel == _commonLabels._langstd) {
 		annotation->type = ANNOTATION_LANGSTD;
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._fastAccess) {
+	if (annotationLabel == _commonLabels._fastAccess) {
 		annotation->type = ANNOTATION_FAST_ACCESS;
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._stdFastAccess) {
+	if (annotationLabel == _commonLabels._stdFastAccess) {
 		annotation->type = ANNOTATION_STD_FAST_ACCESS;
 
 		Parser_read(parser, &_labelPool);
@@ -3373,25 +3519,111 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._noMeta) {
+	if (annotationLabel == _commonLabels._noMeta) {
 		annotation->type = ANNOTATION_NO_META;
 		return;
 	}
 	
-	if (parser->token.label == _commonLabels._separation) {
+	if (annotationLabel == _commonLabels._separation) {
 		annotation->type = ANNOTATION_SEPARATION;
 		return;
 	}
 
-	if (parser->token.label == _commonLabels._constructor) {
+	if (annotationLabel == _commonLabels._constructor) {
 		annotation->type = ANNOTATION_CONSTRUCTOR;
 		return;
 	} 
 
-	if (parser->token.label == _commonLabels._argumentConstructor) {
+	if (annotationLabel == _commonLabels._argumentConstructor) {
 		annotation->type = ANNOTATION_ARGUMENT_CONSTRUCTOR;
 		return;
-	} 
+	}
+	
+	if (annotationLabel == _commonLabels._condition ||
+		annotationLabel == _commonLabels._test
+	) {
+		// Open parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
+			return;
+
+		
+		// Read pass
+		Parser_read(parser, &_labelPool);
+		switch (TokenCompare(SYNTAXLIST_ANNOTATIONCONDITION, 0)) {
+		case 0:
+			annotation->condition.pass = parser->token.label;
+			break;
+			
+		case 1:
+			annotation->condition.pass = LABEL_NULL;
+			break;
+		}
+
+		// Comma
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_COMMA, 0))
+			return;
+
+		// Read miss
+		Parser_read(parser, &_labelPool);
+		switch (TokenCompare(SYNTAXLIST_ANNOTATIONCONDITION, 0)) {
+		case 0:
+			annotation->condition.miss = parser->token.label;
+			break;
+			
+		case 1:
+			annotation->condition.miss = LABEL_NULL;
+			break;
+		}
+
+		// Finish parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0))
+			return;
+
+		annotation->type = annotationLabel == _commonLabels._test ?
+			ANNOTATION_TEST : ANNOTATION_CONDITION;
+
+		return;
+	}
+
+
+	if (annotationLabel == _commonLabels._require) {
+		annotation->type = ANNOTATION_REQUIRE;
+
+		// Open parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
+			return;
+
+		// Object name
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+			return;
+		
+		annotation->require.object = parser->token.label;
+
+		// :: syntax
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_SCOPE, 0))
+			return;
+
+		// Function name
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+			return;
+		
+		annotation->require.fn = parser->token.label;
+
+		// Finish parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0))
+			return;
+
+		return;
+	}
+
 
 	raiseError("[Syntax] Unkown annotation");
 }

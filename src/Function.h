@@ -1,5 +1,4 @@
-#ifndef COMPILER_FUNCTION_H_
-#define COMPILER_FUNCTION_H_
+#pragma once
 
 #include "declarations.h"
 #include "label_t.h"
@@ -11,12 +10,25 @@
 
 extern long functionNextId;
 
+typedef struct {
+	label_t object;
+	label_t fn;
+} labelRequireCouple_t;
+
+typedef struct {
+	int position;
+	Function* fn;
+} realRequireCouple_t;
+
 
 enum {
 	FUNCTIONFLAGS_SEPARATED = 1,
 	FUNCTIONFLAGS_THIS = 2,
 	FUNCTIONFLAGS_INTERPRET = 4,
 	FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR = 8,
+	FUNCTIONFLAGS_TEST = 16,
+	FUNCTIONFLAGS_CONDITION = 32,
+	FUNCTIONFLAGS_REAL_REQUIRES = 64,
 };
 
 
@@ -34,10 +46,21 @@ struct Function {
 	Prototype* returnType;
 	Interpreter* interpreter;
 	
-	
-	long traceId;
+	struct {
+		label_t pass;
+		label_t miss;
+	} testOrCond;
+
+	union {
+		labelRequireCouple_t* labelRequires;
+		realRequireCouple_t* realRequires;
+	};
+
+	int requires_len;
+
 	int stdBehavior;
 	int flags;
+	long traceId;
 };
 
 struct ScopeFunction {
@@ -66,7 +89,7 @@ void Function_delete(Function* fn);
 label_t Function_generateMetaName(label_t name, char addChar);
 
 
-
+void Function_makeRequiresReal(Function* fn, Class* thisclass);
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 void FunctionAssembly_delete(FunctionAssembly* fa);
@@ -91,6 +114,4 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable);
 
-
-#endif
 

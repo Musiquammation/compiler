@@ -1,5 +1,4 @@
-#ifndef COMPILER_DECLARATIONS_H_
-#define COMPILER_DECLARATIONS_H_
+#pragma once
 
 #include "tools/tools.h"
 
@@ -41,4 +40,3 @@ structdef(TypeFollower);
 
 structdef(Interpreter);
 
-#endif

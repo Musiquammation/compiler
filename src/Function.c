@@ -18,9 +18,14 @@ void Function_create(Function* fn) {
 	fn->traceId = functionNextId;
 	fn->interpreter = NULL;
 	functionNextId++;
+	fn->requires_len = 0;
 }
 
 void Function_delete(Function* fn) {
+	if (fn->requires_len) {
+		free(fn->labelRequires); // or frees realRequires since they are in a same union
+	}
+
 	typedef Variable* vptr_t;
 	if (fn->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Function_delete(fn->meta);
@@ -69,6 +74,111 @@ label_t Function_generateMetaName(label_t name, char addChar) {
 	free(dest);
 
 	return result;
+}
+
+
+
+void Function_makeRequiresReal(Function* fn, Class* thisclass) {
+	
+	if (fn->flags & FUNCTIONFLAGS_REAL_REQUIRES)
+	return;
+	
+	fn->flags |= FUNCTIONFLAGS_REAL_REQUIRES;
+
+	printf("make %s\n", fn->name);
+	int requires_len = fn->requires_len;
+	if (requires_len == 0)
+		return;
+	
+	labelRequireCouple_t* const labelRqs = fn->labelRequires;
+	realRequireCouple_t* const requires = requires_len ?
+		malloc(sizeof(realRequireCouple_t) * requires_len) : NULL;
+
+	if (thisclass) {
+		switch (thisclass->metaDefinitionState) {
+		case DEFINITIONSTATE_UNDEFINED:
+			raiseError("[Undefined] Missing definition state for @require");
+			return;
+
+		case DEFINITIONSTATE_READING:
+			raiseError("[Undefined] Reading definition state for @require");
+			return;
+
+		case DEFINITIONSTATE_DONE:
+			thisclass = thisclass->meta;
+			break;
+			
+		case DEFINITIONSTATE_NOEXIST:
+			thisclass = NULL;
+			break;
+		}
+	} else {
+		thisclass = NULL;
+	}
+
+	ScopeSearchArgs searchArgs[] = {
+		{.resultType = SCOPESEARCH_FUNCTION}
+	};
+
+	ScopeClass sc = {
+		.scope = {NULL, SCOPE_CLASS},
+		.allowThis = false
+	};
+
+	typedef Variable* var_t;
+	var_t* fnArguments = fn->arguments;
+	int fnArgsLen = fn->args_len;
+
+	for (int i = 0; i < requires_len; i++) {
+		// Search object in args
+		label_t objectName = labelRqs[i].object;
+		int position;
+		if (objectName == _commonLabels._this) {			
+			if (thisclass == NULL) {
+				raiseError("[Syntax] 'this' is not defined here");
+				return;
+			}
+
+			position = 0;
+			sc.cl = thisclass;
+
+		} else {
+			// Search variable in function arguments
+			Array_for(var_t, fnArguments, fnArgsLen, vptr) {
+				Variable* variable = *vptr;
+				if (variable->name == objectName) {
+					sc.cl = Prototype_getMetaClass(variable->proto);
+					goto found;
+				}
+			}
+
+			raiseError("[Unfound] Variable used in @require not found");
+
+			found:
+			if (thisclass) {
+				position++; // decalage for this
+			}
+		}
+
+		Function* fn = Scope_search(&sc.scope, labelRqs[i].fn, searchArgs, SCOPESEARCH_FUNCTION);
+		if (!fn) {
+			raiseError("[Unfound] Cannot find method from @require");
+			return;
+		}
+
+		if ((fn->flags & FUNCTIONFLAGS_CONDITION) == 0) {
+			raiseError("[TODO] Missing FUNCTIONFLAGS_CONDITION flag");
+		}
+
+		requires[i].position = position;
+		requires[i].fn = fn;
+		printf("got %s at %d\n", fn->name, position);
+
+	}
+		
+
+	fn->realRequires = requires;
+	free(labelRqs);
 }
 
 
@@ -128,7 +238,7 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 		}};
 
 		
-		Intrepret_call(&fncallExpr, &scope->scope);
+		Interpret_call(&fncallExpr, &scope->scope);
 		break;
 	}*/
 }

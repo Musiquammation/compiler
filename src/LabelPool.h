@@ -1,5 +1,4 @@
-#ifndef COMPILER_LABEL_POOL_H_
-#define COMPILER_LABEL_POOL_H_
+#pragma once
 
 #include "declarations.h"
 #include "label_t.h"
@@ -63,6 +62,9 @@ struct CommonLabels {
 	label_t _separation;
 	label_t _constructor;
 	label_t _argumentConstructor;
+	label_t _condition;
+	label_t _require;
+	label_t _test;
 
 
 	label_t _DEBUG_PRINT_CHAR;
@@ -82,4 +84,3 @@ label_t LabelPool_search(const LabelPool* pool, const char* text);
 
 void CommonLabels_init(CommonLabels* labels, LabelPool* pool);
 
-#endif

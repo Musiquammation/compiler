@@ -1,5 +1,4 @@
-#ifndef COMPILER_MEMORYCURSOR_H_
-#define COMPILER_MEMORYCURSOR_H_
+#pragma once
 
 typedef struct {
    	int offset;
@@ -13,4 +12,3 @@ int MemoryCursor_give(MemoryCursor* cursor, int size, int maxMinimalSize);
 
 
 
-#endif

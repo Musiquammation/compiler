@@ -121,8 +121,9 @@ void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	def(separation);
 	def(constructor);
 	def(argumentConstructor);
-	
-	
+	def(condition);
+	def(require);
+	def(test);
 	
 	def(DEBUG_PRINT_CHAR);
 	def(DEBUG_PRINT_SHORT);

@@ -249,7 +249,7 @@ void Class_acheiveDefinition(Class* cl) {
 	default:
 		break;
 	}
-	
+
 	cl->definitionState = DEFINITIONSTATE_DONE;
 
 	// Define method arguments prototypes
@@ -272,6 +272,28 @@ void Class_acheiveDefinition(Class* cl) {
 }
 
 
+
+void Class_makeMethodsRequiresReal(Class* cl) {
+	// Call meta
+	switch (cl->metaDefinitionState) {
+	case DEFINITIONSTATE_UNDEFINED:
+	case DEFINITIONSTATE_READING:
+		raiseError("[Intern] Missing meta for to makes method requires real");
+		break;
+		
+	case DEFINITIONSTATE_NOEXIST:
+		break;
+
+	case DEFINITIONSTATE_DONE:
+		Class_makeMethodsRequiresReal(cl->meta);
+		break;
+	}
+
+	typedef Function* fn_t;
+	Array_loop(fn_t, cl->methods, mptr) {
+		Function_makeRequiresReal(*mptr, cl);
+	}
+}
 
 
 

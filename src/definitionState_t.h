@@ -1,5 +1,4 @@
-#ifndef COMPILER_DEFINITIONSTATET_H_
-#define COMPILER_DEFINITIONSTATET_H_
+#pragma once
 
 typedef char definitionState_t;
 
@@ -10,4 +9,3 @@ enum {
 	DEFINITIONSTATE_NOEXIST,
 };
 
-#endif

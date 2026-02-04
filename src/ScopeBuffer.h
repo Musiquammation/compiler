@@ -1,5 +1,4 @@
-#ifndef COMPILER_SCOPEBUFFER_H_
-#define COMPILER_SCOPEBUFFER_H_
+#pragma once
 
 #include "Scope.h"
 #include "Class.h"
@@ -8,4 +7,3 @@ union ScopeBuffer {
     ScopeClass cl;
 };
 
-#endif

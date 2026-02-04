@@ -1,10 +1,10 @@
-#ifndef COMPILER_INTERPRETER_H_
-#define COMPILER_INTERPRETER_H_
+#pragma once
 
 #include "declarations.h"
 #include "Trace.h"
 
 structdef(TracePack);
+
 
 typedef struct {
 	TracePack* pack;
@@ -24,10 +24,10 @@ Interpreter* Interpreter_build(Trace* trace);
 void Interpreter_delete(Interpreter* itp);
 
 
-Type* Intrepret_call(Expression* fncallExpr, Scope* scope);
+Type* Interpret_call(Expression* fncallExpr, Scope* scope);
 
 
-Type* Intrepret_interpret(
+Type* Interpret_interpret(
 	const Interpreter* interpreter,
 	Scope* scope,
 	Expression** args,
@@ -36,5 +36,3 @@ Type* Intrepret_interpret(
 	bool useThis
 );
 
-
-#endif

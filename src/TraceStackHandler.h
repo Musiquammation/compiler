@@ -1,5 +1,4 @@
-#ifndef COMPILER_TRACESTACKHANDLER_H_
-#define COMPILER_TRACESTACKHANDLER_H_
+#pragma once
 
 #include <stdio.h> // for FILE
 
@@ -45,4 +44,3 @@ void TraceStackHandler_adaptAllocation(TraceStackHandler* handler, int decalage,
 void TraceStackHandler_freeze(TraceStackHandler* handler, int label);
 void TraceStackHandler_unfreeze(TraceStackHandler* handler, int label);
 
-#endif

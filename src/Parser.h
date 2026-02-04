@@ -1,5 +1,4 @@
-#ifndef COMPILER_PARSER_H_
-#define COMPILER_PARSER_H_
+#pragma once
 
 #include "label_t.h"
 #include "declarations.h"
@@ -187,4 +186,3 @@ int Token_compare(const Token* token, const Token comparators[], int length, cha
 
 
 
-#endif

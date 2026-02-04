@@ -156,7 +156,7 @@ void Type_defaultConstructors(
 			Expression* args[] = {&expr};
 
 			/// TODO: check argsStartIndex
-			Intrepret_interpret(
+			Interpret_interpret(
 				fn->interpreter,
 				scope,
 				args,

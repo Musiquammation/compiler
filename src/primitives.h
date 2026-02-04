@@ -1,5 +1,4 @@
-#ifndef COMPILER_PRIMITIVES_H_
-#define COMPILER_PRIMITIVES_H_
+#pragma once
 
 #include "declarations.h"
 
@@ -63,4 +62,3 @@ Class* primitives_getClass(label_t name);
 Type* primitives_getType(Class* cl);
 Prototype* primitives_getPrototype(Class* cl);
 
-#endif

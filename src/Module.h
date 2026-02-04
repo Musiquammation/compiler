@@ -1,5 +1,4 @@
-#ifndef COMPILER_MODULE_H_
-#define COMPILER_MODULE_H_
+#pragma once
 
 #include "declarations.h"
 
@@ -41,7 +40,6 @@ void Module_addFunction(Module* module, Function* fn, int addFlag);
 
 
 
-#endif
 
 
 

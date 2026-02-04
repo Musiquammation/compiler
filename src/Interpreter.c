@@ -222,7 +222,7 @@ void Interpreter_delete(Interpreter* itp) {
 }
 
 
-Type* Intrepret_call(Expression* fncallExpr, Scope* scope) {
+Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 	Function* fn = fncallExpr->data.fncall.fn;
 	switch (fn->metaDefinitionState) {
 	case DEFINITIONSTATE_UNDEFINED:
@@ -234,7 +234,7 @@ Type* Intrepret_call(Expression* fncallExpr, Scope* scope) {
 		return NULL;
 
 	case DEFINITIONSTATE_DONE:
-		return Intrepret_interpret(
+		return Interpret_interpret(
 			fn->meta->interpreter,
 			scope,
 			fncallExpr->data.fncall.args,
@@ -405,7 +405,7 @@ static void irun_stackPtr(Cursor* c, trline_t line);
 static void irun_memory(Cursor* c, trline_t line);
 
 
-Type* Intrepret_interpret(
+Type* Interpret_interpret(
    	const Interpreter* itp,
 	Scope* scope,
 	Expression** args,

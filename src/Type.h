@@ -1,5 +1,4 @@
-#ifndef COMPILER_TYPE_H_
-#define COMPILER_TYPE_H_
+#pragma once
 
 #include "mblock_t.h"
 
@@ -51,5 +50,4 @@ void ScopeType_addFunction(ScopeType* scope, Function* fn);
 
 Type* ScopeType_searchType(ScopeType* scope, Variable* variable);
 
-#endif
 

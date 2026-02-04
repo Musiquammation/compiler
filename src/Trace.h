@@ -1,5 +1,4 @@
-#ifndef COMPILER_TRACE_H_
-#define COMPILER_TRACE_H_
+#pragma once
 
 
 #include "declarations.h"
@@ -490,5 +489,4 @@ enum {
 
 
 
-#endif
 

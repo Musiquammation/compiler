@@ -7,6 +7,12 @@ class {
 		isPositive(): bool;
 		@argumentConstructor
 		function();
+
+		passRuntimePositive();
+		missRuntimePositive();
+
+		@condition(passRuntimePositive, missRuntimePositive)
+		cndPositive: bool;
 	}
 
 	value: int;
@@ -20,9 +26,12 @@ class {
 	def<value: int>();
 
 
-
 	put(value: int): int;
-	
+
+	@require(this::cndPositive)
+	getSqrt(): int;	
+
+	@require(this::cndPositive)
+	@require(operand::cndPositive)
+	getGmean(operand: Integer): int;
 }
-
-

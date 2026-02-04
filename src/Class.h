@@ -1,5 +1,4 @@
-#ifndef COMPILER_CLASS_H_
-#define COMPILER_CLASS_H_
+#pragma once
 
 #include "declarations.h"
 #include "definitionState_t.h"
@@ -63,6 +62,8 @@ void Class_appendMetas(Class* cl);
 
 void Class_acheiveDefinition(Class* cl);
 
+void Class_makeMethodsRequiresReal(Class* cl);
+
 
 void ScopeClass_delete(ScopeClass* scope);
 
@@ -75,6 +76,4 @@ void ScopeClass_addClass(ScopeClass* scope, Class* cl);
 void ScopeClass_addFunction(ScopeClass* scope, Function* fn, int addFlag);
 
 
-
-#endif
 

@@ -1,5 +1,4 @@
-#ifndef COMPILER_VARIABLE_H_
-#define COMPILER_VARIABLE_H_
+#pragma once
 
 #include "label_t.h"
 #include "declarations.h"
@@ -20,4 +19,3 @@ void Variable_destroy(Variable* variable);
 
 
 
-#endif

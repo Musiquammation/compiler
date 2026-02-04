@@ -1,6 +1,8 @@
 
 function main {
 	let integer = Integer{value: 58}();
+	integer.getSqrt();
+
 	return integer.value;
 }
 

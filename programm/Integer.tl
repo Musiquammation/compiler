@@ -6,6 +6,15 @@ function {
 }
 
 
+@control
+function cndPositive {
+    
+}
+@separation
+function getSqrt {
+	
+}
+
 @separation
 function define {
 	this.val = value;

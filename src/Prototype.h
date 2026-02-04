@@ -1,5 +1,4 @@
-#ifndef COMPILER_PROTOTYPE_H_
-#define COMPILER_PROTOTYPE_H_
+#pragma once
 
 #include "declarations.h"
 #include "label_t.h"
@@ -144,4 +143,3 @@ Prototype* Prototype_generateStackPointer(Variable **varr, int varLength);
 Variable* ProtoSetting_getVariable(ProtoSetting* setting, Class* meta);
 
 
-#endif

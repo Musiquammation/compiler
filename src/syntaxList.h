@@ -1,5 +1,4 @@
-#ifndef COMPILER_SYNTAXLIST_H_
-#define COMPILER_SYNTAXLIST_H_
+#pragma once
 
 #include "Parser.h"
 
@@ -13,4 +12,3 @@ void syntaxList_init(void);
 
 
 
-#endif
