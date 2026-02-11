@@ -1,16 +1,5 @@
 
-
-function put {
-	this.value = value;
-	return value;
+function inject {
+	this.value = dst.value + inc.value;
 }
 
-@constructor
-function {
-	this.value = this.value + 21;
-}
-
-@constructor
-function def {
-	
-}

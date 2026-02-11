@@ -314,7 +314,7 @@ void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
 	}
 }
 
-void Trace_pushArgumentTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass) {
+void Trace_pushMembersTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass) {
 	/// TODO: check argsStartIndex 
 	Variable* currentArg;
 	Expression varExpr = {.type = EXPRESSION_PROPERTY, .data = {.property = {

@@ -1,5 +1,0 @@
-@control
-@argumentConstructor
-function {
-	
-}

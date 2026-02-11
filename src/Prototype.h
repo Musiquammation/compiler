@@ -95,6 +95,10 @@ typedef struct {
 	};
 } Prototype_generateType_t;
 
+
+
+
+
 Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, ProtoSetting* settings, int settingLength);
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta);
 Prototype* Prototype_create_reference(Variable** varr, int varrLength);
@@ -133,6 +137,8 @@ Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer);
 
 Prototype* Prototype_copy(Prototype* src);
 Prototype* Prototype_copyWithoutSettings(Prototype* src);
+
+Prototype* Prototype_getArgDefintion(Prototype* proto, label_t name);
 
 bool Prototype_isType(Prototype* proto);
 

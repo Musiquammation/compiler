@@ -1,11 +1,11 @@
 
+
+
 function main {
-	let integer = Integer:def<58>{}();
-	integer.getSqrt();
+	let src = Integer{ value: 32 } ();
+	let dst = Integer{ value: 40 } ();
 
-	return integer.value;
-}
+	src.inject(dst);
 
-function provoque(i: Integer) {
-	
+	return dst.value;
 }

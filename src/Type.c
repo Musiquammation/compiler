@@ -18,7 +18,7 @@
 void Type_free(Type* type) {
 	if (type->primitiveSizeCode)
 		return;
-
+	
 	int refCount = type->refCount;
 	if (refCount > 0) {
 		type->refCount = refCount - 1;

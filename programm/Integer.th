@@ -1,40 +1,20 @@
 class {
 	for {
+		for {}
+
 		val: int;
 		isValueKnown: bool;
 		positive: char; // 0: no, 1: yes, 2: unknown
-
-		isPositive(): bool;
-		@argumentConstructor
-		function();
-
-		passRuntimePositive();
-		missRuntimePositive();
-
-
-		@condition(passRuntimePositive, missRuntimePositive)
-		cndPositive: bool;
-
-
 	}
 
 	value: int;
 
-	define<value: int>();
+	@project(I: Integer)
+	@project(J: Integer)
+	inject(dst: Pointer<T: I>, inc: Pointer<T: J>);
 
 	@constructor
+	@solitary
 	function();
-
-	@constructor
-	def<value: int>();
-
-
-	put(value: int): int;
-
-	@require(this::cndPositive)
-	getSqrt(): int;	
-
-	@require(this::cndPositive)
-	@require(operand::cndPositive)
-	getGmean(operand: Integer): int;
 }
+

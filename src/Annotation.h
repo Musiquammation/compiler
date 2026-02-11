@@ -1,6 +1,8 @@
 #pragma once
 
 #include "label_t.h"
+#include "declarations.h"
+
 struct Annotation {
 	int type;
 
@@ -23,6 +25,11 @@ struct Annotation {
 			label_t object;
 			label_t fn;
 		} require;
+
+		struct {
+			label_t name;
+			Prototype* proto;
+		} project;
 	};
 };
 
@@ -33,11 +40,15 @@ enum {
 	ANNOTATION_LANGSTD,
 	ANNOTATION_FAST_ACCESS,
 	ANNOTATION_STD_FAST_ACCESS,
-	ANNOTATION_NO_META,
 	ANNOTATION_SEPARATION,
 	ANNOTATION_CONSTRUCTOR,
 	ANNOTATION_ARGUMENT_CONSTRUCTOR,
 	ANNOTATION_CONDITION,
 	ANNOTATION_TEST,
 	ANNOTATION_REQUIRE,
+	ANNOTATION_PROJECT,
+	ANNOTATION_SOLITARY,
 };
+
+
+void Annotation_fillProjection(FunctionArgProjection* proj, Annotation* annotation);

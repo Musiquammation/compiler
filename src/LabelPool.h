@@ -51,6 +51,7 @@ struct CommonLabels {
 	label_t _Variadic;
 	label_t _Token;
 
+	label_t _This;
 	label_t _module;
 	label_t _main;
 	label_t _control;
@@ -65,7 +66,9 @@ struct CommonLabels {
 	label_t _condition;
 	label_t _require;
 	label_t _test;
-
+	label_t _T;
+	label_t _solitary;
+	label_t _project;
 
 	label_t _DEBUG_PRINT_CHAR;
 	label_t _DEBUG_PRINT_SHORT;

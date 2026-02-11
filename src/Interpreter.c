@@ -228,11 +228,11 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 	// Check metaDefinitionState
 	switch (fn->metaDefinitionState) {
 	case DEFINITIONSTATE_UNDEFINED:
-		raiseError("[Undefined] Interpret status is undefined for this function");
+		raiseError("[Undefined] Meta interpret status is undefined for this function");
 		return NULL;
 
 	case DEFINITIONSTATE_READING:
-		raiseError("[Intern] Interpret status is reading for this function");
+		raiseError("[Intern] Meta interpret status is reading for this function");
 		return NULL;
 
 	case DEFINITIONSTATE_DONE:
@@ -260,7 +260,7 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 			raiseError("[Intern] Interpret status is reading for this function");
 			return NULL;
 			
-			case DEFINITIONSTATE_DONE:
+		case DEFINITIONSTATE_DONE:
 			break;
 			
 		case DEFINITIONSTATE_NOEXIST:
@@ -290,6 +290,9 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 
 	// Run final code
 	Function* meta = fn->meta;
+	if (Interpreter_checkDefinitionState(fn->definitionState))
+		return NULL;
+		
 	interpreterSlot_t result = Interpret_interpret(
 		meta->interpreter,
 		scope,
@@ -313,13 +316,15 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 
 	Type* type = Prototype_generateType(returnPrototype, scope, TYPE_CWAY_DEFAULT);
 
-
+	/// TODO: handle type
+	return type;
 }
 
 typedef interpreterSlot_t slot_t;
 
 
 static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
+	expr = Expression_cross(expr);
 	switch (expr->type) {
 	case EXPRESSION_ADDR_OF:
 		expr = expr->data.linked;
@@ -352,6 +357,25 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 	case EXPRESSION_MBLOCK:
 		slot->ptr = expr->data.mblock;
 		return true;
+
+	case EXPRESSION_PROPERTY:
+	{
+		if (expr->data.property.origin) {
+			raiseError("[Expression] Cannot handle origin in property");
+			return false;
+		}
+
+		Variable* first = expr->data.property.varr[0];
+		Type* type = Scope_searchType(scope, first);
+		if (!type) {
+			raiseError("[Unfound] Cannot find type");
+		}
+
+		int offset = Prototype_getVariableOffset(
+			expr->data.property.varr, expr->data.property.varr_len);
+
+		return type->data + offset;
+	}
 
 	default:
 		raiseError("[Expression] Invalid expression in argument");
@@ -510,6 +534,8 @@ interpreterSlot_t Interpret_interpret(
 	};
 
 	while (true) {
+		// printf("itp %04ld\n", c.ptr - itp->pack->line);
+
 		trline_t line;
 		move();
 
@@ -677,6 +703,28 @@ interpreterSlot_t Interpret_interpret(
 	
 	#undef move
 }
+
+
+
+bool Interpreter_checkDefinitionState(definitionState_t definitionState) {
+	switch (definitionState) {
+	case DEFINITIONSTATE_UNDEFINED:
+		raiseError("[Undefined] Interpret status is undefined for this function");
+		return true;
+
+	case DEFINITIONSTATE_READING:
+		raiseError("[Intern] Interpret status is reading for this function");
+		return true;
+
+	case DEFINITIONSTATE_DONE:
+		return false;
+
+	case DEFINITIONSTATE_NOEXIST:
+		return true;
+
+	}
+}
+
 
 
 

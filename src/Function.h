@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FunctionArgProjection.h"
 #include "declarations.h"
 #include "label_t.h"
 #include "definitionState_t.h"
@@ -32,12 +33,17 @@ enum {
 };
 
 
+
+
+
 struct Function {
 	label_t name;
 	definitionState_t definitionState;
 	definitionState_t metaDefinitionState;
 	
 	Function* meta;
+	FunctionArgProjection* projections;
+	int projections_len;
 	
 	Variable** arguments;
 	Variable** settings;
@@ -66,9 +72,6 @@ struct Function {
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
-
-	Variable* thisvar;
-	Class* thisclass;
 	Array types; // type: TypeDefinition
 };
 
@@ -90,6 +93,8 @@ label_t Function_generateMetaName(label_t name, char addChar);
 
 
 void Function_makeRequiresReal(Function* fn, Class* thisclass);
+Function* Function_produceMeta(Function* origin);
+
 
 void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 void FunctionAssembly_delete(FunctionAssembly* fa);

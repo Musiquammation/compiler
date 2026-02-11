@@ -16,11 +16,13 @@ structdef(Class);
 structdef(Function);
 
 structdef(FunctionAssembly);
+structdef(FunctionArgProjection);
 structdef(Trace);
 structdef(TraceStackHandler);
-    
+
 structdef(ScopeClass);
 structdef(ScopeFunction);
+structdef(ScopeFunctionArgProjection);
 
 structdef(ScopeSearchArgs);
 

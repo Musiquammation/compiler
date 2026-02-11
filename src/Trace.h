@@ -151,7 +151,7 @@ Function* Trace_getFunction(Trace* trace, int index);
 
 void Trace_pushArgs(Trace* trace, Variable** args, int arglen);
 void Trace_popArgs(Trace* trace, Variable** args, int arglen);
-void Trace_pushArgumentTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass);
+void Trace_pushMembersTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass);
 
 int Trace_packSize(int size);
 int Trace_unpackSize(int psize);

@@ -439,12 +439,15 @@ void Parser_read(Parser* parser, LabelPool* labelPool) {
 }
 
 
-void Parser_readAnnotated(Parser* parser, LabelPool* labelPool) {
+void Parser_readAnnotated(Parser* parser, LabelPool* labelPool, Scope* scope) {
 	parser->annotations.length = 0;
 
 	Parser_read(parser, labelPool);
 	while (parser->token.type == TOKEN_TYPE_OPERATOR && parser->token.operator == TOKEN_OPERATOR_AT) {
-		Syntax_annotation(Array_push(Annotation, &parser->annotations), parser, labelPool);
+		Syntax_annotation(
+			Array_push(Annotation, &parser->annotations),
+			parser, labelPool, scope);
+			
 		Parser_read(parser, labelPool);
 	}
 }

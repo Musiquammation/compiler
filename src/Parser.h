@@ -175,7 +175,7 @@ void Parser_open(Parser* parser, const char* filepath);
 void Parser_close(Parser* parser);
 
 void Parser_read(Parser* parser, LabelPool* labelPool);
-void Parser_readAnnotated(Parser* parser, LabelPool* labelPool);
+void Parser_readAnnotated(Parser* parser, LabelPool* labelPool, Scope* scope);
 
 void Parser_saveToken(Parser* parser);
 

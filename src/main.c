@@ -5,6 +5,7 @@
 
 #include "Module.h"
 #include "LabelPool.h"
+#include "langstd.h"
 
 #include "Variable.h"
 #include "Class.h"
@@ -43,6 +44,8 @@ int main(int argc, char *argv[]) {
 	module.compile = false;
 	module.binFolder = argv[2];
 
+	langstd_init();
+
 	LabelPool_create(&_labelPool);
 	
 	Module_create(&module);
@@ -61,6 +64,10 @@ int main(int argc, char *argv[]) {
 
 	Module_delete(&module);
 	LabelPool_delete(&_labelPool);
+
+	langstd_cleanup();
+
+	
 	printf("\nSucessfully exited!\n");
 
 	return 0;

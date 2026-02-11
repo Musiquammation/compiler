@@ -2,6 +2,7 @@
 
 #include "declarations.h"
 #include "Trace.h"
+#include "definitionState_t.h"
 
 #include <stdint.h>
 
@@ -47,3 +48,5 @@ interpreterSlot_t Interpret_interpret(
 	bool shouldReturn
 );
 
+
+bool Interpreter_checkDefinitionState(definitionState_t definitionState);

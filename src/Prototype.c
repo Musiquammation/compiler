@@ -40,8 +40,8 @@ Prototype* Prototype_create_direct(
 	Class *cl,
 	char primitiveSizeCode,
 	ProtoSetting *settings,
-	int settingLength)
-{
+	int settingLength
+) {
 	Prototype* proto = malloc(sizeof(Prototype));
 	setMode(PROTO_MODE_DIRECT);
 	proto->direct.cl = cl;
@@ -722,6 +722,43 @@ Prototype* Prototype_copyWithoutSettings(Prototype* src) {
 	}
 }
 
+Prototype* Prototype_getArgDefintion(Prototype* proto, label_t name) {
+	switch (proto->state & 0xff) {
+	case PROTO_MODE_REFERENCE:
+		raiseError("[TODO] Prototype_getArgDefintion");
+		return NULL;
+		
+	case PROTO_MODE_DIRECT:
+	{
+		int len = proto->direct.settingLength;
+		if (len <= 0)
+			return NULL;
+
+		Array_for(ProtoSetting, proto->direct.settings, len, s) {
+			if (s->useVariable) {
+				if (s->variable->name == name)
+					return s->proto;
+			} else if (s->name == name) {
+				return s->proto;
+			}
+		}
+
+		return NULL;
+	}
+		
+	case PROTO_MODE_VARIADIC:
+		raiseError("[TODO] Prototype_getArgDefintion");
+		return NULL;
+		
+	case PROTO_MODE_PRIMITIVE:
+	case PROTO_MODE_VOID:
+		raiseError("[TODO] Prototype_getArgDefintion");
+		return NULL;
+	}
+}
+
+
+
 bool Prototype_isType(Prototype* proto) {
 	return Prototype_mode(*proto) == PROTO_MODE_DIRECT && proto->direct.cl == _langstd.type;
 }
@@ -758,5 +795,8 @@ Variable* ProtoSetting_getVariable(ProtoSetting *setting, Class *meta) {
 		return v;
 	}
 }
+
+
+
 
 #undef setMode

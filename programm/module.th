@@ -4,9 +4,7 @@
 	@langstd class Pointer;
 
 
-	class Vector;
 	class Integer;
 
-	function printlnInt(number: int);
 	function main(): int;
 }

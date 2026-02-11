@@ -7,6 +7,7 @@
 #include "Class.h"
 #include "Interpreter.h"
 
+#include "langstd.h"
 #include "helper.h"
 
 #include <string.h>
@@ -19,6 +20,7 @@ void Function_create(Function* fn) {
 	fn->interpreter = NULL;
 	functionNextId++;
 	fn->requires_len = 0;
+	fn->projections_len = 0;
 }
 
 void Function_delete(Function* fn) {
@@ -26,6 +28,16 @@ void Function_delete(Function* fn) {
 		free(fn->labelRequires); // or frees realRequires since they are in a same union
 	}
 
+	if (fn->projections_len) {
+		Array_for(FunctionArgProjection, fn->projections, fn->projections_len, p) {
+			if (p->name) {
+				Prototype_free(p->proto, true);
+			}
+		}
+
+		free(fn->projections);
+	}
+	
 	typedef Variable* vptr_t;
 	if (fn->metaDefinitionState == DEFINITIONSTATE_DONE) {
 		Function_delete(fn->meta);
@@ -77,11 +89,89 @@ label_t Function_generateMetaName(label_t name, char addChar) {
 }
 
 
+Function* Function_produceMeta(Function* origin) {
+	int originArgLen = origin->args_len;
+	int originSettingLength = origin->settings_len;
+	Array arguments;
+	Array_create(&arguments, sizeof(Variable*));
+
+	// Fill arguments
+	typedef Variable* vptr_t;
+	Array_for(FunctionArgProjection, origin->projections, origin->projections_len, proj) {
+		if (proj->name) {
+			ProtoSetting* setting = malloc(sizeof(ProtoSetting));
+			setting->useVariable = true;
+			setting->useProto = true;
+			setting->variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
+
+			Prototype* metaProto = Prototype_reachMeta(proj->proto);
+			setting->proto = metaProto;
+			Prototype_addUsage(*metaProto);
+			
+			
+			Prototype* ptrProto = Prototype_create_direct(
+				_langstd.pointer, 8, setting, 1
+			);
+
+			Variable* dst = malloc(sizeof(Variable));
+			Variable_create(dst);
+			dst->name = proj->name;
+			dst->proto = ptrProto;
+			dst->id = arguments.length;
+			*Array_push(Variable*, &arguments) = dst;
+		}
+	}
+
+	// Fill settings
+	Array_for(vptr_t, origin->settings, origin->settings_len, vptr) {
+		Variable* src = *vptr;
+		Prototype* proto = src->proto;
+		Prototype_addUsage(*proto);
+
+		Variable* dst = malloc(sizeof(Variable));
+		Variable_create(dst);
+		dst->name = src->name;
+		dst->proto = proto;
+		dst->id = arguments.length;
+		*Array_push(Variable*, &arguments) = dst;
+	}
+
+
+	Function* fn = malloc(sizeof(Function));
+	Function_create(fn);
+	fn->name = Function_generateMetaName(origin->name, '^');
+	fn->definitionState = DEFINITIONSTATE_READING;
+	fn->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
+
+	fn->arguments = realloc(arguments.data, sizeof(Variable*) * arguments.length);
+	fn->args_len = arguments.length;
+	fn->settings = NULL;
+	fn->settings_len = 0;
+	fn->flags = FUNCTIONFLAGS_THIS | FUNCTIONFLAGS_INTERPRET;
+	if (origin->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+		fn->flags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+	}
+
+	// Fill return type
+	Prototype* returnType = origin->returnPrototype;
+	if (returnType) {
+		returnType = Prototype_reachMeta(returnType);
+		fn->returnPrototype = returnType;
+		if (returnType) {
+			Prototype_addUsage(*returnType);
+		}
+	} else {
+		fn->returnPrototype = NULL;
+	}
+
+	return fn;
+}
+
+
 
 void Function_makeRequiresReal(Function* fn, Class* thisclass) {
-	
 	if (fn->flags & FUNCTIONFLAGS_REAL_REQUIRES)
-	return;
+		return;
 	
 	fn->flags |= FUNCTIONFLAGS_REAL_REQUIRES;
 
@@ -159,19 +249,19 @@ void Function_makeRequiresReal(Function* fn, Class* thisclass) {
 			}
 		}
 
-		Function* fn = Scope_search(&sc.scope, labelRqs[i].fn, searchArgs, SCOPESEARCH_FUNCTION);
-		if (!fn) {
+		Function* sub = Scope_search(&sc.scope, labelRqs[i].fn, searchArgs, SCOPESEARCH_FUNCTION);
+		if (!sub) {
 			raiseError("[Unfound] Cannot find method from @require");
 			return;
 		}
 
-		if ((fn->flags & FUNCTIONFLAGS_CONDITION) == 0) {
+		if ((sub->flags & FUNCTIONFLAGS_CONDITION) == 0) {
 			raiseError("[TODO] Missing FUNCTIONFLAGS_CONDITION flag");
 		}
 
 		requires[i].position = position;
-		requires[i].fn = fn;
-		printf("got %s at %d\n", fn->name, position);
+		requires[i].fn = sub;
+		printf("got %s at %d\n", sub->name, position);
 
 	}
 		
@@ -210,11 +300,7 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 	typedef Function* fn_t;
 	Class* cl = Prototype_getClass(proto);
 
-	/*Array_loop(fn_t, cl->constructors, cptr) {
-		// Fill members
-		
-
-
+	Array_loop(fn_t, cl->constructors, cptr) {
 		// Call constructor
 		Function* fn = *cptr;
 		if ((fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR))
@@ -239,48 +325,114 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 		
 		Interpret_call(&fncallExpr, &scope->scope);
 		break;
-	}*/
+	}
 }
 
 void ScopeFunction_create(ScopeFunction* scope) {
 	Array_create(&scope->types, sizeof(TypeDefinition));
 
-	if (scope->thisvar) {
-		int way = scope->fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR ?
-			TYPE_CWAY_DEFAULT : TYPE_CWAY_ARGUMENT;
-			
-		fillArgument(scope, scope->thisvar, way);
-	}
+	int useConstructor = scope->fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
 
-	if (scope->fn) {
-		int argLength = scope->fn->args_len;
-	
-		// Fill variables
-		Variable** arguments = scope->fn->arguments;
-		for (int i = 0; i < argLength; i++) {
-			Variable* v = arguments[i];
-			fillArgument(scope, v, TYPE_CWAY_ARGUMENT);
+	Function* fn = scope->fn;
+	if (!fn)
+		return;
+
+	/// TODO: rework this part
+
+	int argLength = fn->args_len;
+
+	// Fill variables
+	Variable** arguments = fn->arguments;
+	for (int i = 0; i < argLength; i++) {
+		Variable* v = arguments[i];
+
+		if (i == 0 && useConstructor) {
+			fillArgument(scope, v, TYPE_CWAY_DEFAULT);
+			continue;
 		}
+
+		fillArgument(scope, v, TYPE_CWAY_ARGUMENT);
 	}
 
+	// Call direct requires
+
+	/*
+	Function_makeRequiresReal(fn, NULL);
+	printf("requires %s %d\n", fn->name, fn->requires_len);
+	Array_for(realRequireCouple_t, fn->realRequires, fn->requires_len, r) {
+		Function* rqfn = r->fn;
+		if ((rqfn->flags & FUNCTIONFLAGS_CONDITION) == 0) {
+			raiseError("[TODO] Missing condition");
+		}
+
+		label_t passLabel = rqfn->testOrCond.pass;
+		if (passLabel == NULL)
+			continue; // no pass to call
+
+		// Search pass
+		int position = r->position;
+		Variable* arg;
+		Class* metaClass;
+
+		arg = arguments[r->position];
+		metaClass = Prototype_getMetaClass(arg->proto);
+
+		gotArg:
+
+		ScopeClass sc = {
+			.scope = {NULL, SCOPE_CLASS},
+			.allowThis = false,
+			.cl = metaClass
+		};
+		
+		ScopeSearchArgs search = {};
+		Function* cndfn = Scope_search(&sc.scope, passLabel, &search, SCOPESEARCH_FUNCTION);
+		if (!cndfn) {
+			raiseError("[Unfound] Cannot find pass function");
+			return;
+		}
+
+		if (cndfn->definitionState != DEFINITIONSTATE_DONE) {
+			raiseError("[Undefined] Interpret status is invalid for this function");
+		}
+
+
+		// Call fn
+		/// TODO: write cleaner code
+		mblock_t mblock;
+		Type* type = Scope_searchType(&scope->scope, thisVar);
+		type = *(Type**)type->data;
+		mblock = type->data;
+
+		Expression argExpr = {
+			.type = EXPRESSION_MBLOCK,
+			.data = {
+				.mblock = mblock
+			}
+		};
+		Expression* argPointer = &argExpr;
+
+
+		/// TODO: check argsStartIndex
+		Interpret_interpret(
+			cndfn->interpreter,
+			&scope->scope,
+			&argPointer,
+			1,
+			0,
+			true,
+			false
+		);
+	}
+
+	*/
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
 	int arglen = scope->fn->args_len;
 	int typelen = scope->types.length;
 	TypeDefinition* types = scope->types.data;
-
-	int i;
-	if (scope->thisvar) {
-		i = 1;
-		arglen++;
-
-		Type_free(types[0].type);
-	} else {
-		i = 0;
-	}
-	
-	for (; i < typelen; i++) {
+	for (int i = 0; i < typelen; i++) {
 		TypeDefinition* td = &types[i];
 		Type_free(td->type);
 		
@@ -299,9 +451,6 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 
 
 Variable* ScopeFunction_searchVariable(ScopeFunction* scope, label_t name, ScopeSearchArgs* args) {
-	if (name == _commonLabels._this && scope->thisvar)
-		return scope->thisvar;
-
 	Array_loop(TypeDefinition, scope->types, td) {
 		if (td->variable->name == name)
 			return td->variable;
@@ -363,7 +512,6 @@ Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
 	
 	return NULL;
 }
-
 
 
 

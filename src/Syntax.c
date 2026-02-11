@@ -63,7 +63,7 @@ void Syntax_thFile(ScopeFile* scope) {
 	scope->state_th = DEFINITIONSTATE_READING;
 	
 	while (true) {
-		Parser_readAnnotated(&parser, &_labelPool);
+		Parser_readAnnotated(&parser, &_labelPool, &scope->scope);
 		
 		switch (TokenCompareWithRealParser(SYNTAXLIST_FILE, SYNTAXFLAG_EOF)) {
 		// function
@@ -73,13 +73,15 @@ void Syntax_thFile(ScopeFile* scope) {
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
-				.definedClass = NULL,
 				.stdBehavior = -1,
 				.args_len = -1,
-				.requireList = NULL
+				.requireList = NULL,
+				.projections = NULL,
+				.thisClassProto = NULL
 			};
 
-			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser, 0, &defaultData);
+			Syntax_functionDeclaration(&scope->scope, &noneScope, &parser,
+				NULL, 0, &defaultData);
 
 			break;
 		}
@@ -122,7 +124,8 @@ void Syntax_tcFile(ScopeFile* scope) {
 	
 	enum {
 		FLAG_CONSTRUCTOR = 1,
-		FLAG_ARGUMENT_CONSTRUCTOR = 2
+		FLAG_ARGUMENT_CONSTRUCTOR = 2,
+		FLAG_SOLITARY = 4
 	};
 
 	scope->state_tc = DEFINITIONSTATE_READING;
@@ -132,7 +135,7 @@ void Syntax_tcFile(ScopeFile* scope) {
 	
 	while (true) {
 		int flags = 0;
-		Parser_readAnnotated(&parser, &_labelPool);
+		Parser_readAnnotated(&parser, &_labelPool, &scope->scope);
 		Class* subDefinedClass = definedClass;
 
 		Array_loop(Annotation, parser.annotations, annotation) {
@@ -157,6 +160,10 @@ void Syntax_tcFile(ScopeFile* scope) {
 				flags |= FLAG_CONSTRUCTOR | FLAG_ARGUMENT_CONSTRUCTOR;
 				break;
 
+			case ANNOTATION_SOLITARY:
+				flags |= FLAG_SOLITARY;
+				break;
+
 			default:
 			{
 				raiseError("[Syntax] Illegal annotation");
@@ -175,15 +182,16 @@ void Syntax_tcFile(ScopeFile* scope) {
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = defaultName,
-				.definedClass = subDefinedClass,
 				.args_len = -1,
-				.requireList = NULL
+				.requireList = NULL,
+				.projections = NULL,
+				.thisClassProto = NULL,
+				.thisClassProto = NULL,
+				.thisClassProto = NULL,
+				.thisClassProto = NULL
 			};
 
 			int fnFlag = 0;
-			if (subDefinedClass) {
-				fnFlag |= SYNTAXDATAFLAG_FNDCL_THIS;
-			}
 
 			if (flags & FLAG_CONSTRUCTOR) {
 				fnFlag |= SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR;
@@ -192,10 +200,14 @@ void Syntax_tcFile(ScopeFile* scope) {
 				}
 			}
 
+			if (flags & FLAG_SOLITARY) {
+				fnFlag |= SYNTAXDATAFLAG_FNDCL_NO_META;
+			}
 
-			Syntax_functionDeclaration(
-				&scope->scope, &noneScope, &parser, fnFlag, &defaultData);
 
+			Function* rfn = Syntax_functionDeclaration(&scope->scope, &noneScope,
+				&parser, subDefinedClass, fnFlag, &defaultData);
+				
 			break;
 		}
 
@@ -242,7 +254,7 @@ void Syntax_tlFile(ScopeFile* scope) {
 
 	
 	while (true) {
-		Parser_readAnnotated(&parser, &_labelPool);
+		Parser_readAnnotated(&parser, &_labelPool, &scope->scope);
 
 		if (TokenCompareWithRealParser(SYNTAXLIST_SINGLETON_FUNCTION, SYNTAXFLAG_EOF))
 			goto close;
@@ -361,86 +373,29 @@ void Syntax_tlFile(ScopeFile* scope) {
 			// Produce meta function
 			originFn->metaDefinitionState = DEFINITIONSTATE_READING;
 			
-			int originArgLen = originFn->args_len;
-			int originSettingLength = originFn->settings_len;
-			Variable** arguments = malloc(sizeof(Variable*) * (originArgLen + originSettingLength));
-			int argLen = 0;
-
-			// Fill arguments
-			typedef Variable* vptr_t;
-			Array_for(vptr_t, originFn->arguments, originFn->args_len, vptr) {
-				Variable* src = *vptr;
-				Prototype* proto = Prototype_reachMeta(src->proto);
-				if (!proto)
-					continue;
-
-				Prototype_addUsage(*proto);
-
-				Variable* dst = malloc(sizeof(Variable));
-				Variable_create(dst);
-				dst->name = src->name;
-				dst->proto = proto;
-				dst->id = argLen+1;
-				arguments[argLen] = dst;
-				argLen++;
-			}
-
-			Array_for(vptr_t, originFn->settings, originFn->settings_len, vptr) {
-				Variable* src = *vptr;
-				Prototype* proto = src->proto;
-				Prototype_addUsage(*proto);
-
-				Variable* dst = malloc(sizeof(Variable));
-				Variable_create(dst);
-				dst->name = src->name;
-				dst->proto = proto;
-				dst->id = argLen+1;
-				arguments[argLen] = dst;
-				argLen++;
-			}
-
-
-			Function* fn = malloc(sizeof(Function));
-			Function_create(fn);
-			fn->name = Function_generateMetaName(originFn->name, '^');
-			fn->definitionState = DEFINITIONSTATE_READING;
-			fn->metaDefinitionState = DEFINITIONSTATE_UNDEFINED;
-
-			fn->arguments = realloc(arguments, sizeof(Variable*) * argLen);
-			fn->args_len = argLen;
-			fn->settings = NULL;
-			fn->settings_len = 0;
-			fn->flags = FUNCTIONFLAGS_THIS | FUNCTIONFLAGS_INTERPRET;
-			if (originFn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
-				fn->flags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
-			}
-
-			// Fill return type
-			Prototype* returnType = originFn->returnPrototype;
-			if (returnType) {
-				returnType = Prototype_reachMeta(returnType);
-				fn->returnPrototype = returnType;
-				if (returnType) {
-					Prototype_addUsage(*returnType);
-				}
-			} else {
-				fn->returnPrototype = NULL;
+			Function* metaFn = Function_produceMeta(originFn);
+			
+			if (subDefinedClass->metaDefinitionState != DEFINITIONSTATE_DONE) {
+				raiseError("[Architecture] Cannot use @separation without meta class");
+				return;
 			}
 
 			Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = scope->name,
-				.definedClass = subDefinedClass,
 				.args_len = -1,
-				.requireList = NULL
+				.requireList = NULL,
+				.projections = NULL,
+				.thisClassProto = NULL,
+				.thisClassProto = NULL,
+				.thisClassProto = NULL
 			};
 
-
-			Syntax_functionDefinition(&scope->scope, &parser, fn, subDefinedClass->meta);
+			Syntax_functionDefinition(&scope->scope, &parser, metaFn, subDefinedClass->meta);
 
 			if (originFn) {
 				originFn->metaDefinitionState = DEFINITIONSTATE_DONE;
-				originFn->meta = fn;
+				originFn->meta = metaFn;
 			}
 
 		} else {
@@ -450,9 +405,10 @@ void Syntax_tlFile(ScopeFile* scope) {
 			/// TODO: definition required ?
 			const Syntax_FunctionDeclarationArg defaultData = {
 				.defaultName = NULL,
-				.definedClass = subDefinedClass,
 				.args_len = -1,
-				.requireList = NULL
+				.requireList = NULL,
+				.projections = NULL,
+				.thisClassProto = NULL
 			};
 
 
@@ -808,7 +764,7 @@ void Syntax_module(Module* module, const char* filepath) {
 void Syntax_declarationList(Scope* scope, Parser* parser) {
 	while (true) {
 		Token token;
-		Parser_readAnnotated(parser, &_labelPool);
+		Parser_readAnnotated(parser, &_labelPool, scope);
 		switch (TokenCompare(SYNTAXLIST_DECLARATION_LIST, 0)) {
 			// end
 			case 0:
@@ -819,9 +775,10 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 			{
 				const Syntax_FunctionDeclarationArg defaultData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = NULL,
 					.args_len = -1,
-					.requireList = NULL
+					.requireList = NULL,
+					.projections = NULL,
+					.thisClassProto = NULL
 				};
 
 				Scope noneScope = {.type = SCOPE_NONE, .parent = NULL};
@@ -829,6 +786,7 @@ void Syntax_declarationList(Scope* scope, Parser* parser) {
 					scope,
 					&noneScope,
 					parser,
+					NULL,
 					SYNTAXDATAFLAG_FNDCL_REQUIRES_DECLARATION,
 					&defaultData
 				);
@@ -1039,6 +997,8 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	};
 	
 	
+	Prototype* const thisClassProto = Prototype_create_direct(cl, PSC_UNKNOWN, NULL, 0);
+
 	Class* meta = NULL;
 	MemoryCursor cursor = {0, 0};
 	Array metaControlFunctions;
@@ -1061,13 +1021,17 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 	Array requireList; // type: labelRequireCouple_t
 	Array_create(&requireList, sizeof(labelRequireCouple_t));
+
+	Array projections; // type: FunctionArgProjection
+
+	Array_create(&projections, sizeof(FunctionArgProjection));
 	
 	// Read content
 	while (true) {
 		bool noMeta = false;
 		annotationFlags = 0; // reset
 
-		Parser_readAnnotated(parser, &_labelPool);
+		Parser_readAnnotated(parser, &_labelPool, parentScope);
 
 		Array_loop(Annotation, parser->annotations, annotation) {
 			int annotType = annotation->type;
@@ -1120,7 +1084,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				annotationFlags |= ANNOTFLAG_STD_FAST_ACCESS;
 				break;
 
-			case ANNOTATION_NO_META:
+			case ANNOTATION_SOLITARY:
 				noMeta = true;
 				break;
 
@@ -1151,6 +1115,13 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				labelRequireCouple_t* l = Array_push(labelRequireCouple_t, &requireList);
 				l->object = annotation->require.object;
 				l->fn = annotation->require.fn;
+				break;
+			}
+
+			case ANNOTATION_PROJECT:
+			{
+				FunctionArgProjection* proj = Array_push(FunctionArgProjection, &projections);
+				Annotation_fillProjection(proj, annotation);
 				break;
 			}
 
@@ -1186,10 +1157,11 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = cl,
 					.stdBehavior = -1,
 					.args_len = -1,
-					.requireList = &requireList
+					.requireList = &requireList,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 
 
@@ -1197,8 +1169,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-						SYNTAXDATAFLAG_FNDCL_THIS |
+						SYNTAXDATAFLAG_FNDCL_CREATE_THIS |
 						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_FAST_ACCESS),
 
@@ -1215,10 +1188,11 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = LABEL_NULL,
-					.definedClass = cl,
 					.stdBehavior = stdBehavior,
 					.args_len = -1,
-					.requireList = NULL
+					.requireList = NULL,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 
 
@@ -1226,8 +1200,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					(SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-						SYNTAXDATAFLAG_FNDCL_THIS |
+						SYNTAXDATAFLAG_FNDCL_CREATE_THIS |
 						SYNTAXDATAFLAG_FNDCL_REQUIRES_RETURN |
 						SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS),
 
@@ -1240,16 +1215,21 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				// Constructor
 				Syntax_FunctionDeclarationArg declData = {
 					.defaultName = NULL,
-					.definedClass = cl,
 					.stdBehavior = stdBehavior,
 					.args_len = -1,
-					.requireList = NULL
+					.requireList = NULL,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 
 				int sf = (SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-						SYNTAXDATAFLAG_FNDCL_THIS |
 						SYNTAXDATAFLAG_FNDCL_FORBID_RETURN |
+						SYNTAXDATAFLAG_FNDCL_CREATE_THIS |
 						SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR);
+
+				if (noMeta) {
+					sf |= SYNTAXDATAFLAG_FNDCL_NO_META;
+				}
 
 				if (annotationFlags & ANNOTFLAG_ARGUMENT_CONSTRUCTOR) {
 					sf |= SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR;
@@ -1259,6 +1239,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					sf,
 					&declData
 				);
@@ -1308,17 +1289,19 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg fnDeclData = {
 					.defaultName = name,
 					.stdBehavior = -1,
-					.definedClass = NULL,
 					.args_len = 0,
-					.requireList = &requireList
+					.requireList = &requireList,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 
 				Function* fn = Syntax_functionDeclaration(
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					SYNTAXDATAFLAG_FNDCL_TEST | SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-					SYNTAXDATAFLAG_FNDCL_THIS,
+					SYNTAXDATAFLAG_FNDCL_CREATE_THIS,
 					&fnDeclData
 				);
 
@@ -1331,17 +1314,19 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg fnDeclData = {
 					.defaultName = name,
 					.stdBehavior = -1,
-					.definedClass = NULL,
 					.args_len = 0,
-					.requireList = &requireList
+					.requireList = &requireList,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 
 				Function* fn = Syntax_functionDeclaration(
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					SYNTAXDATAFLAG_FNDCL_CONDITION | SYNTAXDATAFLAG_FNDCL_FORBID_NAME |
-					SYNTAXDATAFLAG_FNDCL_THIS,
+					SYNTAXDATAFLAG_FNDCL_CREATE_THIS,
 					&fnDeclData
 				);
 
@@ -1404,13 +1389,16 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 				Syntax_FunctionDeclarationArg fnDeclData = {
 					.defaultName = name,
 					.stdBehavior = -1,
-					.definedClass = NULL,
 					.args_len = -1,
-					.requireList = &requireList
+					.requireList = &requireList,
+					.projections = &projections,
+					.thisClassProto = thisClassProto
 				};
 				
 				/// TODO: pass annotation flag
-				int subFlags = SYNTAXDATAFLAG_FNDCL_THIS | SYNTAXDATAFLAG_FNDCL_FORBID_NAME;
+				int subFlags = SYNTAXDATAFLAG_FNDCL_FORBID_NAME | 
+					SYNTAXDATAFLAG_FNDCL_CREATE_THIS;
+
 				if (noMeta) {
 					subFlags |= SYNTAXDATAFLAG_FNDCL_NO_META;
 				}
@@ -1424,6 +1412,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 					&outsideScope.scope,
 					&variadicScope.scope,
 					parser,
+					cl,
 					subFlags,
 					&fnDeclData
 				);
@@ -1473,6 +1462,9 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 		/// TODO: handle metaControlFunctions
 		Array_free(metaControlFunctions);
 	}
+
+	Array_free(projections);
+	Prototype_free(thisClassProto, true);
 
 	Array_free(requireList);
 }
@@ -1674,7 +1666,8 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 	
 	
 	// Search variadic
-	Variable* vdic =  Scope_search(scope, parser->token.label, NULL, SCOPESEARCH_VARIABLE);
+	label_t tokenName = parser->token.label;
+	Variable* vdic =  Scope_search(scope, tokenName, NULL, SCOPESEARCH_VARIABLE);
 	if (vdic) {
 		if (!Prototype_isType(vdic->proto)) {
 			raiseError("[Type] Variadic type must be typed as Type");
@@ -1683,9 +1676,18 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 
 		return Prototype_create_variadic(vdic);
 	}
+
+
+	Prototype* projProto = ScopeFunctionArgProjection_globalSearchPrototype(
+		scope, tokenName
+	);
+	if (projProto) {
+		Prototype_addUsage(*projProto);
+		return projProto;
+	}
 	
 	// Default behavior
-	Class* cl = Scope_search(scope, parser->token.label, NULL, SCOPESEARCH_CLASS);
+	Class* cl = Scope_search(scope, tokenName, NULL, SCOPESEARCH_CLASS);
 	if (cl) {
 		Prototype* proto = primitives_getPrototype(cl);
 		if (proto)
@@ -1773,12 +1775,14 @@ Function* Syntax_functionDeclaration(
 	Scope* scope,
 	Scope* variadicScope,
 	Parser* parser,
+	Class* thisclass,
 	int flags,
 	const Syntax_FunctionDeclarationArg* defaultData
 ) {
-	int fnFlags = flags & SYNTAXDATAFLAG_FNDCL_THIS ? FUNCTIONFLAGS_THIS : 0;
-	label_t name = LABEL_NULL;
+	int fnFlags = thisclass ? FUNCTIONFLAGS_THIS : 0;
 	int syntaxIndex = -1;
+	label_t name = LABEL_NULL;
+	definitionState_t fnMetaDefinitionState = DEFINITIONSTATE_UNDEFINED;
 	char noMeta = flags & SYNTAXDATAFLAG_FNDCL_NO_META;
 	bool definitionToRead;
 	bool returnTypeAlreadyRead = false;
@@ -1786,10 +1790,13 @@ Function* Syntax_functionDeclaration(
 	int settings_len = -1;
 	Prototype* returnType = NULL;
 
+	char withArgs;
 	Array arguments; // type: Variable*
 	if (defaultData->args_len < 0) {
-		arguments.length = 0xffff; // no args read 
+		withArgs = 0;
+		Array_create(&arguments, sizeof(Variable*));
 	} else {
+		withArgs = 2;
 		arguments.data = defaultData->args;
 		arguments.size = sizeof(Variable*);
 		arguments.length = defaultData->args_len;
@@ -1827,7 +1834,7 @@ Function* Syntax_functionDeclaration(
 			break;
 		}
 
-		case ANNOTATION_NO_META:
+		case ANNOTATION_SOLITARY:
 		{
 			noMeta = 1;
 			break;
@@ -1855,6 +1862,40 @@ Function* Syntax_functionDeclaration(
 		fnFlags |= FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
 	}
 
+	if ((flags & SYNTAXDATAFLAG_FNDCL_CREATE_THIS) && thisclass) {
+		withArgs = 1;
+
+		if (thisclass == _langstd.pointer) {
+			/// TODO: what should we do ?
+
+		} else {
+			FunctionArgProjection* pj = Array_push(
+				FunctionArgProjection, defaultData->projections);
+
+			// Create a projection for thisvar
+			Prototype_addUsage(*defaultData->thisClassProto); // for projection
+			Prototype_addUsage(*defaultData->thisClassProto); // for setting
+
+			pj->name = _commonLabels._This;
+			pj->proto = defaultData->thisClassProto;
+
+			Variable* thisvar = malloc(sizeof(Variable));
+			// Prototype* proto = Prototype_create_direct(thisclass, PSC_UNKNOWN, NULL, 0);
+			ProtoSetting* setting = malloc(sizeof(ProtoSetting));
+			setting->useVariable = true;
+			setting->useProto = true;
+			setting->variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
+			setting->proto = defaultData->thisClassProto;
+			
+			Variable_create(thisvar);
+			thisvar->name = _commonLabels._this;
+			thisvar->proto = Prototype_create_direct(_langstd.pointer, 8, setting, 1);
+			
+			*Array_push(Variable*, &arguments) = thisvar;
+		}
+
+	}
+
 	if (flags & SYNTAXDATAFLAG_FNDCL_FAST_ACCESS) {
 		Variable* arg = malloc(sizeof(Variable));
 		Variable_create(arg);
@@ -1862,14 +1903,13 @@ Function* Syntax_functionDeclaration(
 		arg->proto = Prototype_create_direct(_langstd.type, _langstd.type->primitiveSizeCode, NULL, 0);
 		arg->id = -1;
 		
-		Array_createAllowed(&arguments, sizeof(Variable*), 1);
+		withArgs = 2;
 		*Array_push(Variable*, &arguments) = arg;
 	}
 
 
 	if (flags & SYNTAXDATAFLAG_FNDCL_STD_FAST_ACCESS) {
-		arguments.length = 0;
-		arguments.reserved = 0;
+		withArgs = 2;
 	}
 
 	// Read content
@@ -1945,11 +1985,24 @@ Function* Syntax_functionDeclaration(
 		
 		// Arguments
 		case 2:
-			if (arguments.length != 0xffff) {
+			ScopeFunctionArgProjection pjScope = {
+				.scope = {scope, SCOPE_PROJECTIONS}
+			};
+
+			if (defaultData->projections) {
+				pjScope.projections = defaultData->projections->data;
+				pjScope.length = defaultData->projections->length;
+			} else {
+				pjScope.length = 0;
+			}
+
+			if (withArgs >= 2) {
 				raiseError("[Architecture] argument list already defined");
 				break;
 			}
-			arguments = Syntax_functionArgumentsDecl(scope, parser);
+
+			withArgs = 2;
+			Syntax_functionArgumentsDecl(&pjScope.scope, &arguments, parser);
 			break;
 
 		// Type
@@ -2021,10 +2074,9 @@ Function* Syntax_functionDeclaration(
 	/// TODO: this search
 	Function* fn;
 	typedef Function* fn_t;
-	Class* definedClass = defaultData->definedClass;
-	if (definedClass) {		
+	if (thisclass) {		
 		if (flags & SYNTAXDATAFLAG_FNDCL_ARGUMENT_CONSTRUCTOR) {
-			Array_loop(fn_t, definedClass->constructors, fptr) {
+			Array_loop(fn_t, thisclass->constructors, fptr) {
 				Function* f = *fptr;
 				if (f->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
 					fn = f;
@@ -2035,7 +2087,7 @@ Function* Syntax_functionDeclaration(
 			fn = NULL;
 			argumentConstructorFound:
 		} else if (flags & SYNTAXDATAFLAG_FNDCL_CONSTRUCTOR) {
-			Array_loop(fn_t, definedClass->constructors, fptr) {
+			Array_loop(fn_t, thisclass->constructors, fptr) {
 				Function* f = *fptr;
 				if (f->name == name) {
 					fn = f;
@@ -2049,7 +2101,7 @@ Function* Syntax_functionDeclaration(
 			ScopeClass sc = {
 				.scope = {.type=SCOPE_CLASS, .parent=NULL},
 				.allowThis = false,
-				.cl = definedClass
+				.cl = thisclass
 			};
 			fn = Scope_search(&sc.scope, name, NULL, SCOPESEARCH_FUNCTION);
 		}
@@ -2058,6 +2110,8 @@ Function* Syntax_functionDeclaration(
 	}
 
 	if (fn) {
+		Array_free(arguments);
+
 		switch (fn->definitionState) {
 		case DEFINITIONSTATE_READING:
 			raiseError("[Architecture] This function is already being defined");
@@ -2069,7 +2123,7 @@ Function* Syntax_functionDeclaration(
 		}
 
 		// Check if extra data have not been written
-		if (arguments.length != 0xffff) {
+		if (withArgs >= 2) {
 			raiseError("[Architecture] A definition of arguments already exists for this function");
 			return NULL;
 		}
@@ -2088,7 +2142,7 @@ Function* Syntax_functionDeclaration(
 
 	} else {
 		// Check if extra data have been given
-		if (arguments.length == 0xffff) {
+		if (withArgs == 0) {
 			raiseError("[Architecture] Arguments are missing for this function");
 			return NULL;
 		}
@@ -2100,7 +2154,9 @@ Function* Syntax_functionDeclaration(
 		fn->name = name;
 		fn->definitionState = definitionToRead ? DEFINITIONSTATE_READING : DEFINITIONSTATE_UNDEFINED;
 		fn->metaDefinitionState = noMeta ? DEFINITIONSTATE_NOEXIST : DEFINITIONSTATE_UNDEFINED;
+		
 
+		printf("couple %s=%p %d of %s\n", name, fn, noMeta, thisclass ? thisclass->name : NULL);
 		Variable** args = malloc(sizeof(Variable*) * arguments.length);
 		memcpy(args, arguments.data, sizeof(Variable*) * arguments.length);
 		Array_free(arguments);
@@ -2145,14 +2201,31 @@ Function* Syntax_functionDeclaration(
 			fn->requires_len = 0;
 		}
 
-		
+		// Add projections
+		Array* pjs = defaultData->projections;
+		if (pjs) {
+			int length = pjs->length;
+			
+			if (length) {
+				fn->projections_len = length;
+				FunctionArgProjection* data = malloc(sizeof(FunctionArgProjection) * length);
+				memcpy(data, pjs->data, sizeof(FunctionArgProjection) * length);
+				fn->projections = data;
+				pjs->length = 0; // empty array
+			} else {
+				fn->projections_len = 0;
+			}
+
+		} else {
+			fn->projections_len = 0;
+		}
 	}
 
 
 
 	// Read defintion
 	if (definitionToRead) {
-		Syntax_functionDefinition(scope, parser, fn, definedClass);
+		Syntax_functionDefinition(scope, parser, fn, thisclass);
 	}
 
 	
@@ -2165,10 +2238,7 @@ Function* Syntax_functionDeclaration(
 }
 
 
-Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
-	Array arguments;
-	Array_create(&arguments, sizeof(Variable*));
-
+void Syntax_functionArgumentsDecl(Scope* scope, Array* arguments, Parser* parser) {
 	Parser_read(parser, &_labelPool);
 	bool cannotFinish = false;
 	while (true) {
@@ -2187,8 +2257,8 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 
 			Variable* variable = malloc(sizeof(Variable));
 			Variable_create(variable);
-			int position = arguments.length;
-			*Array_push(Variable*, &arguments) = variable;
+			int position = arguments->length;
+			*Array_push(Variable*, arguments) = variable;
 
 			variable->name = name;
 			variable->id = -1;
@@ -2218,7 +2288,7 @@ Array Syntax_functionArgumentsDecl(Scope* scope, Parser* parser) {
 	}
 
 	finish:
-	return arguments;
+	return;
 }
 
 static void functionArgumentsCall(
@@ -3151,8 +3221,7 @@ static void Syntax_functionScope_while(
 
 	ScopeFunction subScope = {
 		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
-		.fn = scope->fn,
-		.thisvar = scope->thisvar
+		.fn = scope->fn
 	};
 	ScopeFunction_create(&subScope);
 
@@ -3337,56 +3406,26 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	fn->definitionState = DEFINITIONSTATE_READING;
 
 	Variable thisvar;
-	ScopeFunction fnScope;
+	ScopeFunction fnScope = {
+		{scope, SCOPE_FUNCTION},
+		fn,
+	};
+
 	Trace trace;
 	Trace_create(&trace);
-
-
-	if (thisclass) {
-		// Construct 'this' object
-		{
-			ProtoSetting* setting = malloc(sizeof(ProtoSetting));
-			setting->useVariable = true;
-			setting->useProto = true;
-			setting->variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
-			setting->proto = Prototype_create_direct(thisclass,
-				Class_getPrimitiveSizeCode(thisclass), NULL, 0);
-
-			thisvar.name = _commonLabels._this;
-			thisvar.id = Trace_ins_create(&trace, &thisvar, 8, 1<<1, 8);
-			thisvar.proto = Prototype_create_direct(_langstd.pointer, 0, setting, 1);
-			Variable_create(&thisvar);
-		}
-
-		fnScope = (ScopeFunction){
-			{scope, SCOPE_FUNCTION},
-			fn,
-			.thisvar = &thisvar,
-			.thisclass = thisclass
-		};
-
-
-	} else {
-		fnScope = (ScopeFunction){
-			{scope, SCOPE_FUNCTION},
-			fn,
-			.thisvar = NULL,
-			.thisclass = NULL
-		};
-	}
-
 
 	// Add arguments
 	Trace_pushArgs(&trace, fn->arguments, fn->args_len);
 	Trace_pushArgs(&trace, fn->settings, fn->settings_len);
 	
 	if (fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
-		Trace_pushArgumentTypeConstructorCalls(&trace, &thisvar, thisclass);
+		/// TODO: there
+		// Trace_pushMembersTypeConstructorCalls(&trace, &thisvar, thisclass);
 	}
 
 
 	// Fill args
-	ScopeFunction_create(&fnScope);	
+	ScopeFunction_create(&fnScope);
 
 
 	// Read content
@@ -3427,9 +3466,6 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 		Trace_popArgs(&trace, fn->settings, fn->settings_len);
 		Trace_popArgs(&trace, fn->arguments, fn->args_len);
 	
-		if (fnScope.thisvar)
-			Trace_popVariable(&trace, thisvar.id);
-			
 		Trace_delete(&trace, false);
 
 	
@@ -3454,8 +3490,6 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 			Trace_popArgs(&trace, fn->settings, fn->settings_len);
 			Trace_popArgs(&trace, fn->arguments, fn->args_len);
 	
-			if (fnScope.thisvar)
-				Trace_popVariable(&trace, thisvar.id);
 			
 			Trace_delete(&trace, false);
 		}
@@ -3476,20 +3510,13 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 
 	
-	
-	
-	if (fnScope.thisvar) {
-		Variable_delete(&thisvar);
-	}
-
-
 	fn->definitionState = DEFINITIONSTATE_DONE;
 	return true;
 }
 
 
 
-void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool) {
+void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelPool, Scope* scope) {
 	Parser_read(parser, labelPool);
 
 	if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
@@ -3538,10 +3565,6 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		return;
 	}
 
-	if (annotationLabel == _commonLabels._noMeta) {
-		annotation->type = ANNOTATION_NO_META;
-		return;
-	}
 	
 	if (annotationLabel == _commonLabels._separation) {
 		annotation->type = ANNOTATION_SEPARATION;
@@ -3643,6 +3666,47 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		return;
 	}
 
+
+	if (annotationLabel == _commonLabels._solitary) {
+		annotation->type = ANNOTATION_SOLITARY;
+		return;
+	}
+
+	if (annotationLabel == _commonLabels._project) {
+		annotation->type = ANNOTATION_PROJECT;
+
+		// Open parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0))
+			return;
+
+		// Object name
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+		return;
+		
+		annotation->project.name = parser->token.label;
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_ANNOTATION_PROJECT, 0) == 0) {
+			// finish
+			annotation->project.proto = NULL;
+			return;
+		}
+		
+
+		/**
+		 * TODO: this prototype should be consumed,
+		 * else, a memory leak can happen */
+		annotation->project.proto = Syntax_proto(parser, scope);
+
+		// Finish parenthesis
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_SINGLETON_RPAREN, 0))
+			return;
+
+
+		return;
+	}
 
 	raiseError("[Syntax] Unkown annotation");
 }
