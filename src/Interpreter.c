@@ -2350,6 +2350,11 @@ static void irun_memory(Cursor* c, trline_t line) {
 			}
 		}
 
+		if (action == 3) {
+			printf("\n");
+			return;
+		}
+
 		return;
 	}
 

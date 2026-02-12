@@ -74,6 +74,7 @@ struct CommonLabels {
 	label_t _DEBUG_PRINT_SHORT;
 	label_t _DEBUG_PRINT_INT;
 	label_t _DEBUG_PRINT_LONG;
+	label_t _DEBUG_PRINT_LINE;
 	
 };
 

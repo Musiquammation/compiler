@@ -1,5 +1,9 @@
 
-function inject {
-	this.value = dst.value + inc.value;
+function copy {
+	this.value = src.value;
 }
 
+
+function printMeta {
+
+}

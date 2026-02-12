@@ -482,6 +482,9 @@ enum {
 	 * +13: packed size
 	 * +15
 	 * 
+	 * ACTION=3
+	 * println
+	 * 
 	 */
 	TRACECODE_MEMORY
 };

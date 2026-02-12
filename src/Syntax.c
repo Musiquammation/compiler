@@ -3373,17 +3373,21 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		case 9: debug(2); break;
 		case 10: debug(3); break;
 
+		case 11:
+			*Trace_push(trace, 1) = TRACECODE_MEMORY | (1<<10) | (3<<11);
+			break;
+		
 		#undef debug
 
 		// free label
-		case 11:
+		case 12:
 		{
 			Syntax_functionScope_freeLabel(scope, parser, parser->token.label, trace);
 			break;
 		}
 
 		// finish scope
-		case 12:
+		case 13:
 		{
 			goto finishScope;
 		}

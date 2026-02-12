@@ -133,6 +133,7 @@ void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	def(DEBUG_PRINT_SHORT);
 	def(DEBUG_PRINT_INT);
 	def(DEBUG_PRINT_LONG);
+	def(DEBUG_PRINT_LINE);
 
 	#undef def
 }

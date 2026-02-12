@@ -225,6 +225,7 @@ Token SYNTAXLIST_FUNCTION[] = {
 	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_SHORT"},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_INT"},
 	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_LONG"},
+	{.type = TOKEN_CTYPE_KEYWORD, .string = "DEBUG_PRINT_LINE"},
 	{.type = TOKEN_CTYPE_LABEL},
 	{.type = TOKEN_CTYPE_OPERATOR, .operator = TOKEN_OPERATOR_RBRACE},
 };

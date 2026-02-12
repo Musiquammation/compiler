@@ -10,8 +10,10 @@ class {
 	value: int;
 
 	@project(I: Integer)
-	@project(J: Integer)
-	inject<number: int>(dst: Pointer<T: I>, inc: Pointer<T: J>);
+	copy(src: Pointer<T: I>);
+
+
+	printMeta();
 
 	@constructor
 	@solitary
