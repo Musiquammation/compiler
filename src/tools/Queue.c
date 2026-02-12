@@ -15,10 +15,10 @@ void* Queue_push(Queue* queue) {
 
 	// No data
 	if (length == 0) {
-		void* data = malloc(queue->size * TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE);
+		void* data = malloc(queue->size * 5);
 
 		queue->data = data;
-		queue->length = TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE;
+		queue->length = 3;
 		queue->read = 0;
 		queue->write = 1;
 
@@ -38,7 +38,7 @@ void* Queue_push(Queue* queue) {
 	// Queue is full
 	if (write == read) {
 		const ushort size = queue->size;
-		const ushort newLength = length + TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE;
+		const ushort newLength = length * 2 + 1;
 		
 		void* newData = malloc(size * newLength);
 		void* oldData = queue->data;

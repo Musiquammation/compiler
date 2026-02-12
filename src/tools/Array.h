@@ -19,7 +19,6 @@ for (Type *i = (array), *const i##_end = i + length; i < i##_end; i++)
 
 #define Array_getPos(ptr, array) (((void*)(ptr) - (array).data) / (array).size)
 
-enum {TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE  = 16};
 
 struct Array {
 	void* data;

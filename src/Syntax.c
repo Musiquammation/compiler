@@ -2406,7 +2406,7 @@ static Expression* readConstructor(Parser* parser,
 	if (TokenCompare(SYNTAXLIST_CONSTRUCTOR_START, 0) == 1) {
 		Parser_read(parser, &_labelPool);
 
-		finish:	
+		finish:
 		*Array_push(Expression*, &args) = NULL; // later, will be defined for runtime 'this'
 		
 		

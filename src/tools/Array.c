@@ -48,7 +48,7 @@ void* Array_pushSafeArray(Array* array) {
 	
 	// Realloc
 	const ushort size = array->size;
-	void* const newData = malloc(size * (reserved + TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE));
+	void* const newData = malloc(size * (reserved * 2 + 1));
 	
 	if (reserved) {
 		void* const oldData = array->data;
@@ -57,7 +57,7 @@ void* Array_pushSafeArray(Array* array) {
 	}
 
 	array->data = newData;
-	array->reserved += TOOLS_ARRAY_CURRENT_ALLOWED_BUFFER_SIZE;
+	array->reserved = reserved * 2 + 1;
 	array->length++;
 
 	return newData + length * size;

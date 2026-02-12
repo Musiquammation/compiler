@@ -23,11 +23,13 @@ static int intComparator(const void* a, const void* b) {
 
 
 
+
 static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount) {
 	uint32_t* const varMalloced = malloc((varCount+31)/32 * sizeof(int));
 
 	int waitedIns = -1;
-	int* nextInsPos;
+	int* nextInsPos = NULL;
+	int* insPosSnapshot = NULL;
 	InterpretPosition* position;
 	Array posArray; // type: int
 
@@ -44,16 +46,21 @@ static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount)
 			// we can create positions
 			Array_sort(&posArray, intComparator);
 			position = malloc(posArray.length * sizeof(InterpretPosition));
-			
+
 			itp->positions = position;
 			itp->pos_len = posArray.length;
+
+			// Snapshot indépendant pour éviter l'invalidation du pointeur
+			// lors d'un éventuel realloc dans Array_push
+			insPosSnapshot = malloc((posArray.length + 1) * sizeof(int));
+			memcpy(insPosSnapshot, posArray.data, posArray.length * sizeof(int));
+			insPosSnapshot[posArray.length] = -1; // sentinelle de fin
+
 			if (posArray.length > 0) {
-				nextInsPos = posArray.data;
+				nextInsPos = insPosSnapshot;
 				waitedIns = *nextInsPos;
 				nextInsPos++;
 			}
-			
-			*Array_push(int, &posArray) = -1; // end
 		}
 
 		while (true) {
@@ -68,9 +75,9 @@ static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount)
 
 			trline_t line;
 			move();
-	
+
 			int code = line & 0x3ff;
-	
+
 			if (code <= TRACE_USAGE_OUT_OF_BOUNDS) {
 				trline_t variable = line >> 11;
 				if (varMalloced[variable/32] & (1u<<(variable%32))) {
@@ -78,19 +85,19 @@ static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount)
 				}
 				continue;
 			}
-	
-	
+
+
 			switch (code) {
 			case TRACECODE_STAR:
 				if (((line >> 10) & 0xf) == 0) {
 					pack = pack->next;
 					if (!pack)
 						goto finishMainWhile;
-	
+
 					ptr = pack->line;
 				}
 				break;
-	
+
 			case TRACECODE_CREATE:
 			{
 				trline_t variable = (line >> 16) & 0xfff;
@@ -101,105 +108,106 @@ static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount)
 					varMalloced[variable / 32] |=  (1u << (variable % 32));
 				}
 				move(); // skip
-	
+
 				break;
 			}
-	
+
 			case TRACECODE_DEF:
 				switch ((line >> 10) & 0x3) {
 				case 0:
 				case 1:
 					break;
-	
+
 				case 2:
 					move();
 					break;
-	
+
 				case 3:
 					move();
 					move();
 					break;
 				}
 				break;
-	
+
 			case TRACECODE_MOVE:
 				break;
-	
+
 			case TRACECODE_PLACE:
 				break;
-	
+
 			case TRACECODE_ARITHMETIC:
 				break;
-	
+
 			case TRACECODE_ARITHMETIC_IMM:
 				switch ((line >> 13) & 0x3) {
 				case 0:
 				case 1:
 					break;
-	
+
 				case 2:
 					move();
 					break;
-	
+
 				case 3:
 					move();
 					move();
 					break;
 				}
 				break;
-				break;
-	
+
 			case TRACECODE_LOGIC:
 				break;
-	
+
 			case TRACECODE_LOGIC_IMM_LEFT:
 			case TRACECODE_LOGIC_IMM_RIGHT:
 				switch ((line >> 14) & 0x3) {
 				case 0:
 				case 1:
 					break;
-	
+
 				case 2:
 					move();
 					break;
-	
+
 				case 3:
 					move();
 					move();
 					break;
 				}
 				break;
-	
+
 			case TRACECODE_FNCALL:
 				break;
-	
+
 			case TRACECODE_IF:
 				if (type == 0)
 					*Array_push(int, &posArray) = line >> 10;
 				break;
-	
+
 			case TRACECODE_JMP:
 				if (type == 0)
 					*Array_push(int, &posArray) = line >> 10;
 				break;
-	
+
 			case TRACECODE_CAST:
 				break;
-	
+
 			case TRACECODE_STACK_PTR:
 				move();
 				break;
 			}
 		}
-	
-	
+
+
 		finishMainWhile:
 		#undef move
 	}
 
+	free(insPosSnapshot);
 	free(varMalloced);
 	Array_free(posArray);
 }
+
 
 Interpreter* Interpreter_build(Trace* trace) {
 	Interpreter* itp = malloc(sizeof(Interpreter));
