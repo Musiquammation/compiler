@@ -2388,6 +2388,8 @@ static Expression* readConstructor(Parser* parser,
 	// Read settings
 	Array args;
 	Array_create(&args, sizeof(Expression*));
+	*Array_push(Expression*, &args) = NULL; // later, will be defined for projection 'This'
+
 	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LANGLE, SYNTAXFLAG_UNFOUND) == 0) {
 		functionSettingsCall(scope, parser, &args);
@@ -2405,7 +2407,7 @@ static Expression* readConstructor(Parser* parser,
 		Parser_read(parser, &_labelPool);
 
 		finish:	
-		*Array_push(Expression*, &args) = NULL; // later, will be defined for 'this'
+		*Array_push(Expression*, &args) = NULL; // later, will be defined for runtime 'this'
 		
 		
 		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
@@ -2413,7 +2415,6 @@ static Expression* readConstructor(Parser* parser,
 		} else {
 			functionArgumentsCall(scope, parser, constructor, NULL, &args);
 		}
-		*Array_push(Expression*, &args) = NULL; // mark the end
 
 		
 		Expression* ret = malloc(sizeof(Expression));
@@ -2431,6 +2432,7 @@ static Expression* readConstructor(Parser* parser,
 	}
 
 
+	// Read definitions of properties
 	while (true) {
 		if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
 			return NULL;

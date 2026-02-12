@@ -1,3 +1,12 @@
+@constructor
+function {
+	
+}
+
+@constructor
+function def {
+	
+}
 
 function copy {
 	this.value = src.value;

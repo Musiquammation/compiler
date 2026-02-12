@@ -1,3 +1,24 @@
+@constructor
+@separation
+function {
+	This.isValueKnown = 0;
+	This.positive = 2;
+	
+}
+
+@constructor
+@separation
+function def {
+	This.val = value;
+	This.isValueKnown = 1;
+
+	This.positive = 0;
+	if (value >= 0) {
+		This.positive = 1;
+	}
+	
+}
+
 
 @separation
 function copy {

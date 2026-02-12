@@ -1311,20 +1311,19 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 
 		// Place arguments
-		for (int i = argsStartIndex; i < argsLength; i++) {
+		for (int i = 0; i < argsLength; i++) {
 			/// TODO: check size
 			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			int subSize = Prototype_getSizes(arguments[i]->proto).size;
 			uint bufferVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
 
-			printf("args %p\n", args[i]);
 			Trace_set(
 				trace,
-				args[i],
+				args[i+argsStartIndex],
 				bufferVar,
 				primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
 				Prototype_getSignedSize(arguments[i]->proto),
-				args[i]->type
+				args[i+argsStartIndex]->type
 			);
 
 			uint finalVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
@@ -1363,7 +1362,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		
 
-		for (int i = 0; i < argsLength - argsStartIndex; i++) {
+		for (int i = 0; i < argsLength; i++) {
 			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			if (psc == PSC_UNKNOWN) {
 				raiseError("[Architecture] Registrable status is unknown");
@@ -1382,7 +1381,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 
 		// Remove variables
-		for (int i = argsLength - argsStartIndex - 1; i >= 0; i--) {
+		for (int i = argsLength - 1; i >= 0; i--) {
 			Trace_popVariable(trace, variables[i]);
 		}
 

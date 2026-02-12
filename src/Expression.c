@@ -173,8 +173,10 @@ void Expression_free(int type, Expression* e) {
 		typedef Expression* expr_t;
 		Array_for(expr_t, e->data.constructor.args, length, ptr) {
 			Expression* arg = *ptr;
-			Expression_free(arg->type, arg);
-			free(arg);
+			if (arg) {
+				Expression_free(arg->type, arg);
+				free(arg);
+			}
 		}
 
 		free(e->data.constructor.members);
@@ -1069,15 +1071,13 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 		pat.proto = value->data.constructor.origin->proto;
 		pat.type = Prototype_generateType(pat.proto, scope, TYPE_CWAY_DEFAULT);
 
-		Expression thisArg = {
+		Expression projectionThisArg = {
 			.type = EXPRESSION_TYPE,
 			.data = {.type = pat.type}
 		};
 
-		int thisIndex = fn->projections_len + fn->settings_len;
-
 		Expression** args = value->data.constructor.args;
-		args[thisIndex] = &thisArg;
+		args[0] = &projectionThisArg;
 
 		/// TODO: choose argsStartIndex
 		Expression fncall = {
@@ -1090,7 +1090,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 
 		Interpret_call(&fncall, scope);
 
-		args[thisIndex] = NULL;
+		args[0] = NULL;
 		return pat;
 	}
 
@@ -1348,12 +1348,6 @@ void Expression_place(
 
 		Function* fn = sourceExpr->data.constructor.origin->fn;
 		if (fn->flags & FUNCTIONFLAGS_THIS) {
-			// 'this' projection
-			Expression* thisProj = malloc(sizeof(Expression));
-			thisProj->type = EXPRESSION_NONE;
-			args[0] = thisProj;
-
-
 			// 'this' argument
 			Expression* thisArg = malloc(sizeof(Expression));
 			thisArg->type = EXPRESSION_PROPERTY,

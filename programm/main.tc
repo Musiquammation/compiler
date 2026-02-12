@@ -2,7 +2,7 @@
 
 
 function main {
-	let src = Integer{ value: 32 } ();
+	let src = Integer:def<32>{}();
 	let dst = Integer{ value: 40 } ();
 
 	let srcPtr = &src;

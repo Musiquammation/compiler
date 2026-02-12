@@ -16,7 +16,9 @@ class {
 	printMeta();
 
 	@constructor
-	@solitary
 	function();
+
+	@constructor
+	def<value: int>();
 }
 
