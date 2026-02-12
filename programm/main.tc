@@ -4,8 +4,12 @@
 function main {
 	let src = Integer{ value: 32 } ();
 	let dst = Integer{ value: 40 } ();
+	let inc = Integer{ value: 10 } ();
 
-	src.inject(dst);
+	let dstPtr = &dst;
+	let incPtr = &dst;
+	src.inject<src, dst, inc, 49>(dstPtr, incPtr);
+	src.inject<src, dst, inc, 49>(dstPtr, incPtr);
 
 	return dst.value;
 }

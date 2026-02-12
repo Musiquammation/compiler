@@ -1789,6 +1789,7 @@ Function* Syntax_functionDeclaration(
 	Variable** settings;
 	int settings_len = -1;
 	Prototype* returnType = NULL;
+	FunctionArgProjection thisProjection = {NULL, NULL};
 
 	char withArgs;
 	Array arguments; // type: Variable*
@@ -1869,15 +1870,13 @@ Function* Syntax_functionDeclaration(
 			/// TODO: what should we do ?
 
 		} else {
-			FunctionArgProjection* pj = Array_push(
-				FunctionArgProjection, defaultData->projections);
 
 			// Create a projection for thisvar
 			Prototype_addUsage(*defaultData->thisClassProto); // for projection
 			Prototype_addUsage(*defaultData->thisClassProto); // for setting
 
-			pj->name = _commonLabels._This;
-			pj->proto = defaultData->thisClassProto;
+			thisProjection.name = _commonLabels._This;
+			thisProjection.proto = defaultData->thisClassProto;
 
 			Variable* thisvar = malloc(sizeof(Variable));
 			// Prototype* proto = Prototype_create_direct(thisclass, PSC_UNKNOWN, NULL, 0);
@@ -2156,7 +2155,6 @@ Function* Syntax_functionDeclaration(
 		fn->metaDefinitionState = noMeta ? DEFINITIONSTATE_NOEXIST : DEFINITIONSTATE_UNDEFINED;
 		
 
-		printf("couple %s=%p %d of %s\n", name, fn, noMeta, thisclass ? thisclass->name : NULL);
 		Variable** args = malloc(sizeof(Variable*) * arguments.length);
 		memcpy(args, arguments.data, sizeof(Variable*) * arguments.length);
 		Array_free(arguments);
@@ -2206,7 +2204,19 @@ Function* Syntax_functionDeclaration(
 		if (pjs) {
 			int length = pjs->length;
 			
-			if (length) {
+			if (thisProjection.name || thisProjection.proto) {
+				fn->projections_len = length+1;
+				FunctionArgProjection* data = malloc(sizeof(FunctionArgProjection) * (length+1));
+				data[0] = thisProjection;
+
+				if (length) {
+					memcpy(&data[1], pjs->data, sizeof(FunctionArgProjection) * length);
+				}
+
+				fn->projections = data;
+				pjs->length = 0; // empty array
+
+			} else if (length) {
 				fn->projections_len = length;
 				FunctionArgProjection* data = malloc(sizeof(FunctionArgProjection) * length);
 				memcpy(data, pjs->data, sizeof(FunctionArgProjection) * length);
@@ -2377,15 +2387,11 @@ static Expression* readConstructor(Parser* parser,
 	constructorFound:
 	// Read settings
 	Array args;
-	int argsStartIndex;
 	Array_create(&args, sizeof(Expression*));
 	Parser_read(parser, &_labelPool);
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LANGLE, SYNTAXFLAG_UNFOUND) == 0) {
 		functionSettingsCall(scope, parser, &args);
-		argsStartIndex = args.length;
 		Parser_read(parser, &_labelPool);
-	} else {
-		argsStartIndex = 0;
 	}
 	
 	// Require left brace
@@ -2400,7 +2406,7 @@ static Expression* readConstructor(Parser* parser,
 
 		finish:	
 		*Array_push(Expression*, &args) = NULL; // later, will be defined for 'this'
-
+		
 		
 		if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, SYNTAXFLAG_UNFOUND)) {
 			raiseError("[TODO] No fncall");
@@ -2416,7 +2422,6 @@ static Expression* readConstructor(Parser* parser,
 		Prototype_addUsage(*proto);
 		origin->proto = proto;
 		origin->fn = constructor;
-		origin->argsStartIndex = argsStartIndex;
 
 		ret->type = EXPRESSION_CONSTRUCTOR;
 		ret->data.constructor.origin = origin;
@@ -2695,17 +2700,15 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				raiseError("[TODO] fn references not handled");
 			}
 
+			
 
-			int argsStartIndex;
 			Function* fn = object;
 			Array args;
 			Array_create(&args, sizeof(Expression*));
 			if (subSyntaxIndex == 0) {
-				argsStartIndex = 0;
 				functionArgumentsCall(scope, parser, fn, last, &args);
 			} else {
 				functionSettingsCall(scope, parser, &args);
-				argsStartIndex = args.length;
 				
 				Parser_read(parser, &_labelPool);
 				if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0)) {
@@ -2720,17 +2723,15 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				size_t size = sizeof(Expression*) * args.length;
 				Expression** ae = malloc(size);
 				memcpy(ae, args.data, size);
-				last->data.fncall.varr_len = args.length;
 				last->data.fncall.args = ae;
 				free(args.data);
 				
 			} else {
-				last->data.fncall.varr_len = 0;
+				last->data.fncall.args = NULL;
 			}
 
 			last->type = EXPRESSION_FNCALL;
 			last->data.fncall.fn = fn;
-			last->data.fncall.argsStartIndex = argsStartIndex;
 
 			
 			// Check for next

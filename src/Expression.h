@@ -16,7 +16,6 @@ typedef struct {
 typedef struct {
 	Prototype* proto;
 	Function* fn;
-	int argsStartIndex;
 } constructorOrigin_t;
 
 struct Expression {
@@ -48,8 +47,6 @@ struct Expression {
 		struct {
 			Expression** args;
 			Function* fn;
-			int varr_len;
-			int argsStartIndex;
 		} fncall;
 
 		struct {

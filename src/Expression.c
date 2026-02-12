@@ -43,10 +43,14 @@ void Expression_free(int type, Expression* e) {
 
 	case EXPRESSION_FNCALL:
 	{
-		int argLength = e->data.fncall.varr_len;
-		if (argLength) {
+		Function* fn = e->data.fncall.fn;
+		Expression** args = e->data.fncall.args;
+		if (args) {
+			int totalLength = fn->projections_len +
+				fn->settings_len + fn->args_len;
+
 			typedef Expression* ptr_t;
-			Array_for(ptr_t, e->data.fncall.args, argLength, ptr) {
+			Array_for(ptr_t, e->data.fncall.args, totalLength, ptr) {
 				Expression* i = *ptr;
 				Expression_free(i->type, i);
 				free(i);
@@ -163,7 +167,11 @@ void Expression_free(int type, Expression* e) {
 			free(m->expr);
 		}
 
-		for (Expression** ptr = e->data.constructor.args; *ptr; ptr++) {
+		Function* fn = e->data.constructor.origin->fn;
+		int length = fn->projections_len + fn->settings_len + fn->args_len;
+
+		typedef Expression* expr_t;
+		Array_for(expr_t, e->data.constructor.args, length, ptr) {
 			Expression* arg = *ptr;
 			Expression_free(arg->type, arg);
 			free(arg);
@@ -1057,35 +1065,32 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 
 	if (exprType == EXPRESSION_CONSTRUCTOR) {
 		protoAndType_t pat;
-		int argsStartIndex = value->data.constructor.origin->argsStartIndex;
+		Function* fn = value->data.constructor.origin->fn;
 		pat.proto = value->data.constructor.origin->proto;
 		pat.type = Prototype_generateType(pat.proto, scope, TYPE_CWAY_DEFAULT);
-
-
-		Expression** args = value->data.constructor.args;
-		int argLen = argsStartIndex+1;
-		for (; args[argLen]; argLen++){} // get length
 
 		Expression thisArg = {
 			.type = EXPRESSION_TYPE,
 			.data = {.type = pat.type}
 		};
-		args[argsStartIndex] = &thisArg;
+
+		int thisIndex = fn->projections_len + fn->settings_len;
+
+		Expression** args = value->data.constructor.args;
+		args[thisIndex] = &thisArg;
 
 		/// TODO: choose argsStartIndex
 		Expression fncall = {
 			.type = EXPRESSION_FNCALL,
 			.data = {.fncall = {
 				.args = args,
-				.fn = value->data.constructor.origin->fn,
-				.varr_len = argLen,
-				.argsStartIndex = argsStartIndex	
+				.fn = fn
 			}}
 		};
 
 		Interpret_call(&fncall, scope);
 
-		args[argsStartIndex] = NULL;
+		args[thisIndex] = NULL;
 		return pat;
 	}
 
@@ -1340,12 +1345,16 @@ void Expression_place(
 		}
 
 		Expression** args = sourceExpr->data.constructor.args;
-		int argsStartIndex = sourceExpr->data.constructor.origin->argsStartIndex;
-		int argLen = argsStartIndex+1;
-		for (; args[argLen]; argLen++){} // get length
 
-		
-		if (args[argsStartIndex] == NULL) {
+		Function* fn = sourceExpr->data.constructor.origin->fn;
+		if (fn->flags & FUNCTIONFLAGS_THIS) {
+			// 'this' projection
+			Expression* thisProj = malloc(sizeof(Expression));
+			thisProj->type = EXPRESSION_NONE;
+			args[0] = thisProj;
+
+
+			// 'this' argument
 			Expression* thisArg = malloc(sizeof(Expression));
 			thisArg->type = EXPRESSION_PROPERTY,
 			thisArg->data.property.origin = NULL;
@@ -1356,7 +1365,7 @@ void Expression_place(
 			Expression* thisAddrArg = malloc(sizeof(Expression));
 			thisAddrArg->type = EXPRESSION_ADDR_OF;
 			thisAddrArg->data.operand.op = thisArg;
-			args[argsStartIndex] = thisAddrArg;
+			args[fn->settings_len + fn->projections_len] = thisAddrArg;
 		}
 
 		// Call constructor
@@ -1365,8 +1374,6 @@ void Expression_place(
 			.data = {.fncall = {
 				.args = args,
 				.fn = sourceExpr->data.constructor.origin->fn,
-				.argsStartIndex = argsStartIndex,
-				.varr_len = argLen
 			}}
 		};
 

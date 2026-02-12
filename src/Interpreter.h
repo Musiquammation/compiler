@@ -39,14 +39,14 @@ void Interpreter_delete(Interpreter* itp);
 Type* Interpret_call(Expression* fncallExpr, Scope* scope);
 
 interpreterSlot_t Interpret_interpret(
-	const Interpreter* interpreter,
+	const Interpreter* itp,
 	Scope* scope,
 	Expression** args,
+	int projectionLength,
+	int settingsLength,
 	int argsLen,
-	int startArgIndex,
 	bool useThis,
 	bool shouldReturn
 );
-
 
 bool Interpreter_checkDefinitionState(definitionState_t definitionState);

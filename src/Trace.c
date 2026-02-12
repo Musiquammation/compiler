@@ -328,8 +328,6 @@ void Trace_pushMembersTypeConstructorCalls(Trace* trace, Variable* thisvar, Clas
 	Expression* varExprList[] = {&varExpr};
 	Expression expr = {.type = EXPRESSION_FNCALL};
 	expr.data.fncall.args = varExprList;
-	expr.data.fncall.varr_len = 0;
-	expr.data.fncall.argsStartIndex = 0;
 	
 	typedef Variable* var_t;
 	typedef Function* fn_t;
@@ -1301,62 +1299,25 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 	case EXPRESSION_FNCALL:
 	{
-		int argsLength = expr->data.fncall.varr_len;
-		int argsStartIndex = expr->data.fncall.argsStartIndex;
 		Expression** args = expr->data.fncall.args;
 
 		Function* fn = expr->data.fncall.fn;
 		Variable** arguments = fn->arguments;
 
-		bool useThis = (fn->flags & FUNCTIONFLAGS_THIS) ? true : false;
-		uint variables[argsLength - argsStartIndex];
-		uint* scaledVariables;
-
-		const int* currentRegister;
-		int usedArgsLength = argsLength - argsStartIndex;
-
-		if (useThis) {
-			uint bufferVar = Trace_ins_create(trace, NULL, 8, 0, 8);
- 			Trace_set(
-				trace,
-				args[argsStartIndex],
-				bufferVar,
-				-1,
-				8,
-				args[argsStartIndex]->type
-			);
-
-			uint finalVar = Trace_ins_create(trace, NULL, 8, 0, 8);
-			variables[0] = finalVar;
-
-			Trace_ins_placeReg(
-				trace,
-				bufferVar,
-				finalVar,
-				ARGUMENT_REGISTERS[0],
-				Trace_packSize(8)
-			);
-
-			Trace_popVariable(trace, bufferVar);
-
-			currentRegister = &ARGUMENT_REGISTERS[1];
-			scaledVariables = &variables[1];
-			args++;
-			usedArgsLength--;
-		
-		} else {
-			currentRegister = ARGUMENT_REGISTERS;
-			scaledVariables = variables;
-		}
+		int argsLength = fn->args_len;
+		int argsStartIndex = fn->projections_len + fn->settings_len;
+		uint variables[argsLength];
+		const int* currentRegister = ARGUMENT_REGISTERS;
 
 
 		// Place arguments
-		for (int i = 0; i < usedArgsLength; i++) {
+		for (int i = argsStartIndex; i < argsLength; i++) {
 			/// TODO: check size
 			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			int subSize = Prototype_getSizes(arguments[i]->proto).size;
 			uint bufferVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
 
+			printf("args %p\n", args[i]);
 			Trace_set(
 				trace,
 				args[i],
@@ -1367,7 +1328,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			);
 
 			uint finalVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
-			scaledVariables[i] = finalVar;
+			variables[i] = finalVar;
 
 			if (currentRegister < &ARGUMENT_REGISTERS[ARGUMENT_REGISTERS_LENGTH]) {
 				Trace_ins_placeReg(
@@ -1400,23 +1361,16 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			}
 		}
 
-		// Add usages
-		if (useThis) {
-			Trace_addUsage(
-				trace, variables[0],
-				TRACE_OFFSET_NONE,
-				true
-			);
-		}
+		
 
-		for (int i = 0; i < argsLength - argsStartIndex - useThis; i++) {
+		for (int i = 0; i < argsLength - argsStartIndex; i++) {
 			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			if (psc == PSC_UNKNOWN) {
 				raiseError("[Architecture] Registrable status is unknown");
 			}
 
 			Trace_addUsage(
-				trace, scaledVariables[i],
+				trace, variables[i],
 				psc ? TRACE_OFFSET_NONE : 0,
 				true
 			);

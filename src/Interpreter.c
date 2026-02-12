@@ -1,5 +1,6 @@
 #include "Interpreter.h"
 
+#include "Variable.h"
 #include "Expression.h"
 #include "Prototype.h"
 #include "Function.h"
@@ -15,9 +16,9 @@
 
 
 static int intComparator(const void* a, const void* b) {
-    int x = *(int*)a;
-    int y = *(int*)b;
-    return (x > y) - (x < y);
+	int x = *(int*)a;
+	int y = *(int*)b;
+	return (x > y) - (x < y);
 }
 
 
@@ -271,15 +272,13 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 		if ((fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS) == 0) 
 			raiseError("[TODO] Interpret_call: no this");
 
-		if (fncallExpr->data.fncall.argsStartIndex != 0) 
-			raiseError("[TODO] Interpret_call: argsStartIndex");
-		
 
 		// Define mblock
 		Expression* arg = exprArgs[require->position];
 		interpreterSlot_t result = Interpret_interpret(
-			testfn->interpreter,
-			scope, &arg, 0, 0, true, true
+			testfn->interpreter, scope, &arg,
+			0, 0, 1,
+			true, true
 		);
 
 		if (result.u8 == 0) {
@@ -297,8 +296,9 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 		meta->interpreter,
 		scope,
 		exprArgs,
-		fncallExpr->data.fncall.varr_len,
-		fncallExpr->data.fncall.argsStartIndex,
+		0,
+		0,
+		fn->projections_len + fn->settings_len,
 		fncallExpr->data.fncall.fn->flags & FUNCTIONFLAGS_THIS,
 		meta->returnPrototype ? true:false
 	);
@@ -371,11 +371,37 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 			raiseError("[Unfound] Cannot find type");
 		}
 
-		int offset = Prototype_getVariableOffset(
-			expr->data.property.varr, expr->data.property.varr_len);
 
-		return type->data + offset;
+		int offset = Prototype_getGlobalVariableOffset(
+			first->proto,
+			&expr->data.property.varr[1], expr->data.property.varr_len-1);
+
+		slot->ptr = type->data + offset;
+		return true;
 	}
+
+
+
+	case EXPRESSION_U8:
+		slot->u8 = expr->data.num.u8;  return true;
+	case EXPRESSION_I8:
+		slot->u8 = expr->data.num.i8;  return true;
+
+	case EXPRESSION_U16:
+		slot->u16 = expr->data.num.u16; return true;
+	case EXPRESSION_I16:
+		slot->u16 = expr->data.num.i16; return true;
+
+	case EXPRESSION_U32:
+		slot->u32 = expr->data.num.u32; return true;
+	case EXPRESSION_I32:
+	case EXPRESSION_INTEGER:
+		slot->u32 = expr->data.num.i32; return true;
+
+	case EXPRESSION_U64:
+		slot->u64 = expr->data.num.u64; return true;
+	case EXPRESSION_I64:
+		slot->u64 = expr->data.num.i64; return true;
 
 	default:
 		raiseError("[Expression] Invalid expression in argument");
@@ -414,27 +440,31 @@ static bool fillSlotSetting(Expression* expr, slot_t* slot) {
 	}
 }
 
+static bool fillSlotProjection(Expression* expr, slot_t* slot) {
+	switch (expr->type) {
+	
+
+
+	default:
+		raiseError("[Expression] Invalid expression in setting");
+		return false;
+	}
+}
+
 
 
 static void fillInputSlots(
 	slot_t slots[],
 	Scope* scope,
 	Expression** args,
+	int projectionLength,
+	int settingsLength,
 	int argsLen,
-	int startArgIndex,
 	bool useThis
 ) {
-	Expression** endArgs = args + argsLen;
 	slot_t* slot = slots;
-	Expression** argptr = &args[startArgIndex];
-
-	// This
-	if (useThis) {
-		if (fillSlotArgument(scope, *argptr, slot))
-			slot++;
-		
-		argptr++;
-	}
+	Expression** argptr = &args[projectionLength + settingsLength];
+	Expression** endArgs = argptr + argsLen;
 
 	// Fill args
 	for (; argptr < endArgs; argptr++) {
@@ -443,8 +473,9 @@ static void fillInputSlots(
 	}
 
 	// Fill settings
-	endArgs = args + startArgIndex;
-	for (argptr = args; argptr < endArgs; argptr++) {
+	argptr = &args[projectionLength];
+	endArgs = argptr + settingsLength;
+	for (; argptr < endArgs; argptr++) {
 		if (fillSlotSetting(*argptr, slot))
 			slot++;
 	}
@@ -491,11 +522,12 @@ static void irun_memory(Cursor* c, trline_t line);
 
 
 interpreterSlot_t Interpret_interpret(
-   	const Interpreter* itp,
+	const Interpreter* itp,
 	Scope* scope,
 	Expression** args,
+	int projectionLength,
+	int settingsLength,
 	int argsLen,
-	int startArgIndex,
 	bool useThis,
 	bool shouldReturn
 ) {
@@ -514,7 +546,8 @@ interpreterSlot_t Interpret_interpret(
 	memset(registers, -1, sizeof(registers));
 
 	// Fill args
-	fillInputSlots(slots, scope, args, argsLen, startArgIndex, useThis);
+	fillInputSlots(slots, scope, args, 
+		projectionLength, settingsLength, argsLen, useThis);
 
 	// Run
 	#define move() {line = *c.ptr; c.ptr++;}

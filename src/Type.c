@@ -160,8 +160,9 @@ void Type_defaultConstructors(
 				fn->interpreter,
 				scope,
 				args,
-				1,
 				0,
+				0,
+				1,
 				true,
 				false
 			);

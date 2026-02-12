@@ -11,7 +11,7 @@ class {
 
 	@project(I: Integer)
 	@project(J: Integer)
-	inject(dst: Pointer<T: I>, inc: Pointer<T: J>);
+	inject<number: int>(dst: Pointer<T: I>, inc: Pointer<T: J>);
 
 	@constructor
 	@solitary

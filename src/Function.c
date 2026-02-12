@@ -95,7 +95,7 @@ Function* Function_produceMeta(Function* origin) {
 	Array arguments;
 	Array_create(&arguments, sizeof(Variable*));
 
-	// Fill arguments
+	// Fill projections
 	typedef Variable* vptr_t;
 	Array_for(FunctionArgProjection, origin->projections, origin->projections_len, proj) {
 		if (proj->name) {
@@ -107,7 +107,6 @@ Function* Function_produceMeta(Function* origin) {
 			Prototype* metaProto = Prototype_reachMeta(proj->proto);
 			setting->proto = metaProto;
 			Prototype_addUsage(*metaProto);
-			
 			
 			Prototype* ptrProto = Prototype_create_direct(
 				_langstd.pointer, 8, setting, 1
@@ -316,9 +315,7 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 		Expression fncallExpr = { .type = EXPRESSION_FNCALL, .data = {
 			.fncall = {
 				.args = argsList,
-				.fn = fn,
-				.varr_len = 1,
-				.argsStartIndex = 0
+				.fn = fn
 			}
 		}};
 
