@@ -1,4 +1,4 @@
-#define PRINT_PACK 1
+#define PRINT_PACK 0
 
 #include "Syntax.h"
 
@@ -1682,8 +1682,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope) {
 		scope, tokenName
 	);
 	if (projProto) {
-		Prototype_addUsage(*projProto);
-		return projProto;
+		return Prototype_create_link(projProto);
 	}
 	
 	// Default behavior
@@ -1873,10 +1872,11 @@ Function* Syntax_functionDeclaration(
 
 			// Create a projection for thisvar
 			Prototype_addUsage(*defaultData->thisClassProto); // for projection
-			Prototype_addUsage(*defaultData->thisClassProto); // for setting
 
 			thisProjection.name = _commonLabels._This;
 			thisProjection.proto = defaultData->thisClassProto;
+
+			Prototype* projectionLinkProto = Prototype_create_link(thisProjection.proto);
 
 			Variable* thisvar = malloc(sizeof(Variable));
 			// Prototype* proto = Prototype_create_direct(thisclass, PSC_UNKNOWN, NULL, 0);
@@ -1884,7 +1884,7 @@ Function* Syntax_functionDeclaration(
 			setting->useVariable = true;
 			setting->useProto = true;
 			setting->variable = *Array_get(Variable*, _langstd.pointer->meta->variables, 0);
-			setting->proto = defaultData->thisClassProto;
+			setting->proto = projectionLinkProto;
 			
 			Variable_create(thisvar);
 			thisvar->name = _commonLabels._this;
@@ -2199,7 +2199,7 @@ Function* Syntax_functionDeclaration(
 			fn->requires_len = 0;
 		}
 
-		// Add projections
+		// Add (and add maybe 'this' projection) projections
 		Array* pjs = defaultData->projections;
 		if (pjs) {
 			int length = pjs->length;
@@ -2481,6 +2481,7 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 	Token token;
 	ScopeSearchArgs searchArg;
 	void* object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+	bool appendMetaExpression = false;
 
 	#define enshureObject() if (!object) {\
 		raiseError("[Unknown] Object not defined");\
@@ -2492,6 +2493,15 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 
 	while (true) {
+		if (appendMetaExpression) {
+			Expression* expr = malloc(sizeof(Expression));
+			expr->type = EXPRESSION_META_OF;
+			expr->data.metaOf.origin = last;
+			last = expr;
+		}
+		
+		appendMetaExpression = false;
+
 		switch (searchArg.resultType) {
 		case SCOPESEARCH_VARIABLE: {
 			Array currentVarPath; // type: Variable*
@@ -2596,8 +2606,23 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				// meta operator
 				case 2:
 				{
-					raiseError("[TODO] meta");
-					break;
+					// get meta subscope (of a class)
+					/// TODO: check if subScope is from 'class'
+					Prototype* proto = ((Variable*)object)->proto;
+					subScopePtr = Prototype_reachSubScope(
+						Prototype_reachMeta(proto),
+						&subScope
+					);
+
+					// Read name
+					Parser_read(parser, &_labelPool);
+					if (TokenCompare(SYNTAXLIST_FREE_LABEL, 0))
+						return NULL;
+
+					label = parser->token.label;
+					object = Scope_search(subScopePtr, label, &searchArg, SCOPESEARCH_ANY);
+					appendMetaExpression = true;
+					goto generatePathExpr;
 				}
 
 
@@ -3129,7 +3154,7 @@ static void Syntax_functionScope_if(
 
 	ScopeFunction subScope = {
 		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
-		.fn = scope->fn
+		.fn = NULL
 	};
 	ScopeFunction_create(&subScope);
 
@@ -3151,7 +3176,6 @@ static void Syntax_functionScope_if(
 	free(expr);
 
 	
-	printf("ifr %d\n", signedConditionSize);
 	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
@@ -3224,7 +3248,7 @@ static void Syntax_functionScope_while(
 
 	ScopeFunction subScope = {
 		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
-		.fn = scope->fn
+		.fn = NULL
 	};
 	ScopeFunction_create(&subScope);
 
@@ -3319,14 +3343,15 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 		{
 			Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 			int exprType = expr->type;
-			int signedSize = Prototype_getSignedSize(scope->fn->returnPrototype);
+			Function* fn = ScopeFunction_reachFunction(scope);
+			int signedSize = Prototype_getSignedSize(fn->returnPrototype);
 			int size = signedSize >= 0 ? signedSize : -signedSize;
 
-			if (!scope->fn->returnPrototype) {
+			if (!fn->returnPrototype) {
 				raiseError("[Architecture] Tried to return void");
 				return -1;
 			}
-			char isRegistrable = Prototype_getPrimitiveSizeCode(scope->fn->returnPrototype);
+			char isRegistrable = Prototype_getPrimitiveSizeCode(fn->returnPrototype);
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
 
 			
@@ -3412,7 +3437,6 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass) {
 	fn->definitionState = DEFINITIONSTATE_READING;
 
-	Variable thisvar;
 	ScopeFunction fnScope = {
 		{scope, SCOPE_FUNCTION},
 		fn,
@@ -3424,10 +3448,11 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	// Add arguments
 	Trace_pushArgs(&trace, fn->arguments, fn->args_len);
 	Trace_pushArgs(&trace, fn->settings, fn->settings_len);
-	
+
+	// Build members for a constructor
+	/// TODO: handle default constructors differently
 	if (fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
-		/// TODO: there
-		// Trace_pushMembersTypeConstructorCalls(&trace, &thisvar, thisclass);
+		Trace_pushMembersTypeConstructorCalls(&trace, thisclass);
 	}
 
 
@@ -3653,9 +3678,9 @@ void Syntax_annotation(Annotation* annotation, Parser* parser, LabelPool* labelP
 		
 		annotation->require.object = parser->token.label;
 
-		// :: syntax
+		// get member
 		Parser_read(parser, &_labelPool);
-		if (TokenCompare(SYNTAXLIST_SINGLETON_SCOPE, 0))
+		if (TokenCompare(SYNTAXLIST_SINGLETON_MEMBER, 0))
 			return;
 
 		// Function name

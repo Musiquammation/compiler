@@ -90,6 +90,16 @@ Prototype* Prototype_create_variadic(Variable* ref) {
 	return proto;
 }
 
+Prototype* Prototype_create_link(Prototype* origin) {
+	Prototype* proto = malloc(sizeof(Prototype));
+	setMode(PROTO_MODE_LINK);
+	Prototype_addUsage(*origin);
+	proto->link = origin;
+
+	return proto;
+
+}
+
 void Prototype_free(Prototype* proto, bool deep) {
 	int state = proto->state;
 
@@ -138,6 +148,11 @@ void Prototype_free(Prototype* proto, bool deep) {
 		break;
 
 	case PROTO_MODE_PRIMITIVE:
+		break;
+
+	case PROTO_MODE_LINK:
+		Prototype_free(proto->link, deep);
+		free(proto);
 		break;
 	}
 }
@@ -270,6 +285,20 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope, int way) {
 	{
 		return primitives_getType(proto->primitive.cl);
 	}
+
+
+	case PROTO_MODE_LINK:
+	{
+		Type* type = Scope_searchTypeFromLink(scope, proto->link);
+		if (!type) {
+			raiseError("[Intern] Cannot find link to generate type");
+			return NULL;
+		}
+
+		type->refCount++; // add usage
+		return type;
+	}
+
 	}
 
 	raiseError("[Intern] Invalid proto mode");
@@ -319,8 +348,13 @@ ExtendedPrototypeSize Prototype_getSizes(Prototype* proto) {
 		int size = proto->primitive.size;
 		return (ExtendedPrototypeSize){size, size, proto->primitive.sizeCode};
 	}
+	
+	case PROTO_MODE_LINK:
+		return Prototype_getSizes(proto->link);
+
 	case PROTO_MODE_VOID:
 		return (ExtendedPrototypeSize){0, 0, true};
+	
 	}
 }
 
@@ -370,6 +404,10 @@ ExtendedPrototypeSize Prototype_reachSizes(Prototype* proto, Scope* scope, bool 
 		return (ExtendedPrototypeSize){size, size, true};
 	}
 
+	case PROTO_MODE_LINK:
+		return Prototype_reachSizes(proto->link, scope, throwError);
+
+
 	case PROTO_MODE_VOID:
 	{
 		return (ExtendedPrototypeSize){0, 0, true};
@@ -412,6 +450,9 @@ ExtendedPrototypeSize Prototype_getMetaSizes(Prototype* proto) {
 		break;
 	}
 
+	case PROTO_MODE_LINK:
+		return Prototype_getMetaSizes(proto->link);
+
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
 	{
@@ -448,6 +489,9 @@ ExtendedPrototypeSize Prototype_reachMetaSizes(Prototype* proto, Scope* scope, b
 		break;
 	}
 
+	case PROTO_MODE_LINK:
+		return Prototype_reachMetaSizes(proto->link, scope, throwError);
+
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
 	{
@@ -471,6 +515,9 @@ char Prototype_hasMeta(Prototype* proto) {
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
 		return 0;
+
+	case PROTO_MODE_LINK:
+		return Prototype_hasMeta(proto->link);
 	}
 }
 
@@ -503,6 +550,9 @@ Prototype* Prototype_reachMeta(Prototype* proto) {
 	{
 		return NULL;
 	}
+
+	case PROTO_MODE_LINK:
+		return Prototype_reachMeta(proto->link);
 	}
 }
 
@@ -530,6 +580,9 @@ Class* Prototype_getClass(Prototype* proto) {
 
 	case PROTO_MODE_VOID:
 		return NULL;
+
+	case PROTO_MODE_LINK:
+		return Prototype_getClass(proto->link);
 	}
 }
 
@@ -558,6 +611,9 @@ Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
 
 	case PROTO_MODE_VOID:
 		return NULL;
+
+	case PROTO_MODE_LINK:
+		return Prototype_reachProto(proto->link, parent);
 	}
 }
 
@@ -605,6 +661,9 @@ char Prototype_getPrimitiveSizeCode(Prototype* proto) {
 	{
 		return 0;
 	}
+
+	case PROTO_MODE_LINK:
+		return Prototype_getPrimitiveSizeCode(proto->link);
 	}
 }
 
@@ -654,6 +713,9 @@ Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer) {
 		raiseError("[Architecture] Cannot get a property from a primitive object");
 		break;
 
+	case PROTO_MODE_LINK:
+		return Prototype_reachSubScope(proto->link, buffer);
+
 	case PROTO_MODE_VOID:
 		raiseError("[Architecture] Cannot get a property from a void object");
 		break;
@@ -677,7 +739,11 @@ Prototype* Prototype_copy(Prototype* src) {
 	case PROTO_MODE_VARIADIC:
 		return NULL;
 
-	case PROTO_MODE_PRIMITIVE:
+
+	case PROTO_MODE_LINK:
+		return src;
+
+		case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
 		return src;
 	}
@@ -715,6 +781,10 @@ Prototype* Prototype_copyWithoutSettings(Prototype* src) {
 
 	case PROTO_MODE_VARIADIC:
 		return NULL;
+
+	case PROTO_MODE_LINK:
+		raiseError("[TODO] Prototype_copyWithoutSettings for LINK");
+		return NULL;
 		
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:
@@ -749,6 +819,9 @@ Prototype* Prototype_getArgDefintion(Prototype* proto, label_t name) {
 	case PROTO_MODE_VARIADIC:
 		raiseError("[TODO] Prototype_getArgDefintion");
 		return NULL;
+
+	case PROTO_MODE_LINK:
+		return Prototype_getArgDefintion(proto->link, name);
 		
 	case PROTO_MODE_PRIMITIVE:
 	case PROTO_MODE_VOID:

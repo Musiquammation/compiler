@@ -5,20 +5,35 @@ class {
 		val: int;
 		isValueKnown: bool;
 		positive: char; // 0: no, 1: yes, 2: unknown
+
+		@argumentConstructor
+		function();
+
+		passRuntimePositive();
+		missRuntimePositive();
+
+		@condition(passRuntimePositive, missRuntimePositive)
+		cndPositive: bool;
 	}
 
 	value: int;
 
-	@project(I: Integer)
-	copy(src: Pointer<T: I>);
-
-
-	printMeta();
 
 	@constructor
 	function();
 
 	@constructor
 	def<value: int>();
-}
 
+	@project(I: Integer)
+	copy(src: Pointer<T: I>);
+
+	printMeta();
+
+
+	@require(This.cndPositive)
+	getSqrt(): int;
+
+	@require(This.cndPositive)
+	getGMean(): int;
+}

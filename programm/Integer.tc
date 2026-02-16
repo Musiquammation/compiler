@@ -16,3 +16,12 @@ function copy {
 function printMeta {
 
 }
+
+function getSqrt {
+	return 10; // fake value for tests
+}
+
+function getGMean {
+	this.getSqrt<this::T>();
+	return 12;
+}

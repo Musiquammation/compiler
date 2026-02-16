@@ -213,40 +213,28 @@ void Function_makeRequiresReal(Function* fn, Class* thisclass) {
 		.allowThis = false
 	};
 
-	typedef Variable* var_t;
-	var_t* fnArguments = fn->arguments;
-	int fnArgsLen = fn->args_len;
-
 	for (int i = 0; i < requires_len; i++) {
 		// Search object in args
-		label_t objectName = labelRqs[i].object;
-		int position;
-		if (objectName == _commonLabels._this) {			
-			if (thisclass == NULL) {
-				raiseError("[Syntax] 'this' is not defined here");
-				return;
-			}
-
-			position = 0;
-			sc.cl = thisclass;
-
-		} else {
+		int position = 0;
+		{
+			label_t objectName = labelRqs[i].object;
+			FunctionArgProjection* projections = fn->projections;
+			int projLen = fn->projections_len;
+	
 			// Search variable in function arguments
-			Array_for(var_t, fnArguments, fnArgsLen, vptr) {
-				Variable* variable = *vptr;
-				if (variable->name == objectName) {
-					sc.cl = Prototype_getMetaClass(variable->proto);
-					goto found;
+			for (; position < projLen; position++) {
+				if (projections[position].name != objectName) {
+					continue;
 				}
-			}
 
+				sc.cl = Prototype_getMetaClass(projections->proto);
+				goto found;
+			}
+	
 			raiseError("[Unfound] Variable used in @require not found");
-
-			found:
-			if (thisclass) {
-				position++; // decalage for this
-			}
+	
 		}
+		found:
 
 		Function* sub = Scope_search(&sc.scope, labelRqs[i].fn, searchArgs, SCOPESEARCH_FUNCTION);
 		if (!sub) {
@@ -260,10 +248,8 @@ void Function_makeRequiresReal(Function* fn, Class* thisclass) {
 
 		requires[i].position = position;
 		requires[i].fn = sub;
-		printf("got %s at %d\n", sub->name, position);
-
 	}
-		
+	
 
 	fn->realRequires = requires;
 	free(labelRqs);
@@ -287,7 +273,7 @@ void FunctionAssembly_delete(FunctionAssembly* fa) {
 
 
 static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
-	TypeDefinition* def = Array_push(TypeDefinition, &scope->types);
+	TypeVarDefinition* def = Array_push(TypeVarDefinition, &scope->types);
 	Prototype* proto = variable->proto;
 	Prototype_reachMetaSizes(proto, &scope->scope, true);
 
@@ -326,15 +312,36 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 }
 
 void ScopeFunction_create(ScopeFunction* scope) {
-	Array_create(&scope->types, sizeof(TypeDefinition));
-
-	int useConstructor = scope->fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+	Array_create(&scope->types, sizeof(TypeVarDefinition));
 
 	Function* fn = scope->fn;
-	if (!fn)
+	if (!fn) {
+		scope->protoDefTypes = NULL;
+		scope->protoDefTypes_len = 0;
 		return;
+	}
 
-	/// TODO: rework this part
+	// Create types for projectors
+	TypeProtoDefinition* projectionTypes;
+	{
+		FunctionArgProjection* pjs = fn->projections;
+		int len = fn->projections_len;
+		projectionTypes = malloc(sizeof(TypeProtoDefinition) * len);
+		for (int i = 0; i < len; i++) {
+			Prototype* proto = pjs[i].proto;
+			Prototype_addUsage(*proto);
+			projectionTypes[i].proto = proto;
+			projectionTypes[i].type = Prototype_generateType(proto, &scope->scope, TYPE_CWAY_ARGUMENT);
+		}
+
+		scope->protoDefTypes = projectionTypes;;
+		scope->protoDefTypes_len = len;
+	}
+	
+	
+	int insideConstructor = fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR;
+
+
 
 	int argLength = fn->args_len;
 
@@ -343,7 +350,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 	for (int i = 0; i < argLength; i++) {
 		Variable* v = arguments[i];
 
-		if (i == 0 && useConstructor) {
+		if (i == 0 && insideConstructor) {
 			fillArgument(scope, v, TYPE_CWAY_DEFAULT);
 			continue;
 		}
@@ -351,11 +358,11 @@ void ScopeFunction_create(ScopeFunction* scope) {
 		fillArgument(scope, v, TYPE_CWAY_ARGUMENT);
 	}
 
-	// Call direct requires
-
-	/*
+	// Call pass functions of requires
 	Function_makeRequiresReal(fn, NULL);
-	printf("requires %s %d\n", fn->name, fn->requires_len);
+
+	FunctionArgProjection* projections = fn->projections;
+
 	Array_for(realRequireCouple_t, fn->realRequires, fn->requires_len, r) {
 		Function* rqfn = r->fn;
 		if ((rqfn->flags & FUNCTIONFLAGS_CONDITION) == 0) {
@@ -368,13 +375,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 
 		// Search pass
 		int position = r->position;
-		Variable* arg;
-		Class* metaClass;
-
-		arg = arguments[r->position];
-		metaClass = Prototype_getMetaClass(arg->proto);
-
-		gotArg:
+		Class* metaClass = Prototype_getMetaClass(projections[position].proto);
 
 		ScopeClass sc = {
 			.scope = {NULL, SCOPE_CLASS},
@@ -396,10 +397,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 
 		// Call fn
 		/// TODO: write cleaner code
-		mblock_t mblock;
-		Type* type = Scope_searchType(&scope->scope, thisVar);
-		type = *(Type**)type->data;
-		mblock = type->data;
+		mblock_t mblock = projectionTypes[position].type->data;
 
 		Expression argExpr = {
 			.type = EXPRESSION_MBLOCK,
@@ -409,28 +407,40 @@ void ScopeFunction_create(ScopeFunction* scope) {
 		};
 		Expression* argPointer = &argExpr;
 
-
 		/// TODO: check argsStartIndex
+
+		// Interpret pass function
 		Interpret_interpret(
 			cndfn->interpreter,
 			&scope->scope,
 			&argPointer,
-			1,
 			0,
+			0,
+			1,
 			true,
 			false
 		);
 	}
-
-	*/
 }
 
 void ScopeFunction_delete(ScopeFunction* scope) {
-	int arglen = scope->fn->args_len;
+	Function* fn = scope->fn;
+	int arglen = fn ? fn->args_len : 0;
 	int typelen = scope->types.length;
-	TypeDefinition* types = scope->types.data;
+	
+	TypeProtoDefinition* protoDefTypes = scope->protoDefTypes;
+	if (protoDefTypes) {
+		int len = scope->protoDefTypes_len;
+		for (int i = 0; i < len; i++) {
+			Prototype_free(protoDefTypes[i].proto, true);
+			Type_free(protoDefTypes[i].type);
+		}
+		free(protoDefTypes);
+	}
+	
+	TypeVarDefinition* types = scope->types.data;
 	for (int i = 0; i < typelen; i++) {
-		TypeDefinition* td = &types[i];
+		TypeVarDefinition* td = &types[i];
 		Type_free(td->type);
 		
 		if (i >= arglen) {
@@ -448,7 +458,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 
 
 Variable* ScopeFunction_searchVariable(ScopeFunction* scope, label_t name, ScopeSearchArgs* args) {
-	Array_loop(TypeDefinition, scope->types, td) {
+	Array_loop(TypeVarDefinition, scope->types, td) {
 		if (td->variable->name == name)
 			return td->variable;
 	}
@@ -486,14 +496,14 @@ void ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Prototype* pr
 		raiseError("[Syntax] Cannot create a variable whose type is a reference of an other type");
 	}
 
-	TypeDefinition* td = Array_push(TypeDefinition, &scope->types);
+	TypeVarDefinition* td = Array_push(TypeVarDefinition, &scope->types);
 	td->type = type;
 	td->variable = v;
 }
 
 
 Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variable) {
-	Array_loop(TypeDefinition, scope->types, m)
+	Array_loop(TypeVarDefinition, scope->types, m)
 		if (m->variable == variable)
 			return m->type;
 
@@ -503,8 +513,16 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
-	Array_loop(TypeDefinition, scope->types, t)
+	Array_loop(TypeVarDefinition, scope->types, t)
 		if (t->variable == variable)
+			return t->type;
+	
+	return NULL;
+}
+
+Type* ScopeFunction_searchTypeFromLink(ScopeFunction* scope, Prototype* proto) {
+	Array_for(TypeProtoDefinition, scope->protoDefTypes, scope->protoDefTypes_len, t)
+		if (t->proto == proto)
 			return t->type;
 	
 	return NULL;
@@ -512,3 +530,14 @@ Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
 
 
 
+
+Function* ScopeFunction_reachFunction(ScopeFunction* scope) {
+	while (true) {
+		if (scope->fn)
+			return scope->fn;
+		
+		scope = (ScopeFunction*)scope->scope.parent;
+	}
+
+	
+}

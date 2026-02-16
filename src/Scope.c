@@ -238,6 +238,21 @@ Type* Scope_searchType(Scope* scope, Variable* variable) {
 	return NULL;
 }
 
+Type* Scope_searchTypeFromLink(Scope* scope, Prototype* proto) {
+	while (scope) {
+		Type* t;
+		switch (scope->type) {
+		case SCOPE_FUNCTION:
+			t = ScopeFunction_searchTypeFromLink((ScopeFunction*)scope, proto);
+			if (t) {return t;}
+			break;
+		}
+		
+		scope = scope->parent;
+	}
+	
+	return NULL;
+}
 
 
 

@@ -314,7 +314,7 @@ void Trace_popArgs(Trace* trace, Variable** args, int arglen) {
 	}
 }
 
-void Trace_pushMembersTypeConstructorCalls(Trace* trace, Variable* thisvar, Class* thisclass) {
+void Trace_pushMembersTypeConstructorCalls(Trace* trace, Class* thisclass) {
 	/// TODO: check argsStartIndex 
 	Variable* currentArg;
 	Expression varExpr = {.type = EXPRESSION_PROPERTY, .data = {.property = {
@@ -342,7 +342,7 @@ void Trace_pushMembersTypeConstructorCalls(Trace* trace, Variable* thisvar, Clas
 		// Search and call constructor
 		Array_loop(fn_t, cl->constructors, fptr) {
 			Function* fn = *fptr;
-			if (fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
+			if (fn->name == NULL && fn->flags & FUNCTIONFLAGS_ARGUMENT_CONSTRUCTOR) {
 				// constructor found
 				currentArg = v;
 				expr.data.fncall.fn = fn;
@@ -1320,7 +1320,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			Trace_set(
 				trace,
 				args[i+argsStartIndex],
-				bufferVar,
+				bufferVar,	
 				primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
 				Prototype_getSignedSize(arguments[i]->proto),
 				args[i+argsStartIndex]->type
@@ -1712,22 +1712,54 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 	case EXPRESSION_ADDR_OF:
 	{
 		Expression* reference = Expression_cross(expr->data.operand.op);
-		if (reference->type != EXPRESSION_PROPERTY) {
-			raiseError("[Syntax] Can only get the address of a variable");
+		switch (reference->type) {
+		case EXPRESSION_PROPERTY:
+		{
+			if (reference->type != EXPRESSION_PROPERTY) {
+				raiseError("[Syntax] Can only get the address of a variable");
+				return;
+			}
+			
+			if (reference->data.property.origin) {
+				raiseError("[TODO] Handle origin in addrOf (this)");
+			}
+			
+			int refArrLength = reference->data.property.varr_len;
+			Variable** refVarArr = reference->data.property.varr;
+			int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
+			int srcVar = refVarArr[0]->id;
+			
+			Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
 			return;
 		}
-		
-		if (reference->data.property.origin) {
-			raiseError("[TODO] Handle origin in addrOf (this)");
+
+		case EXPRESSION_FAST_ACCESS:
+		{
+			Function* accessor = reference->data.fastAccess.accessor;
+			if (accessor->stdBehavior < 0) {
+				raiseError("[TODO] handle non standard behaviors in addrOf(fastAccess)");
+				return;
+			}
+
+			switch (accessor->stdBehavior) {
+			case 0: // pointer
+			{
+				Expression* o = reference->data.fastAccess.origin;
+				Trace_set(trace, o, destVar, destOffset, 8, o->type);
+				return;
+			}
+
+			default:
+				raiseError("[BadId]: Invalid id for standard fast access");
+			}
+
+			return;
 		}
+
+		default:
+			raiseError("[TODO] addrOf in trace");
 		
-		int refArrLength = reference->data.property.varr_len;
-		Variable** refVarArr = reference->data.property.varr;
-		int srcOffset = Prototype_getVariableOffset(refVarArr, refArrLength);
-		int srcVar = refVarArr[0]->id;
-		
-		Trace_ins_getStackPtr(trace, destVar, srcVar, destOffset, srcOffset);
-		return;
+		}
 	}	
 
 

@@ -148,7 +148,6 @@ void Type_defaultConstructors(
 				goto finishArgumentConstruction;
 			}
 
-			printf("construct %s\n", meta->name);
 
 			Expression expr = {.type = EXPRESSION_MBLOCK, .data = {
 				.mblock = data

@@ -1,5 +1,6 @@
 #include "Interpreter.h"
 
+#include "runtimePrint.h"
 #include "Variable.h"
 #include "Expression.h"
 #include "Prototype.h"
@@ -234,6 +235,8 @@ void Interpreter_delete(Interpreter* itp) {
 Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 	Function* fn = fncallExpr->data.fncall.fn;
 
+	runtimePrint_present(fn->name);
+
 	// Check metaDefinitionState
 	switch (fn->metaDefinitionState) {
 	case DEFINITIONSTATE_UNDEFINED:
@@ -254,7 +257,7 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 
 	Expression** exprArgs = fncallExpr->data.fncall.args;
 
-	// Check for requires
+	// Check requires
 	Function_makeRequiresReal(fn, NULL);
 	Array_for(realRequireCouple_t, fn->realRequires, fn->requires_len, require) {
 		Function* testfn = require->fn;
@@ -311,6 +314,8 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 		meta->returnPrototype ? true:false
 	);
 
+
+
 	// Produce a type from the result
 	Prototype* returnPrototype = fn->returnPrototype;
 	if (returnPrototype == NULL) {
@@ -325,6 +330,7 @@ Type* Interpret_call(Expression* fncallExpr, Scope* scope) {
 	Type* type = Prototype_generateType(returnPrototype, scope, TYPE_CWAY_DEFAULT);
 
 	/// TODO: handle type
+
 	return type;
 }
 
@@ -345,9 +351,52 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 
 			Variable** path = expr->data.property.varr;
 			Type* type = Scope_searchType(scope, path[0]);
-			int offset = Prototype_getVariableOffset(path, expr->data.property.varr_len);
-			if (offset < 0) {offset = 0;}
+			int offset = Prototype_getGlobalVariableOffset(path[0]->proto,
+				path, expr->data.property.varr_len);
+
 			slot->ptr = type->data + offset;
+
+			return true;
+		}
+
+		case EXPRESSION_FAST_ACCESS:
+		{
+			Function* accessor = expr->data.fastAccess.accessor;
+			if (accessor->stdBehavior < 0) {
+				raiseError("[TODO]: perform real std behavior");
+				return false;
+			}
+
+			switch (accessor->stdBehavior) {
+			// pointer
+			case 0:
+			{
+				Expression* origin = expr->data.fastAccess.origin;
+				switch (origin->type) {
+				case EXPRESSION_PROPERTY:
+				{
+					if (origin->data.property.origin) {
+						raiseError("[Expression] Cannot handle origin in property");
+						return false;
+					}
+
+					Variable** path = origin->data.property.varr;
+					Type* type = Scope_searchType(scope, path[0]);
+					int offset = Prototype_getGlobalVariableOffset(
+						path[0]->proto, path, origin->data.property.varr_len);
+					Type* sub = *(Type**)type->data;
+					slot->ptr = sub->data + offset;
+					printf("give %d\n", origin->data.property.varr_len);
+					return true;
+				}
+				}
+
+				return true;
+			}
+
+			default:
+				raiseError("[BadId]: Invalid id for standard fast access");
+			}
 
 			return true;
 		}
@@ -368,9 +417,33 @@ static bool fillSlotArgument(Scope* scope, Expression* expr, slot_t* slot) {
 
 	case EXPRESSION_PROPERTY:
 	{
-		if (expr->data.property.origin) {
-			raiseError("[Expression] Cannot handle origin in property");
-			return false;
+		
+		Expression* origin = expr->data.property.origin;
+		if (origin) {
+			switch (origin->type) {
+			case EXPRESSION_META_OF:
+			{
+				slot_t subSlot;	
+				Expression subExpr = {
+					.type = EXPRESSION_ADDR_OF,
+					.data.target = origin->data.metaOf.origin
+				};
+				if (!fillSlotArgument(scope, &subExpr, &subSlot)) {
+					raiseError("[Intern] fillSlotArgument returned false");
+				}
+
+				Variable** path = expr->data.property.varr;
+				int offset = Prototype_getGlobalVariableOffset(
+					path[0]->proto, path, expr->data.property.varr_len);
+
+				slot->ptr = (*(Type**)subSlot.ptr)->data + offset;
+
+				return true;
+			}
+
+			default:
+				raiseError("[TODO] Handle OTHER origin case");
+			}
 		}
 
 		Variable* first = expr->data.property.varr[0];
@@ -544,6 +617,9 @@ interpreterSlot_t Interpret_interpret(
 		return (interpreterSlot_t){};
 	}
 
+	runtimePrint_push();
+
+
 	// Slots
 	const int varCount = itp->varCount;
 	// slot_t slots[varCount];
@@ -714,7 +790,8 @@ interpreterSlot_t Interpret_interpret(
 	/// TODO: when doing create, skip if it is an argument
 
 	finishMainWhile:
-
+	runtimePrint_pop();
+	
 	interpreterSlot_t result;
 	// Take rax (if we need to return)
 	int skippedRemovedVariable;
@@ -738,6 +815,8 @@ interpreterSlot_t Interpret_interpret(
 		}
 	}
 	free(slots);
+
+
 
 	return result;
 
@@ -2271,7 +2350,6 @@ static void jumpTo(Cursor* c, int destination) {
 }
 
 static void irun_if(Cursor* c, trline_t line) {
-	printf("rmbSize=%d ", c->rememberedSize);
 	switch (c->rememberedSize) {
 	case 1:
 		if (*eval8(c->slots, c->vars[0]))
@@ -2311,8 +2389,6 @@ static void irun_cast(Cursor* c, trline_t line) {
 	trline_t srcSize   = (line>>16) & 0x3;
 	trline_t dstSize   = (line>>18) & 0x3;
 
-	printf("got %d %d %d %d %d %d\n", srcSigned, srcFloat, dstSigned, dstFloat, srcSize, dstSize);
-
 	raiseError("[TODO] eval irun_cast");
 }
 
@@ -2341,25 +2417,25 @@ static void irun_memory(Cursor* c, trline_t line) {
 		if (action == 2) {
 			switch (line >> 13) {
 			case 0:
-				printf("runtime08: %d\n", (int)*eval8(c->slots, c->vars[0]));
+				runtimePrint_u08(*eval8(c->slots, c->vars[0]));
 				break;
 
 			case 1:
-				printf("runtime16: %d\n", (int)*eval16(c->slots, c->vars[0]));
+				runtimePrint_u16(*eval16(c->slots, c->vars[0]));
 				break;
 
 			case 2:
-				printf("runtime32: %d\n", *eval32(c->slots, c->vars[0]));
+				runtimePrint_u32(*eval32(c->slots, c->vars[0]));
 				break;
 
 			case 3:
-				printf("runtime64: %ld\n", *eval64(c->slots, c->vars[0]));
+				runtimePrint_u64(*eval64(c->slots, c->vars[0]));
 				break;
 			}
 		}
 
 		if (action == 3) {
-			printf("\n");
+			runtimePrint_line();
 			return;
 		}
 

@@ -109,6 +109,7 @@ Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeS
 Class* Scope_searchClass(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
 Function* Scope_searchFunction(Scope* scope, int scopeType, label_t name, ScopeSearchArgs* args);
 Type* Scope_searchType(Scope* scope, Variable* variable);
+Type* Scope_searchTypeFromLink(Scope* scope, Prototype* proto);
 
 
 void Scope_addVariable(Scope* scope, int scopeType, Variable* v);

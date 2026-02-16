@@ -10,6 +10,7 @@ enum {
 	PROTO_MODE_DIRECT,
 	PROTO_MODE_VARIADIC,
 	PROTO_MODE_PRIMITIVE,
+	PROTO_MODE_LINK,
 	PROTO_MODE_VOID,
 };
 
@@ -78,6 +79,8 @@ struct Prototype {
 		struct {
 			Variable* ref;
 		} variadic;
+
+		Prototype* link;
 	};
 };
 
@@ -103,6 +106,7 @@ Prototype* Prototype_create_direct(Class* cl, char primitiveSizeCode, ProtoSetti
 Prototype* Prototype_create_meta(Prototype* origin, Class* meta);
 Prototype* Prototype_create_reference(Variable** varr, int varrLength);
 Prototype* Prototype_create_variadic(Variable* ref);
+Prototype* Prototype_create_link(Prototype* origin);
 void Prototype_free(Prototype* proto, bool deep);
 
 

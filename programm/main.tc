@@ -1,8 +1,7 @@
 
 
-
 function main {
-	let src = Integer:def<32>{}();
+	let src = Integer:def<32>{value: 32}();
 	let dst = Integer{ value: 40 } ();
 
 	let srcPtr = &src;
@@ -10,6 +9,8 @@ function main {
 
 
 	dst.printMeta<dst>();
+
+	dst.getGMean<dst>();
 
 	return dst.value;
 }

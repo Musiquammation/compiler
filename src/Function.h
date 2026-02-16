@@ -69,10 +69,28 @@ struct Function {
 	long traceId;
 };
 
+
+
+typedef struct {
+	Variable* variable;
+	Type* type;
+} TypeVarDefinition;
+
+typedef struct {
+	Prototype* proto;
+	Type* type;
+} TypeProtoDefinition;
+
+
+
+
+
 struct ScopeFunction {
 	Scope scope;
 	Function* fn;
-	Array types; // type: TypeDefinition
+	Array types; // type: TypeVarDefinition
+	TypeProtoDefinition* protoDefTypes;
+	int protoDefTypes_len;
 };
 
 
@@ -82,10 +100,6 @@ struct FunctionAssembly {
 	FILE* output;
 };
 
-typedef struct {
-	Variable* variable;
-	Type* type;
-} TypeDefinition;
 
 void Function_create(Function* fn);
 void Function_delete(Function* fn);
@@ -116,7 +130,9 @@ void ScopeFunction_pushVariable(ScopeFunction* scope, Variable* v, Prototype* pr
 Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variable);
 
 
-
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable);
+Type* ScopeFunction_searchTypeFromLink(ScopeFunction* scope, Prototype* proto);
 
+
+Function* ScopeFunction_reachFunction(ScopeFunction* scope);
 

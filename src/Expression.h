@@ -57,6 +57,10 @@ struct Expression {
 		} property;
 
 		struct {
+			Expression* origin;
+		} metaOf;
+
+		struct {
 			Function* accessor;
 			Expression* origin;
 		} fastAccess;
@@ -146,6 +150,7 @@ enum {
 	EXPRESSION_CONSTRUCTOR,     // constructor
 	EXPRESSION_TYPE,            // type
 	EXPRESSION_MBLOCK,          // mblock
+	EXPRESSION_META_OF, 		// ::
 };
 
 enum {

@@ -162,6 +162,7 @@ void Expression_free(int type, Expression* e) {
 	}
 
 	case EXPRESSION_CONSTRUCTOR:
+	{
 		for (constructorDefinition_t* m = e->data.constructor.members; m->variable; m++) {
 			Expression_free(m->expr->type, m->expr);
 			free(m->expr);
@@ -185,6 +186,17 @@ void Expression_free(int type, Expression* e) {
 		free(e->data.constructor.origin);
 		break;
 	}
+
+	case EXPRESSION_META_OF:
+	{
+		Expression* origin = e->data.metaOf.origin;
+		Expression_free(origin->type, origin);
+		free(origin);
+		break;
+	}
+
+	}
+	
 }
 
 
@@ -813,7 +825,6 @@ int Expression_reachSignedSize(int type, const Expression* expr) {
 
 		/// TODO: raise floatings
 
-		printf("choose cmp %d %d\n", signedLeft, signedRight);
 		return chooseSign(signedLeft, signedRight);
 	/// TODO: logical operations (max of operands)
 
