@@ -3166,7 +3166,7 @@ static void Syntax_functionScope_if(
 		raiseError("[TODO] float in if");
 	}
 	int conditionSize = signedConditionSize < 0 ? -signedConditionSize : signedConditionSize;
-	uint dest = Trace_ins_create(trace, NULL, signedConditionSize, 0, signedConditionSize);
+	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, signedConditionSize);
 	
 	/// TODO: handle size
 	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, signedConditionSize, exprType);

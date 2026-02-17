@@ -3,7 +3,7 @@
 function main {
 	let src = Integer{}();
 
-	if (1) {
+	if (32) {
 		src.value = src.getSqrt<src>();
 	}
 
