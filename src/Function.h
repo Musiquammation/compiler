@@ -89,7 +89,9 @@ struct ScopeFunction {
 	Scope scope;
 	Function* fn;
 	Array types; // type: TypeVarDefinition
+	TypeVarDefinition* defOverrides;
 	TypeProtoDefinition* protoDefTypes;
+	int defOverrides_len;
 	int protoDefTypes_len;
 };
 
@@ -114,7 +116,7 @@ void FunctionAssembly_create(FunctionAssembly* fa, ScopeFunction* sf);
 void FunctionAssembly_delete(FunctionAssembly* fa);
 
 
-void ScopeFunction_create(ScopeFunction* scope);
+void ScopeFunction_create(ScopeFunction* scope, ScopeFunction* parent);
 void ScopeFunction_delete(ScopeFunction* scope);
 
 Variable* ScopeFunction_searchVariable(ScopeFunction* scope, label_t name, ScopeSearchArgs* args);

@@ -2,10 +2,14 @@
 
 function main {
 	let src = Integer{}();
+	src.give<src>(132);
 
-	if (32) {
-		src.value = src.getSqrt<src>();
+	if [src.isPositive<src>()] {
+		src.define<src, 32>();
+		src.getSqrt<src>();
 	}
 
 	return src.value;
 }
+
+

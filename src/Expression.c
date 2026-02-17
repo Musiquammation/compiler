@@ -1002,7 +1002,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 
 		Variable* subVarr[varr_len];
 		memcpy(subVarr, varr, sizeof(subVarr));
-		Type* type = Type_deepCopy(rootType, subVarr[varr_len-1]->proto, subVarr, varr_len);
+		Type* type = Type_deepCopy(rootType, subVarr[varr_len-1]->proto, subVarr, varr_len, scope);
 
 		if (origin) {
 			Type_free(rootType);

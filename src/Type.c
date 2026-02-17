@@ -191,7 +191,7 @@ void Type_defaultDestructors(mblock_t data, Class* cl) {
 	}
 }
 
-void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl) {
+void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl, Scope* scope) {
 	if (cl->isPrimitive) {
 		memcpy(dst, src, cl->size);
 		return;
@@ -204,18 +204,18 @@ void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl) {
 		Prototype* proto = variable->proto;
 		Class* cl = Prototype_getClass(proto);
 		if (cl == _langstd.type) {
-			Type* newType = Type_deepCopy(*(Type**)src, proto, vptr, 1);
+			Type* newType = Type_deepCopy(*(Type**)src, proto, vptr, 1, scope);
 			*(Type**)dst = newType;
 			continue;
 		}
 
 		// default behavior
-		Type_defaultCopy(dst + offset, src + offset, cl);
+		Type_defaultCopy(dst + offset, src + offset, cl, scope);
 	}
 }
 
 
-Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len) {
+Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len, Scope* scope) {
 	typedef Variable* var_ptr_t;
 
 	switch (Prototype_mode(*proto)) {
@@ -342,7 +342,7 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 
 
 		Prototype* metaProto = proto->direct.meta;
-		Type* metaType = Type_deepCopy(rootMetaType, metaProto, varr, varr_len);
+		Type* metaType = Type_deepCopy(rootMetaType, metaProto, varr, varr_len, scope);
 		type->meta = metaType;
 
 		ExtendedPrototypeSize sizes = Prototype_getSizes(metaProto);
@@ -355,7 +355,8 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 			Type_defaultCopy(
 				data,
 				root->data + offset,
-				cl->meta
+				cl->meta,
+				scope
 			);
 
 		} else {
@@ -369,6 +370,11 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len)
 	{
 		/// TODO: search definition (but WHERE?)
 		raiseError("[TODO] Type_newCopy");
+	}
+
+	case PROTO_MODE_LINK:
+	{
+		
 	}
 
 	case PROTO_MODE_PRIMITIVE:

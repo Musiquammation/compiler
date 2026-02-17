@@ -35,9 +35,9 @@ void Type_defaultConstructors(
 
 void Type_defaultDestructors(mblock_t data, Class* cl);
 
-void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl);
+void Type_defaultCopy(mblock_t dst, const mblock_t src, Class* cl, Scope* scope);
 
-Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len);
+Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len, Scope* scope);
 
 
 Variable* ScopeType_searchVariable(ScopeType* scope, label_t name, ScopeSearchArgs* args);

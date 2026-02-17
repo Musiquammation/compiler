@@ -25,6 +25,10 @@ function getSqrt {
 	return 10; // fake value for tests
 }
 
+function give {
+	this.value = value;
+}
+
 function getGMean {
 	this.getSqrt<this::T>();
 	this.getSqrt<arg::T>();

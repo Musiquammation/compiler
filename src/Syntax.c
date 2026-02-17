@@ -29,7 +29,7 @@
 #include <string.h>
 
 
-#define PRINT_PACK 1
+#define PRINT_PACK 0
 
 
 
@@ -3126,18 +3126,35 @@ void Syntax_functionScope_freeLabel(
 }
 
 
+typedef struct {
+	int conditionSize;
+	uint dest;
+} placeResult_t;
 
+static placeResult_t placeIfTest(Trace* trace, Expression* expr, int exprType) {
+	int signedConditionSize = Expression_reachSignedSize(exprType, expr);
+	if (signedConditionSize == EXPRSIZE_INTEGER) {
+		signedConditionSize = -4;
+	} else if (signedConditionSize == EXPRSIZE_FLOATING) {
+		raiseError("[TODO] float in if");
+	}
+	int conditionSize = signedConditionSize < 0 ? -signedConditionSize : signedConditionSize;
+	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, signedConditionSize);
+	
+	/// TODO: handle size
+	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, signedConditionSize, exprType);
 
-static void Syntax_functionScope_if(
+	return (placeResult_t){
+		conditionSize,
+		dest
+	};
+}
+
+static void handleBasicIf(
 	Parser* parser,
 	ScopeFunction* scope,
 	Trace* trace
 ) {
-	// Require left parethesis
-	Parser_read(parser, &_labelPool);
-	if (TokenCompare(SYNTAXLIST_SINGLETON_LPAREN, 0) != 0)
-		return;
-
 	Expression* expr = Syntax_expression(parser, &scope->scope, 1, false);
 	// Require right parenthesis
 	Parser_read(parser, &_labelPool);
@@ -3155,28 +3172,18 @@ static void Syntax_functionScope_if(
 		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
 		.fn = NULL
 	};
-	ScopeFunction_create(&subScope);
-
+	ScopeFunction_create(&subScope, scope);
+	
 
 	int exprType = expr->type;
-	int signedConditionSize = Expression_reachSignedSize(exprType, expr);
-	if (signedConditionSize == EXPRSIZE_INTEGER) {
-		signedConditionSize = -4;
-	} else if (signedConditionSize == EXPRSIZE_FLOATING) {
-		raiseError("[TODO] float in if");
-	}
-	int conditionSize = signedConditionSize < 0 ? -signedConditionSize : signedConditionSize;
-	uint dest = Trace_ins_create(trace, NULL, conditionSize, 0, signedConditionSize);
-	
-	/// TODO: handle size
-	Trace_set(trace, expr, dest, TRACE_OFFSET_NONE, signedConditionSize, exprType);
+	placeResult_t placement = placeIfTest(trace, expr, exprType);
 
 	Expression_free(exprType, expr);
 	free(expr);
 
 	
-	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
-	Trace_popVariable(trace, dest);
+	trline_t* ifLine = Trace_ins_if(trace, placement.dest, placement.conditionSize);
+	Trace_popVariable(trace, placement.dest);
 
 
 	Syntax_functionScope(&subScope, trace, parser);
@@ -3188,7 +3195,7 @@ static void Syntax_functionScope_if(
 	
 	// No else
 	Parser_read(parser, &_labelPool);
-	if (parser->token.type != TOKEN_TYPE_LABEL|| parser->token.label != _commonLabels._else) {
+	if (parser->token.type != TOKEN_TYPE_LABEL || parser->token.label != _commonLabels._else) {
 		// Mark position
 		*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
 		Parser_saveToken(parser);
@@ -3204,12 +3211,120 @@ static void Syntax_functionScope_if(
 	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
 		return;
 
-	ScopeFunction_create(&subScope);
+	ScopeFunction_create(&subScope, scope);
 	Syntax_functionScope(&subScope, trace, parser);
 	ScopeFunction_delete(&subScope);
 
-
 	*ifLine |= (trace->instruction << 10);
+}
+
+static void handleInterpretedIf(
+	Parser* parser,
+	ScopeFunction* scope,
+	Trace* trace
+) {
+	Array expressions; // type: Expression*
+	Array_create(&expressions, sizeof(Expression*));
+	
+	// This section is run as a while
+	conditionLoop:
+	Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_INTERPRETED_IF_TEST, 0) == 0) {
+		readExpr:
+		Expression* expr = Syntax_readPath(parser->token.label, parser, &scope->scope);
+		*Array_push(Expression*, &expressions) = expr;
+
+		Parser_read(parser, &_labelPool);
+		if (TokenCompare(SYNTAXLIST_INTERPRETED_IF_CONJONCTION, 0) == 0) {
+			goto readContent; // end
+		}
+
+		goto conditionLoop; // read next condition
+
+	} else {
+		raiseError("[TODO] handle not");
+		goto readExpr;
+	}
+
+	readContent:
+
+	// Ask for lbrace token
+	Parser_read(parser, &_labelPool);
+	if (TokenCompare(SYNTAXLIST_SINGLETON_LBRACE, 0) != 0)
+		return;
+
+
+	typedef Expression* expr_t;
+
+
+	ScopeFunction subScope = {
+		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
+		.fn = NULL
+	};
+	ScopeFunction_create(&subScope, scope);
+
+
+	placeResult_t placement;
+	if (expressions.length == 1) {
+		Expression* expr = *Array_get(Expression*, expressions, 0);
+		placement = placeIfTest(trace, expr, expr->type);
+	} else {
+		raiseError("[TODO] generate AND expression");
+	}
+
+	trline_t* ifLine = Trace_ins_if(trace, placement.dest, placement.conditionSize);
+	Trace_popVariable(trace, placement.dest);
+
+	Syntax_functionScope(&subScope, trace, parser);
+	ScopeFunction_delete(&subScope);
+
+	// No else
+	Parser_read(parser, &_labelPool);
+	if (parser->token.type != TOKEN_TYPE_LABEL || parser->token.label != _commonLabels._else) {
+		// Mark position
+		*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
+		Parser_saveToken(parser);
+		*ifLine |= (trace->instruction << 10);
+		goto emptyData;
+	}
+
+	/// TODO: Here, else 
+	{
+		raiseError("[TODO] else");
+	}
+
+
+
+
+	emptyData:
+	Array_loop(expr_t, expressions, ptr) {
+		Expression* expr = *ptr;
+		Expression_free(expr->type, expr);
+		free(expr);
+	}
+	Array_free(expressions);
+
+}
+
+static void Syntax_functionScope_if(
+	Parser* parser,
+	ScopeFunction* scope,
+	Trace* trace
+) {
+	// Get syntax
+	Parser_read(parser, &_labelPool);
+	switch (TokenCompare(SYNTAXLIST_START_IF, 0) != 0) {
+	// basic if
+	case 0:
+		handleBasicIf(parser, scope, trace);
+		break;
+
+	case 1:
+		handleInterpretedIf(parser, scope, trace);
+		break;
+	}
+
+	
 }
 
 
@@ -3243,7 +3358,7 @@ static void Syntax_functionScope_while(
 		.scope = {.parent = &scope->scope, type: SCOPE_FUNCTION},
 		.fn = NULL
 	};
-	ScopeFunction_create(&subScope);
+	ScopeFunction_create(&subScope, scope);
 
 	
 	
@@ -3279,7 +3394,7 @@ static void Syntax_functionScope_while(
 void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	while (true) {
 		Parser_read(parser, &_labelPool);
-		
+
 		// Search
 		switch (TokenCompare(SYNTAXLIST_FUNCTION, 0)) {
 		// let
@@ -3433,7 +3548,7 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 
 
 	// Fill args
-	ScopeFunction_create(&fnScope);
+	ScopeFunction_create(&fnScope, NULL);
 
 
 	// Read content

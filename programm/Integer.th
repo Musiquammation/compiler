@@ -35,6 +35,8 @@ class {
 	@require(This.cndPositive)
 	getSqrt(): int;
 
+	give(value: int);
+
 	@project(I: Integer)
 	@require(This.cndPositive)
 	@require(I.cndPositive)

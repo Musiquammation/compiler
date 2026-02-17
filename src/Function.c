@@ -311,13 +311,65 @@ static void fillArgument(ScopeFunction* scope, Variable* variable, int way) {
 	}
 }
 
-void ScopeFunction_create(ScopeFunction* scope) {
+void ScopeFunction_create(ScopeFunction* scope, ScopeFunction* parent) {
 	Array_create(&scope->types, sizeof(TypeVarDefinition));
+
+	// Generate def overrides
+	if (parent) {
+		TypeVarDefinition* defs = parent->types.data;
+		int len = parent->types.length;
+		TypeVarDefinition* defOverrides = malloc(sizeof(TypeVarDefinition) * len);
+		scope->defOverrides = defOverrides;
+		scope->defOverrides_len = len;
+
+		for (int i = 0; i < len; i++) {
+			Variable* v = defs[i].variable;
+			defOverrides[i].variable = v;
+			defOverrides[i].type = Type_deepCopy(
+				defs[i].type,
+				v->proto,
+				&v,
+				1,
+				&parent->scope
+			);
+		}
+
+	} else {
+		scope->defOverrides = NULL;
+		scope->defOverrides_len = 0;
+	}
 
 	Function* fn = scope->fn;
 	if (!fn) {
-		scope->protoDefTypes = NULL;
-		scope->protoDefTypes_len = 0;
+		// Copy protoDefTypes from parent
+		TypeProtoDefinition* list = parent->protoDefTypes;
+		int len = parent->protoDefTypes_len;
+
+		if (len) {
+			TypeProtoDefinition* protoDefTypes = malloc(sizeof(TypeProtoDefinition) * len);
+	
+			for (int i = 0; i < len; i++) {
+				Prototype* proto = list[i].proto;
+				Prototype_addUsage(*proto);
+	
+				protoDefTypes[i].proto = proto;
+				protoDefTypes[i].type = Type_deepCopy(
+					list[i].type,
+					proto,
+					NULL,
+					0,
+					&parent->scope
+				);
+			}
+	
+			scope->protoDefTypes = protoDefTypes;
+			scope->protoDefTypes_len = len;
+
+		} else {
+			scope->protoDefTypes = NULL;
+			scope->protoDefTypes_len = 0;
+		}
+
 		return;
 	}
 
@@ -326,16 +378,19 @@ void ScopeFunction_create(ScopeFunction* scope) {
 	{
 		FunctionArgProjection* pjs = fn->projections;
 		int len = fn->projections_len;
-		projectionTypes = malloc(sizeof(TypeProtoDefinition) * len);
-		for (int i = 0; i < len; i++) {
-			Prototype* proto = pjs[i].proto;
-			Prototype_addUsage(*proto);
-			projectionTypes[i].proto = proto;
-			projectionTypes[i].type = Prototype_generateType(proto, &scope->scope, TYPE_CWAY_ARGUMENT);
-		}
 
-		scope->protoDefTypes = projectionTypes;;
-		scope->protoDefTypes_len = len;
+		if (len) {
+			projectionTypes = malloc(sizeof(TypeProtoDefinition) * len);
+			for (int i = 0; i < len; i++) {
+				Prototype* proto = pjs[i].proto;
+				Prototype_addUsage(*proto);
+				projectionTypes[i].proto = proto;
+				projectionTypes[i].type = Prototype_generateType(proto, &scope->scope, TYPE_CWAY_ARGUMENT);
+			}
+	
+			scope->protoDefTypes = projectionTypes;
+			scope->protoDefTypes_len = len;
+		}
 	}
 	
 	
@@ -463,9 +518,14 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 			free(v);
 		}
 	}
-
 	
 	Array_free(scope->types);
+
+	
+	Array_for(TypeVarDefinition, scope->defOverrides, scope->defOverrides_len, def) {
+		Type_free(def->type);
+	}
+	free(scope->defOverrides);
 	
 }
 
@@ -473,6 +533,11 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 
 Variable* ScopeFunction_searchVariable(ScopeFunction* scope, label_t name, ScopeSearchArgs* args) {
 	Array_loop(TypeVarDefinition, scope->types, td) {
+		if (td->variable->name == name)
+			return td->variable;
+	}
+
+	Array_for(TypeVarDefinition, scope->defOverrides, scope->defOverrides_len, td) {
 		if (td->variable->name == name)
 			return td->variable;
 	}
@@ -521,6 +586,10 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 		if (m->variable == variable)
 			return m->type;
 
+	Array_for(TypeVarDefinition, scope->defOverrides, scope->defOverrides_len, m)
+		if (m->variable == variable)
+			return m->type;
+
 	return NULL;
 }
 
@@ -528,6 +597,10 @@ Type* ScopeFunction_quickSearchMetaBlock(ScopeFunction* scope, Variable* variabl
 
 Type* ScopeFunction_searchType(ScopeFunction* scope, Variable* variable) {
 	Array_loop(TypeVarDefinition, scope->types, t)
+		if (t->variable == variable)
+			return t->type;
+
+	Array_for(TypeVarDefinition, scope->defOverrides, scope->defOverrides_len, t)
 		if (t->variable == variable)
 			return t->type;
 	

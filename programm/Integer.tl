@@ -8,9 +8,12 @@ function {
 @constructor
 @separation
 function {
+	let mark = 404;
+	DEBUG_PRINT_INT mark
+
+
 	This.isValueKnown = 0;
 	This.positive = 2;
-	
 }
 
 @constructor
@@ -35,7 +38,6 @@ function passRuntimePositive {
 	let mark = 402;
 	DEBUG_PRINT_INT mark
 	DEBUG_PRINT_CHAR before
-
 }
 
 
@@ -62,6 +64,19 @@ function copy {
 	This.val = I.val;
 	This.isValueKnown = I.isValueKnown;
 	This.positive = I.positive;
+
+}
+
+@separation
+function give {
+	let before = This.positive;
+	let mark = 405;
+
+	This.isValueKnown = 0;
+	This.positive = 2;
+
+	DEBUG_PRINT_INT mark
+	DEBUG_PRINT_CHAR before
 }
 
 @separation
@@ -91,7 +106,6 @@ function define {
 
 	DEBUG_PRINT_INT mark
 	DEBUG_PRINT_INT value
-
 }
 
 @separation
