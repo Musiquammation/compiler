@@ -1,16 +1,9 @@
 
 
 function main {
-	let src = Integer:def<32>{value: 32}();
-	let dst = Integer{ value: 40 } ();
+	let src = Integer{}();
 
-	let srcPtr = &src;
-	dst.copy<dst, src>(srcPtr);
+	src.define<src, 32>();
 
-
-	dst.printMeta<dst>();
-
-	dst.getGMean<dst>();
-
-	return dst.value;
+	return src.value;
 }

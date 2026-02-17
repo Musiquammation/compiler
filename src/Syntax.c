@@ -1,5 +1,3 @@
-#define PRINT_PACK 0
-
 #include "Syntax.h"
 
 #include "Annotation.h"
@@ -31,6 +29,7 @@
 #include <string.h>
 
 
+#define PRINT_PACK 0
 
 
 

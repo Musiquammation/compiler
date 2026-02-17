@@ -343,12 +343,26 @@ void ScopeFunction_create(ScopeFunction* scope) {
 
 
 
+	
+	// Fill variables from arguments
 	int argLength = fn->args_len;
-
-	// Fill variables
 	Variable** arguments = fn->arguments;
 	for (int i = 0; i < argLength; i++) {
 		Variable* v = arguments[i];
+
+		if (i == 0 && insideConstructor) {
+			fillArgument(scope, v, TYPE_CWAY_DEFAULT);
+			continue;
+		}
+
+		fillArgument(scope, v, TYPE_CWAY_ARGUMENT);
+	}
+
+	// Fill variables from settings
+	int settingLength = fn->settings_len;
+	Variable** settings = fn->settings;
+	for (int i = 0; i < settingLength; i++) {
+		Variable* v = settings[i];
 
 		if (i == 0 && insideConstructor) {
 			fillArgument(scope, v, TYPE_CWAY_DEFAULT);
@@ -425,7 +439,7 @@ void ScopeFunction_create(ScopeFunction* scope) {
 
 void ScopeFunction_delete(ScopeFunction* scope) {
 	Function* fn = scope->fn;
-	int arglen = fn ? fn->args_len : 0;
+	int runtimeArgCeil = fn ? fn->args_len + fn->settings_len : 0;
 	int typelen = scope->types.length;
 	
 	TypeProtoDefinition* protoDefTypes = scope->protoDefTypes;
@@ -443,7 +457,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 		TypeVarDefinition* td = &types[i];
 		Type_free(td->type);
 		
-		if (i >= arglen) {
+		if (i >= runtimeArgCeil) {
 			Variable* v = td->variable;
 			Variable_destroy(v);
 			free(v);

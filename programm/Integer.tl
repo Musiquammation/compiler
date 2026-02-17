@@ -78,6 +78,21 @@ function printMeta {
 	DEBUG_PRINT_CHAR positive
 }
 
+@separation
+function define {
+	let mark = 403;
+
+	This.val = value;
+	This.isValueKnown = 1;
+	This.positive = 0;
+	if (value >= 0) {
+		This.positive = 1;
+	}
+
+	DEBUG_PRINT_INT mark
+	DEBUG_PRINT_INT value
+
+}
 
 @separation
 function getSqrt {

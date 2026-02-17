@@ -1214,6 +1214,50 @@ static void handleOrigin(Trace* trace, Expression* origin,
 	}
 }
 
+
+
+static const int* placeFnArg(
+	Trace* trace,
+	Prototype* argProto,
+	Expression* expr,
+	uint* variable,
+	const int* currentRegister
+) {
+	char primitiveSizeCode = Prototype_getPrimitiveSizeCode(argProto);
+	int subSize = Prototype_getSizes(argProto).size;
+	uint bufferVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
+
+	Trace_set(
+		trace,
+		expr,
+		bufferVar,	
+		primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
+		Prototype_getSignedSize(argProto),
+		expr->type
+	);
+
+	uint finalVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
+	*variable = finalVar;
+
+	if (currentRegister < &ARGUMENT_REGISTERS[ARGUMENT_REGISTERS_LENGTH]) {
+		Trace_ins_placeReg(
+			trace,
+			bufferVar,
+			finalVar,
+			*currentRegister,
+			Trace_packSize(subSize)
+		);
+
+		currentRegister++;
+	} else {
+		raiseError("[TODO] handle a lot of arguements");
+		return NULL;
+	}
+
+	Trace_popVariable(trace, bufferVar);
+	return currentRegister;
+}
+
 void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int signedSize, int exprType) {
 	const int destSize = signedSize >= 0 ? signedSize : -signedSize;
 
@@ -1303,48 +1347,38 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 
 		Function* fn = expr->data.fncall.fn;
 		Variable** arguments = fn->arguments;
+		Variable** settings = fn->settings;
 
 		int argsLength = fn->args_len;
-		int argsStartIndex = fn->projections_len + fn->settings_len;
-		uint variables[argsLength];
+		int settingLength = fn->settings_len;
+
+		int argsStartIndex = fn->projections_len + settingLength;
+		int settingsStartIndex = settingLength;
+
+		uint variables[argsLength + settingLength];
 		const int* currentRegister = ARGUMENT_REGISTERS;
 
 
 		// Place arguments
 		for (int i = 0; i < argsLength; i++) {
-			/// TODO: check size
-			char primitiveSizeCode = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
-			int subSize = Prototype_getSizes(arguments[i]->proto).size;
-			uint bufferVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
-
-			Trace_set(
+			currentRegister = placeFnArg(
 				trace,
+				arguments[i]->proto,
 				args[i+argsStartIndex],
-				bufferVar,	
-				primitiveSizeCode ? TRACE_OFFSET_NONE : 0,
-				Prototype_getSignedSize(arguments[i]->proto),
-				args[i+argsStartIndex]->type
+				&variables[i],
+				currentRegister
 			);
+		}
 
-			uint finalVar = Trace_ins_create(trace, NULL, subSize, 0, primitiveSizeCode);
-			variables[i] = finalVar;
-
-			if (currentRegister < &ARGUMENT_REGISTERS[ARGUMENT_REGISTERS_LENGTH]) {
-				Trace_ins_placeReg(
-					trace,
-					bufferVar,
-					finalVar,
-					*currentRegister,
-					Trace_packSize(subSize)
-				);
-
-				currentRegister++;
-			} else {
-				raiseError("[TODO] handle a lot of arguements");
-				return;
-			}
-
-			Trace_popVariable(trace, bufferVar);
+		// Place settings
+		for (int i = 0; i < settingLength; i++) {
+			currentRegister = placeFnArg(
+				trace,
+				settings[i]->proto,
+				args[i+settingsStartIndex],
+				&variables[argsLength+i],
+				currentRegister
+			);
 		}
 
 		// Mark rax will be used and mark variable
@@ -1361,7 +1395,7 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 		}
 
 		
-
+		// Add argument usages
 		for (int i = 0; i < argsLength; i++) {
 			char psc = Prototype_getPrimitiveSizeCode(arguments[i]->proto);
 			if (psc == PSC_UNKNOWN) {
@@ -1375,13 +1409,27 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 			);
 		}
 
+		// Add setting usages
+		for (int i = 0; i < settingLength; i++) {
+			char psc = Prototype_getPrimitiveSizeCode(settings[i]->proto);
+			if (psc == PSC_UNKNOWN) {
+				raiseError("[Architecture] Registrable status is unknown");
+			}
+
+			Trace_addUsage(
+				trace, variables[argsLength + i],
+				psc ? TRACE_OFFSET_NONE : 0,
+				true
+			);
+		}
+
 		// Function call
 		int fnIndex = Trace_reachFunction(trace, fn);
 		*Trace_push(trace, 1) = TRACECODE_FNCALL | (fnIndex << 10);
 
 
 		// Remove variables
-		for (int i = argsLength - 1; i >= 0; i--) {
+		for (int i = argsLength + settingLength - 1; i >= 0; i--) {
 			Trace_popVariable(trace, variables[i]);
 		}
 
@@ -4512,24 +4560,36 @@ void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThi
 		);
 	}
 
-	int fnArgLen = currentFunction->args_len;
-	if (useThis) {
-		fprintf(output, "/* this */ uint64_t v%03d_%02d", 0, 1);
-		if (fnArgLen) {
-			fprintf(output, ", ");
-		}
-	}
+	
+	typedef Variable* vptr_t;
 
 	// Write args
-	typedef Variable* vptr_t;
+	int fnArgLen = currentFunction->args_len;
 	Variable** fnArgs = currentFunction->arguments;
 	for (int i = 0; i < fnArgLen; i++) {
 		Variable* v = fnArgs[i];
+		if (useThis && i==0) {
+			fprintf(output, "/* this */ ");
+		}
+
 		fprintf(output, "%s v%03d_%02d",
 			Prototype_getClass(v->proto)->c_name, v->id, 1);
 		
 		if (i < fnArgLen-1)
 			fprintf(output, ", ");
+	}
+
+	// Write settings
+	int fnSettingLen = currentFunction->settings_len;
+	Variable** fnSettings = currentFunction->settings;
+	for (int i = 0; i < fnSettingLen; i++) {
+		if (i == 0 && fnArgLen > 0)
+			fprintf(output, ", ");
+		
+		Variable* v = fnSettings[i];
+		fprintf(output, "%s v%03d_%02d",
+			Prototype_getClass(v->proto)->c_name, v->id, 1);
+		
 	}
 
 

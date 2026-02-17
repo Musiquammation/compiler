@@ -5,7 +5,11 @@ function {
 
 @constructor
 function def {
-	
+	this.value = value;	
+}
+
+function define {
+	this.value = value;
 }
 
 function copy {
@@ -23,5 +27,7 @@ function getSqrt {
 
 function getGMean {
 	this.getSqrt<this::T>();
+	this.getSqrt<arg::T>();
+
 	return 12;
 }
