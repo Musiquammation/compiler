@@ -3,7 +3,9 @@
 function main {
 	let src = Integer{}();
 
-	src.define<src, 32>();
+	if (1) {
+		src.value = src.getSqrt<src>();
+	}
 
 	return src.value;
 }

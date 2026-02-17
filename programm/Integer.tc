@@ -31,3 +31,11 @@ function getGMean {
 
 	return 12;
 }
+
+function isPositive {
+	if (this.value >= 0) {
+		return 1;
+	}
+
+	return 0;
+}

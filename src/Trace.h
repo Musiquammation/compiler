@@ -3,7 +3,6 @@
 
 #include "declarations.h"
 #include "castable_t.h"
-#include "TraceStackHandler.h"
 
 #include "util/Stack.h"
 
@@ -111,27 +110,14 @@ struct Trace {
 	TracePack* first;
 	TracePack* last;
 
-	union {
-		struct {
-			Array variables; // type: VariableTrace
-			Stack varPlacements; // type: uint
-			int deep;
-			int scopeId;
-			int nextScopeId;
-			Stack scopeIdStack; // type: int
-		};
-		
-		struct {
-			Array fncallPlacements; // type: fnplacement_t
-			Array replaces; // type: Replace
-			VarInfoTrace* varInfos; // type: VarInfo
-			TraceRegister* regs;
-			int stackId;
-			int varlength;
-			TraceStackHandler stackHandler;
-		};
-	};
-
+	Array fncallPlacements; // type: fnplacement_t
+	Array replaces; // type: Replace
+	VarInfoTrace* varInfos; // type: VarInfo
+	TraceRegister* regs;
+	int stackId;
+	int varlength;
+	Stack varPlacements; // type: uint
+	int varCount;
 	TraceFunctionMap calledFunctions;
 
 
@@ -185,7 +171,6 @@ int* Trace_prepareWhileUsages(Trace* trace);
 void Trace_addWhileUsages(Trace* trace, int scopeId, int startIns, int endIns, int* backup);
 
 void Trace_placeRegisters(Trace* trace);
-void Trace_generateAssembly(Trace* trace, FunctionAssembly* fnAsm);
 void Trace_generateTranspiled(Trace* trace, FunctionAssembly* fnAsm, bool useThis);
 
 

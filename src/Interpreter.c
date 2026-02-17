@@ -213,7 +213,7 @@ static void buildPositions(Interpreter* itp, TracePack* firstPack, int varCount)
 Interpreter* Interpreter_build(Trace* trace) {
 	Interpreter* itp = malloc(sizeof(Interpreter));
 	TracePack* pack = trace->first;
-	int varCount = trace->variables.length;
+	int varCount = trace->varCount;
 	itp->pack = pack;
 	itp->varCount = varCount;
 	buildPositions(itp, pack, varCount);

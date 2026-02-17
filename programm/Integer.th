@@ -39,4 +39,7 @@ class {
 	@require(This.cndPositive)
 	@require(I.cndPositive)
 	getGMean(arg: I): int;
+
+	@condition(passRuntimePositive, missRuntimePositive)
+	isPositive(): bool;
 }

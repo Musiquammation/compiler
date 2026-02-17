@@ -29,7 +29,7 @@
 #include <string.h>
 
 
-#define PRINT_PACK 0
+#define PRINT_PACK 1
 
 
 
@@ -3178,13 +3178,10 @@ static void Syntax_functionScope_if(
 	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
-	Trace_ins_savePlacement(trace);
 
 	Syntax_functionScope(&subScope, trace, parser);
 	ScopeFunction_delete(&subScope);
 	
-	Trace_ins_openPlacement(trace);
-
 	/// TODO: compare new TypeNode with the else case => track similarities
 
 
@@ -3221,9 +3218,6 @@ static void Syntax_functionScope_while(
 	ScopeFunction* scope,
 	Trace* trace
 ) {
-	int* usageBackup = Trace_prepareWhileUsages(trace);
-	Trace_ins_savePlacement(trace);
-
 	// Mark start position
 	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
 
@@ -3268,35 +3262,21 @@ static void Syntax_functionScope_while(
 	trline_t* ifLine = Trace_ins_if(trace, dest, conditionSize);
 	Trace_popVariable(trace, dest);
 
-	Trace_ins_saveShadowPlacement(trace);
-
 	// While content
-	int scopeId = Syntax_functionScope(&subScope, trace, parser);
+	Syntax_functionScope(&subScope, trace, parser);
 	
 	ScopeFunction_delete(&subScope);
 
 	// Jump
-	Trace_ins_openPlacement(trace);	
-	Trace_ins_jmp(trace, startInstruction);
-	
-	
-	Trace_ins_openShadowPlacement(trace);
-	
+	Trace_ins_jmp(trace, startInstruction);	
+		
 	// Mark end position
 	*Trace_push(trace, 1) = TRACECODE_STAR | (6<<10);
 	int endInstruction = trace->instruction;
 	*ifLine |= (endInstruction << 10);
-	Trace_addWhileUsages(trace, scopeId, startInstruction, endInstruction, usageBackup);
 }
 
-int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
-	trace->deep++;
-	int previousScopeId = trace->scopeId;
-	int currentScopeId = trace->nextScopeId;
-	trace->scopeId = currentScopeId;
-	trace->nextScopeId = currentScopeId + 1;
-	*Stack_push(int, &trace->scopeIdStack) = currentScopeId;
-
+void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 	while (true) {
 		Parser_read(parser, &_labelPool);
 		
@@ -3348,7 +3328,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 			if (!fn->returnPrototype) {
 				raiseError("[Architecture] Tried to return void");
-				return -1;
+				return;
 			}
 			char isRegistrable = Prototype_getPrimitiveSizeCode(fn->returnPrototype);
 			uint variable = Trace_ins_create(trace, NULL, size, 0, isRegistrable);
@@ -3371,7 +3351,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 			Parser_read(parser, &_labelPool);
 			if (TokenCompare(SYNTAXLIST_SINGLETON_END, 0) != 0)
-				return -1;
+				return;
 
 			break;
 		}
@@ -3423,10 +3403,7 @@ int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser) {
 
 	// Remove variable traces
 	finishScope:
-	trace->deep--;
-	Stack_pop(int, &trace->scopeIdStack);
-	trace->scopeId = previousScopeId;
-	return currentScopeId;
+	return;
 }
 
 
@@ -3503,13 +3480,13 @@ bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class
 	} else {
 		// Compile or transpile
 		if (Scope_reachModule(scope)->compile) {
-			Trace_placeRegisters(&trace);
+			// Trace_placeRegisters(&trace);
 			
 			FunctionAssembly fnAsm;
 			FunctionAssembly_create(&fnAsm, &fnScope);
 			
 			/// TODO: enable this line
-			Trace_generateAssembly(&trace, &fnAsm);
+			raiseError("[TODO] Cannot compile");
 			FunctionAssembly_delete(&fnAsm);
 			Trace_delete(&trace, true);	
 	

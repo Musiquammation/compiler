@@ -68,7 +68,7 @@ Prototype* Syntax_proto(Parser* parser, Scope* scope);
 Function* Syntax_functionDeclaration(Scope* scope, Scope* variadicScope, Parser* parser, Class* thisclass, int flags, const Syntax_FunctionDeclarationArg* defaultData);
 void Syntax_functionArgumentsDecl(Scope* scope, Array* arguments, Parser* parser);
 bool Syntax_functionDefinition(Scope* scope, Parser* parser, Function* fn, Class* thisclass);
-int Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
+void Syntax_functionScope(ScopeFunction* scope, Trace* trace, Parser* parser);
 
 
 /**
