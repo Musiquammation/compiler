@@ -1186,7 +1186,8 @@ void Trace_set(Trace* trace, Expression* expr, uint destVar, int destOffset, int
 				// Logic operation
 				*Trace_push(trace, 1) = TRACECODE_LOGIC |
 					((exprType - (EXPRESSION_BITWISE_AND - TRACEOP_BITWISE_AND)) << 10) |
-					(packedMaxSize << 14);
+					(packedMaxSize << 14) |
+					(signedSize < 0 ? (1 << 16) : 0);
 			}
 
 			// Add cast

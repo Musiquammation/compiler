@@ -19,6 +19,7 @@ function {
 @constructor
 @separation
 function def {
+	value = value;
 	This.val = value;
 	This.isValueKnown = 1;
 
@@ -117,3 +118,27 @@ function getSqrt {
 function getGMean {
 	let positive = This.positive;
 }
+
+@separation
+function printToZero {
+	let mark = 405;
+	DEBUG_PRINT_INT mark
+
+
+	while (This.val >= 0) {
+		let v = This.val;
+		DEBUG_PRINT_INT v
+
+		This.val = This.val - 1;
+	}
+}
+
+@separation
+function setToAbsolute {
+	if (This.isValueKnown && This.positive == 0) {
+		This.val = 0 -This.val;
+	}
+
+	This.positive = 1;
+}
+

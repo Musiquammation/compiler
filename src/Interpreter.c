@@ -1542,256 +1542,175 @@ static void irun_arithmetic_imm(Cursor* c, trline_t line) {
 static void irun_logic(Cursor* c, trline_t line) {
 	int operation = (line >> 10) & 0xf;
 	int psize = (line >> 14) & 0x3;
+	int isSigned = (line >> 16) & 0x1;
 
 	switch (psize) {
-	case 0:
+
+	case 0: {
+		uint8_t  a = *eval8(c->slots, c->vars[0]);
+		uint8_t  b = *eval8(c->slots, c->vars[2]);
+		uint8_t* r =  eval8(c->slots, c->vars[1]);
+
 		switch (operation) {
-		case TRACEOP_BITWISE_AND:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) &
-				*eval8(c->slots, c->vars[2]); break;
 
-		case TRACEOP_BITWISE_OR:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) |
-				*eval8(c->slots, c->vars[2]); break;
-
-		case TRACEOP_BITWISE_XOR:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) ^
-				*eval8(c->slots, c->vars[2]); break;
-
-		case TRACEOP_LEFT_SHIFT:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) <<
-				*eval8(c->slots, c->vars[2]); break;
+		case TRACEOP_BITWISE_AND:	*r = a & b; break;
+		case TRACEOP_BITWISE_OR:	*r = a | b; break;
+		case TRACEOP_BITWISE_XOR:	*r = a ^ b; break;
+		case TRACEOP_LEFT_SHIFT:	*r = a << b; break;
 
 		case TRACEOP_RIGHT_SHIFT:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) >>
-				*eval8(c->slots, c->vars[2]); break;
+			*r = isSigned ? (uint8_t)((int8_t)a >> b) : (a >> b);
+			break;
 
+		case TRACEOP_LOGICAL_AND:	*r = a && b; break;
+		case TRACEOP_LOGICAL_OR:	*r = a || b; break;
 
-		case TRACEOP_LOGICAL_AND:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) &&
-				*eval8(c->slots, c->vars[2]); break;
-
-		case TRACEOP_LOGICAL_OR:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) ||
-				*eval8(c->slots, c->vars[2]); break;
-
-
-		case TRACEOP_EQUAL:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) ==
-				*eval8(c->slots, c->vars[2]); break;
-
-		case TRACEOP_NOT_EQUAL:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) !=
-				*eval8(c->slots, c->vars[2]); break;
+		case TRACEOP_EQUAL:		*r = a == b; break;
+		case TRACEOP_NOT_EQUAL:		*r = a != b; break;
 
 		case TRACEOP_LESS:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) <
-				*eval8(c->slots, c->vars[2]); break;
+			*r = isSigned ? ((int8_t)a < (int8_t)b) : (a < b);
+			break;
 
 		case TRACEOP_LESS_EQUAL:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) <=
-				*eval8(c->slots, c->vars[2]); break;
+			*r = isSigned ? ((int8_t)a <= (int8_t)b) : (a <= b);
+			break;
 
 		case TRACEOP_GREATER:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) >
-				*eval8(c->slots, c->vars[2]); break;
+			*r = isSigned ? ((int8_t)a > (int8_t)b) : (a > b);
+			break;
 
 		case TRACEOP_GREATER_EQUAL:
-			*eval8(c->slots, c->vars[1]) = *eval8(c->slots, c->vars[0]) >=
-				*eval8(c->slots, c->vars[2]); break;
-
-
+			*r = isSigned ? ((int8_t)a >= (int8_t)b) : (a >= b);
+			break;
 		}
+	} break;
 
-		break;
 
+	case 1: {
+		uint16_t  a = *eval16(c->slots, c->vars[0]);
+		uint16_t  b = *eval16(c->slots, c->vars[2]);
+		uint16_t* r =  eval16(c->slots, c->vars[1]);
 
-	case 1:
 		switch (operation) {
-			case TRACEOP_BITWISE_AND:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) &
-					*eval16(c->slots, c->vars[2]); break;
 
-			case TRACEOP_BITWISE_OR:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) |
-					*eval16(c->slots, c->vars[2]); break;
+		case TRACEOP_BITWISE_AND:	*r = a & b; break;
+		case TRACEOP_BITWISE_OR:	*r = a | b; break;
+		case TRACEOP_BITWISE_XOR:	*r = a ^ b; break;
+		case TRACEOP_LEFT_SHIFT:	*r = a << b; break;
 
-			case TRACEOP_BITWISE_XOR:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ^
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LEFT_SHIFT:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <<
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_RIGHT_SHIFT:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >>
-					*eval16(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_LOGICAL_AND:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) &&
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LOGICAL_OR:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ||
-					*eval16(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_EQUAL:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) ==
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_NOT_EQUAL:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) !=
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS_EQUAL:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) <=
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >
-					*eval16(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER_EQUAL:
-				*eval16(c->slots, c->vars[1]) = *eval16(c->slots, c->vars[0]) >=
-					*eval16(c->slots, c->vars[2]); break;
-
-
-			}
-
+		case TRACEOP_RIGHT_SHIFT:
+			*r = isSigned ? (uint16_t)((int16_t)a >> b) : (a >> b);
 			break;
 
+		case TRACEOP_LOGICAL_AND:	*r = a && b; break;
+		case TRACEOP_LOGICAL_OR:	*r = a || b; break;
 
-		case 2:
-			switch (operation) {
-			case TRACEOP_BITWISE_AND:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) &
-					*eval32(c->slots, c->vars[2]); break;
+		case TRACEOP_EQUAL:		*r = a == b; break;
+		case TRACEOP_NOT_EQUAL:		*r = a != b; break;
 
-			case TRACEOP_BITWISE_OR:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) |
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_BITWISE_XOR:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ^
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LEFT_SHIFT:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <<
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_RIGHT_SHIFT:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >>
-					*eval32(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_LOGICAL_AND:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) &&
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LOGICAL_OR:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ||
-					*eval32(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_EQUAL:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) ==
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_NOT_EQUAL:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) !=
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS_EQUAL:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) <=
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >
-					*eval32(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER_EQUAL:
-				*eval32(c->slots, c->vars[1]) = *eval32(c->slots, c->vars[0]) >=
-					*eval32(c->slots, c->vars[2]); break;
-
-
-			}
-
+		case TRACEOP_LESS:
+			*r = isSigned ? ((int16_t)a < (int16_t)b) : (a < b);
 			break;
 
-
-		case 3:
-			switch (operation) {
-			case TRACEOP_BITWISE_AND:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) &
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_BITWISE_OR:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) |
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_BITWISE_XOR:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ^
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LEFT_SHIFT:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <<
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_RIGHT_SHIFT:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >>
-					*eval64(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_LOGICAL_AND:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) &&
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LOGICAL_OR:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ||
-					*eval64(c->slots, c->vars[2]); break;
-
-
-			case TRACEOP_EQUAL:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) ==
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_NOT_EQUAL:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) !=
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_LESS_EQUAL:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) <=
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >
-					*eval64(c->slots, c->vars[2]); break;
-
-			case TRACEOP_GREATER_EQUAL:
-				*eval64(c->slots, c->vars[1]) = *eval64(c->slots, c->vars[0]) >=
-					*eval64(c->slots, c->vars[2]); break;
-
-
-			}
-
+		case TRACEOP_LESS_EQUAL:
+			*r = isSigned ? ((int16_t)a <= (int16_t)b) : (a <= b);
 			break;
+
+		case TRACEOP_GREATER:
+			*r = isSigned ? ((int16_t)a > (int16_t)b) : (a > b);
+			break;
+
+		case TRACEOP_GREATER_EQUAL:
+			*r = isSigned ? ((int16_t)a >= (int16_t)b) : (a >= b);
+			break;
+		}
+	} break;
+
+
+	case 2: {
+		uint32_t  a = *eval32(c->slots, c->vars[0]);
+		uint32_t  b = *eval32(c->slots, c->vars[2]);
+		uint32_t* r =  eval32(c->slots, c->vars[1]);
+
+		switch (operation) {
+
+		case TRACEOP_BITWISE_AND:	*r = a & b; break;
+		case TRACEOP_BITWISE_OR:	*r = a | b; break;
+		case TRACEOP_BITWISE_XOR:	*r = a ^ b; break;
+		case TRACEOP_LEFT_SHIFT:	*r = a << b; break;
+
+		case TRACEOP_RIGHT_SHIFT:
+			*r = isSigned ? (uint32_t)((int32_t)a >> b) : (a >> b);
+			break;
+
+		case TRACEOP_LOGICAL_AND:	*r = a && b; break;
+		case TRACEOP_LOGICAL_OR:	*r = a || b; break;
+
+		case TRACEOP_EQUAL:		*r = a == b; break;
+		case TRACEOP_NOT_EQUAL:		*r = a != b; break;
+
+		case TRACEOP_LESS:
+			*r = isSigned ? ((int32_t)a < (int32_t)b) : (a < b);
+			break;
+
+		case TRACEOP_LESS_EQUAL:
+			*r = isSigned ? ((int32_t)a <= (int32_t)b) : (a <= b);
+			break;
+
+		case TRACEOP_GREATER:
+			*r = isSigned ? ((int32_t)a > (int32_t)b) : (a > b);
+			break;
+
+		case TRACEOP_GREATER_EQUAL:
+			*r = isSigned ? ((int32_t)a >= (int32_t)b) : (a >= b);
+			break;
+		}
+	} break;
+
+
+	case 3: {
+		uint64_t  a = *eval64(c->slots, c->vars[0]);
+		uint64_t  b = *eval64(c->slots, c->vars[2]);
+		uint64_t* r =  eval64(c->slots, c->vars[1]);
+
+		switch (operation) {
+
+		case TRACEOP_BITWISE_AND:	*r = a & b; break;
+		case TRACEOP_BITWISE_OR:	*r = a | b; break;
+		case TRACEOP_BITWISE_XOR:	*r = a ^ b; break;
+		case TRACEOP_LEFT_SHIFT:	*r = a << b; break;
+
+		case TRACEOP_RIGHT_SHIFT:
+			*r = isSigned ? (uint64_t)((int64_t)a >> b) : (a >> b);
+			break;
+
+		case TRACEOP_LOGICAL_AND:	*r = a && b; break;
+		case TRACEOP_LOGICAL_OR:	*r = a || b; break;
+
+		case TRACEOP_EQUAL:		*r = a == b; break;
+		case TRACEOP_NOT_EQUAL:		*r = a != b; break;
+
+		case TRACEOP_LESS:
+			*r = isSigned ? ((int64_t)a < (int64_t)b) : (a < b);
+			break;
+
+		case TRACEOP_LESS_EQUAL:
+			*r = isSigned ? ((int64_t)a <= (int64_t)b) : (a <= b);
+			break;
+
+		case TRACEOP_GREATER:
+			*r = isSigned ? ((int64_t)a > (int64_t)b) : (a > b);
+			break;
+
+		case TRACEOP_GREATER_EQUAL:
+			*r = isSigned ? ((int64_t)a >= (int64_t)b) : (a >= b);
+			break;
+		}
+	} break;
 	}
 }
+
 
 static void irun_logic_imm_right(Cursor* c, trline_t line) {
 	int operation = (line >> 10) & 0xf;
@@ -2389,8 +2308,73 @@ static void irun_cast(Cursor* c, trline_t line) {
 	trline_t srcSize   = (line>>16) & 0x3;
 	trline_t dstSize   = (line>>18) & 0x3;
 
-	raiseError("[TODO] eval irun_cast");
+
+	if (srcFloat || dstFloat) {
+		raiseError("[TODO] float casts");
+		return;
+	}
+
+	// Load source value into a large intermediate type
+	uint64_t uval = 0;
+	int64_t  sval = 0;
+
+	switch (srcSize) {
+		case 0: {	/* 8-bit source */
+			uint8_t v = *eval8(c->slots, c->vars[0]);
+			if (srcSigned)
+				sval = (int8_t)v;
+			else
+				uval = v;
+		} break;
+
+		case 1: {	/* 16-bit source */
+			uint16_t v = *eval16(c->slots, c->vars[0]);
+			if (srcSigned)
+				sval = (int16_t)v;
+			else
+				uval = v;
+		} break;
+
+		case 2: {	/* 32-bit source */
+			uint32_t v = *eval32(c->slots, c->vars[0]);
+			if (srcSigned)
+				sval = (int32_t)v;
+			else
+				uval = v;
+		} break;
+
+		case 3: {	/* 64-bit source */
+			uint64_t v = *eval64(c->slots, c->vars[0]);
+			if (srcSigned)
+				sval = (int64_t)v;
+			else
+				uval = v;
+		} break;
+	}
+
+	// Normalize to unsigned for final cast
+	uint64_t val = srcSigned ? (uint64_t)sval : uval;
+
+	// Write value to destination with truncation
+	switch (dstSize) {
+		case 0:	/* 8-bit destination */
+			*eval8(c->slots, c->vars[1]) = (uint8_t)val;
+			break;
+
+		case 1:	/* 16-bit destination */
+			*eval16(c->slots, c->vars[1]) = (uint16_t)val;
+			break;
+
+		case 2:	/* 32-bit destination */
+			*eval32(c->slots, c->vars[1]) = (uint32_t)val;
+			break;
+
+		case 3:	/* 64-bit destination */
+			*eval64(c->slots, c->vars[1]) = (uint64_t)val;
+			break;
+	}
 }
+
 
 static void irun_stackPtr(Cursor* c, trline_t line) {
 	trline_t variable = line >> 16;

@@ -1,13 +1,13 @@
 
 
 function main {
-	let src = Integer{}();
-	src.give<src>(132);
+	let src = Integer:def<40>{}();
+	
+	src.printMeta<src>();
 
-	if [src.isPositive<src>()] {
-		src.define<src, 32>();
-		src.getSqrt<src>();
-	}
+	src.setToAbsolute<src>();
+
+	src.printMeta<src>();
 
 	return src.value;
 }

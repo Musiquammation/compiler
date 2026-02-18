@@ -44,4 +44,9 @@ class {
 
 	@condition(passRuntimePositive, missRuntimePositive)
 	isPositive(): bool;
+
+	@require(This.cndPositive)
+	printToZero();
+
+	setToAbsolute();
 }

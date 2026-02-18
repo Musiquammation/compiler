@@ -375,7 +375,8 @@ enum {
 	 * +00: CODE
 	 * +10: OPERATION
 	 * +14: TYPE
-	 * +16: [blank]
+	 * +16: SIGNED?
+	 * +17: [blank]
 	 */
 	TRACECODE_LOGIC,
 
