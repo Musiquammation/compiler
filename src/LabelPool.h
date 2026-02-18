@@ -50,6 +50,7 @@ struct CommonLabels {
 	label_t _Type;
 	label_t _Variadic;
 	label_t _Token;
+	label_t _Array;
 
 	label_t _This;
 	label_t _module;

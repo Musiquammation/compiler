@@ -109,6 +109,7 @@ void CommonLabels_init(CommonLabels* labels, LabelPool* pool) {
 	def(Type);
 	def(Variadic);
 	def(Token);
+	def(Array);
 
 	def(This);
 	def(module);

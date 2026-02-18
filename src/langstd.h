@@ -8,6 +8,7 @@ typedef struct {
 	Class* pointer;
 	Class* type;
 	Class* token;
+	Class* array;
 
 	Function* pointer_fastAccess;
 } langstd_t;

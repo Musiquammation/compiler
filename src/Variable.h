@@ -15,7 +15,6 @@ struct Variable {
 
 void Variable_create(Variable* variable);
 void Variable_delete(Variable* variable);
-void Variable_destroy(Variable* variable);
 
 
 

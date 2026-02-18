@@ -64,8 +64,8 @@ Prototype* Prototype_create_direct(
 Prototype* Prototype_create_meta(Prototype* origin, Class *meta) {
 	Prototype* mp = Prototype_create_direct(
 		meta, meta->primitiveSizeCode, NULL, -1);
-	mp->direct.origin = origin;
 
+	mp->direct.origin = origin;
 	return mp;
 }
 
@@ -76,9 +76,10 @@ Prototype* Prototype_create_reference(Variable* *varr, int varrLength) {
 	proto->ref.varrLength = varrLength;
 
 	Prototype* rp = varr[varrLength - 1]->proto;
-	proto->ref.proto = rp;
 
 	Prototype_addUsage(*rp);
+	proto->ref.proto = rp;
+
 	return proto;
 }
 
@@ -100,7 +101,7 @@ Prototype* Prototype_create_link(Prototype* origin) {
 
 }
 
-void Prototype_free(Prototype* proto, bool deep) {
+void Prototype_free(Prototype* proto) {
 	int state = proto->state;
 
 	if (state >> 8) {
@@ -110,38 +111,39 @@ void Prototype_free(Prototype* proto, bool deep) {
 
 	switch (state & 0xff) {
 	case PROTO_MODE_REFERENCE:
-		Prototype_free(proto->ref.proto, deep);
+		Prototype_free(proto->ref.proto);
 		free(proto->ref.varr);
 		free(proto);
 		break;
 
 	case PROTO_MODE_DIRECT:
+	{
+		int slength = proto->direct.settingLength;
 		if (proto->direct.settingsMustBeFreed) {
 			ProtoSetting *settings = proto->direct.settings;
-			int slength = proto->direct.settingLength;
-			Array_for(ProtoSetting, settings, slength, setting) {
-				if (setting->useProto) {
-					Prototype_free(setting->proto, true);
-				}
-				else {
-					Expression_free(setting->expr->type, setting->expr);
-				}
-			}
 
-			if (slength > 0)
+			if (slength > 0) {
+				Array_for(ProtoSetting, settings, slength, setting) {
+					if (setting->useProto) {
+						Prototype_free(setting->proto);
+					}
+					else {
+						Expression_free(setting->expr->type, setting->expr);
+					}
+				}
+
 				free(settings);
+			}
 		}
 
-		if (deep) {
-			char hasMeta = proto->direct.hasMeta;
-
-			if (hasMeta == 1) {
-				Prototype_free(proto->direct.meta, deep);
-			}
+		char hasMeta = proto->direct.hasMeta;
+		if (hasMeta == 1) {
+			Prototype_free(proto->direct.meta);
 		}
 
 		free(proto);
 		break;
+	}
 
 	case PROTO_MODE_VARIADIC:
 		free(proto);
@@ -151,7 +153,7 @@ void Prototype_free(Prototype* proto, bool deep) {
 		break;
 
 	case PROTO_MODE_LINK:
-		Prototype_free(proto->link, deep);
+		Prototype_free(proto->link);
 		free(proto);
 		break;
 	}
@@ -168,9 +170,10 @@ char Prototype_directHasMeta(Prototype* proto) {
 			return -1;
 
 		case DEFINITIONSTATE_DONE: {
-			proto->direct.meta = Prototype_create_meta(
+			Prototype* m = Prototype_create_meta(
 				proto, proto->direct.cl->meta);
 
+			proto->direct.meta = m;
 			proto->direct.hasMeta = 1;
 			return 1;
 		}
@@ -226,7 +229,7 @@ Type* Prototype_generateType(Prototype* proto, Scope* scope, int way) {
 	}
 
 	case PROTO_MODE_DIRECT:
-	{
+	{	
 		// Handle meta
 		char hasMeta = Prototype_directHasMeta(proto);
 		if (hasMeta == -1) {
@@ -767,14 +770,23 @@ Prototype* Prototype_copyWithoutSettings(Prototype* src) {
 		}
 
 		copy = malloc(sizeof(Prototype));
-		copy->state = state;
+		copy->state = PROTO_MODE_DIRECT;
 		copy->direct.cl = src->direct.cl;
 		copy->direct.primitiveSizeCode = src->direct.primitiveSizeCode;
+		copy->direct.sizes = src->direct.sizes;
+		
 		if (src->direct.hasMeta == 1) {
-			copy->direct.meta = Prototype_copyWithoutSettings(src->direct.meta);
+			Prototype* m = Prototype_copyWithoutSettings(src->direct.meta);
+			copy->direct.meta = m;
 			copy->direct.hasMeta = 1;
+			m->direct.origin = copy;
+			m->direct.settingLength = -1;
+			m->direct.settingsMustBeFreed = false;
 		} else {
 			copy->direct.hasMeta = src->direct.hasMeta;
+			copy->direct.settings = NULL;
+			copy->direct.settingLength = 0;
+			copy->direct.settingsMustBeFreed = false;
 		}
 		return copy;
 

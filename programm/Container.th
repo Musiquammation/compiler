@@ -3,9 +3,7 @@ class {
 		J: Type;
 	}
 
-	x: int;
-	y: int;
-	z: int;
-	t: int;
+
+	ptr: Pointer<T: Type>;
 }
 

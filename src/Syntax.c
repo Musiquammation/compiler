@@ -945,6 +945,7 @@ void Syntax_classDeclaration(Scope* scope, Parser* parser, int flags, const Synt
 			check(pointer, Pointer);
 			check(type, Type);
 			check(token, Token);
+			check(array, Array);
 
 			#undef check
 
@@ -1463,7 +1464,7 @@ void Syntax_classDefinition(Scope* parentScope, Parser* parser, Class* cl, Synta
 	}
 
 	Array_free(projections);
-	Prototype_free(thisClassProto, true);
+	Prototype_free(thisClassProto);
 
 	Array_free(requireList);
 }
@@ -1486,6 +1487,7 @@ void Syntax_proto_readSettings(Parser* parser, Scope* scope, Class* meta, Array*
 	
 	while (true) {
 		Parser_read(parser, &_labelPool);
+		
 		int syntaxResult = TokenCompare(SYNTAXLIST_SETTING, 0);
 
 		switch (syntaxResult) {

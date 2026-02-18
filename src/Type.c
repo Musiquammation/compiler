@@ -49,7 +49,7 @@ void Type_free(Type* type) {
 		free(data);
 	}
 
-	Prototype_free(type->proto, true);
+	Prototype_free(type->proto);
 	free(type);
 
 	if (meta) {
@@ -290,7 +290,7 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len,
 
 						if (p != origin) {
 							Prototype_addUsage(*p);
-							Prototype_free(origin, false);
+							Prototype_free(origin);
 						}
 
 						s->proto = p;

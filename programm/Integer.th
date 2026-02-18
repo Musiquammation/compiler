@@ -1,7 +1,5 @@
 class {
 	for {
-		for {}
-
 		val: int;
 		isValueKnown: bool;
 		positive: char; // 0: no, 1: yes, 2: unknown

@@ -210,6 +210,7 @@ void Class_appendMetas(Class* cl) {
 		Variable* variable = malloc(sizeof(Variable));
 		*Array_push(Variable*, &meta->variables) = variable;
 
+		Prototype_addUsage(*mp);
 		Variable_create(variable);
 		variable->name = source->name;
 		variable->proto = mp;

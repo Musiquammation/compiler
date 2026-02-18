@@ -2,9 +2,11 @@
 	@langstd class Token;
 	@langstd class Type;
 	@langstd class Pointer;
+	@langstd class Array;
 
 
 	class Integer;
+	class Container;
 
 	function main(): int;
 }

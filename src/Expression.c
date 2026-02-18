@@ -182,7 +182,7 @@ void Expression_free(int type, Expression* e) {
 
 		free(e->data.constructor.members);
 		free(e->data.constructor.args);
-		Prototype_free(e->data.constructor.origin->proto, true);
+		Prototype_free(e->data.constructor.origin->proto);
 		free(e->data.constructor.origin);
 		break;
 	}
@@ -991,7 +991,7 @@ protoAndType_t Expression_generateExpressionType(Expression* value, Scope* scope
 		if (origin) {
 			protoAndType_t pat = Expression_generateExpressionType(origin, scope);
 			rootType = pat.type;
-			Prototype_free(pat.proto, false);
+			Prototype_free(pat.proto);
 		} else {
 			rootType = Scope_searchType(scope, varr[0]);
 			if (!rootType) {

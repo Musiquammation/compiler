@@ -107,7 +107,7 @@ Prototype* Prototype_create_meta(Prototype* origin, Class* meta);
 Prototype* Prototype_create_reference(Variable** varr, int varrLength);
 Prototype* Prototype_create_variadic(Variable* ref);
 Prototype* Prototype_create_link(Prototype* origin);
-void Prototype_free(Prototype* proto, bool deep);
+void Prototype_free(Prototype* proto);
 
 
 Type* Prototype_generateType(Prototype* proto, Scope* scope, int way);

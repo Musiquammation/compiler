@@ -31,7 +31,7 @@ void Function_delete(Function* fn) {
 	if (fn->projections_len) {
 		Array_for(FunctionArgProjection, fn->projections, fn->projections_len, p) {
 			if (p->name) {
-				Prototype_free(p->proto, true);
+				Prototype_free(p->proto);
 			}
 		}
 
@@ -47,20 +47,20 @@ void Function_delete(Function* fn) {
 	if (fn->arguments) {
 		Array_for(vptr_t, fn->arguments, fn->args_len, vptr) {
 			Variable* v = *vptr;
-			Variable_destroy(v);
+			Variable_delete(v);
 			free(v);
 		}
 		free(fn->arguments);
 	}
 
 	if (fn->returnPrototype) {
-		Prototype_free(fn->returnPrototype, true);
+		Prototype_free(fn->returnPrototype);
 	}
 
 	if (fn->settings) {
 		Array_for(vptr_t, fn->settings, fn->settings_len, vptr) {
 			Variable* v = *vptr;
-			Variable_destroy(v);
+			Variable_delete(v);
 			free(v);
 		}
 		free(fn->settings);
@@ -501,7 +501,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 	if (protoDefTypes) {
 		int len = scope->protoDefTypes_len;
 		for (int i = 0; i < len; i++) {
-			Prototype_free(protoDefTypes[i].proto, true);
+			Prototype_free(protoDefTypes[i].proto);
 			Type_free(protoDefTypes[i].type);
 		}
 		free(protoDefTypes);
@@ -514,7 +514,7 @@ void ScopeFunction_delete(ScopeFunction* scope) {
 		
 		if (i >= runtimeArgCeil) {
 			Variable* v = td->variable;
-			Variable_destroy(v);
+			Variable_delete(v);
 			free(v);
 		}
 	}
