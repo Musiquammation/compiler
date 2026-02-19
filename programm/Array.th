@@ -1,7 +1,7 @@
 class {
 	for {
-        U: Type;
-    }
+		U: Type;
+	}
 
-    ptr: Pointer<T: Integer>;
+	obj: Pointer<T: U>;
 }

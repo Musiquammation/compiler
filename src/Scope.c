@@ -174,6 +174,8 @@ Variable* Scope_searchVariable(Scope* scope, int scopeType, label_t name, ScopeS
 	case SCOPE_FUNCTION:
 		return ScopeFunction_searchVariable((ScopeFunction*)scope, name, args);
 
+	case SCOPE_PROTO:
+		return ScopePrototype_searchVariable((ScopePrototype*)scope, name, args);
 	}
 
 	return NULL;
@@ -193,6 +195,9 @@ Class* Scope_searchClass(Scope* scope, int scopeType, label_t name, ScopeSearchA
 	case SCOPE_FUNCTION:
 		return ScopeFunction_searchClass((ScopeFunction*)scope, name, args);
 
+	case SCOPE_PROTO:
+		return ScopePrototype_searchClass((ScopePrototype*)scope, name, args);
+
 	}
 
 	return NULL;
@@ -211,6 +216,9 @@ Function* Scope_searchFunction(Scope* scope, int scopeType, label_t name, ScopeS
 
 	case SCOPE_FUNCTION:
 		return ScopeFunction_searchFunction((ScopeFunction*)scope, name, args);
+
+	case SCOPE_PROTO:
+		return ScopePrototype_searchFunction((ScopePrototype*)scope, name, args);
 
 	}
 
@@ -271,6 +279,10 @@ void Scope_addVariable(Scope* scope, int scopeType, Variable* v) {
 		ScopeClass_addVariable((ScopeClass*)scope, v);
 		break;
 
+	case SCOPE_PROJECTIONS:
+		ScopePrototype_addVariable((ScopePrototype*)scope, v);
+		break;
+
 	}
 }
 
@@ -288,6 +300,10 @@ void Scope_addClass(Scope* scope, int scopeType, Class* cl) {
 		ScopeClass_addClass((ScopeClass*)scope, cl);
 		break;
 
+	case SCOPE_PROJECTIONS:
+		ScopePrototype_addClass((ScopePrototype*)scope, cl);
+		break;
+
 	}
 }
 
@@ -303,6 +319,10 @@ void Scope_addFunction(Scope* scope, int scopeType, int addFlag, Function* fn) {
 
 	case SCOPE_CLASS:
 		ScopeClass_addFunction((ScopeClass*)scope, fn, addFlag);
+		break;
+
+	case SCOPE_PROJECTIONS:
+		ScopePrototype_addFunction((ScopePrototype*)scope, fn, addFlag);
 		break;
 
 	}

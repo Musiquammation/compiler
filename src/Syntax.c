@@ -2533,7 +2533,8 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 				// member
 				case 0:
 				{
-					Prototype* proto = ((Variable*)object)->proto;
+					Variable* variable = object;
+					Prototype* proto = variable->proto;
 
 					// Count '#' symbols
 					Parser_read(parser, &_labelPool);
@@ -2548,13 +2549,11 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 						}
 
 						accessorFn = accessor;
-						accessorProto = proto;
-
-
-						proto = Prototype_reachProto(accessor->returnPrototype, proto);
+						accessorProto = Prototype_reachProto(accessor->returnPrototype,
+							currentVarPath.data, currentVarPath.length);
 
 						subScopePtr = Prototype_reachSubScope(
-							proto,
+							accessorProto,
 							&subScope
 						);
 
@@ -2641,7 +2640,6 @@ Expression* Syntax_readPath(label_t label, Parser* parser, Scope* scope) {
 
 
 			while (accessorFn) {
-				accessorProto = Prototype_reachProto(accessorFn->returnPrototype, accessorProto);
 				Class* cl = Prototype_getClass(accessorProto);
 				
 				// Generate fastAccess expr

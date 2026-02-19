@@ -6,6 +6,7 @@
 
 
 	class Integer;
+	class Vector;
 	class Container;
 
 	function main(): int;

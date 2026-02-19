@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Scope.h"
-#include "Class.h"
+#include "Prototype.h"
 
 union ScopeBuffer {
-    ScopeClass cl;
+    ScopePrototype proto;
 };
 

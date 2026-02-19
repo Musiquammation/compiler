@@ -589,22 +589,25 @@ Class* Prototype_getClass(Prototype* proto) {
 	}
 }
 
-Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
+Prototype* Prototype_reachProto(Prototype* proto, Variable** varr, int varr_len) {
 	switch (Prototype_mode(*proto)) {
 	case PROTO_MODE_REFERENCE:
-		return Prototype_reachProto(proto->ref.proto, parent);
+		return Prototype_reachProto(proto->ref.proto, varr, varr_len);
 
 	case PROTO_MODE_DIRECT:
 		return proto;
 
 	case PROTO_MODE_VARIADIC: {
-		if (Prototype_mode(*parent) != PROTO_MODE_DIRECT)
+		if (varr_len == 0)
 			return NULL;
 
+		varr_len--;
+		Prototype* parent = (varr[varr_len])->proto;
+		
 		Variable* ref = proto->variadic.ref;
 		Array_for(ProtoSetting, parent->direct.settings, parent->direct.settingLength, s)
 			if (s->variable == ref)
-				return s->proto;
+				return Prototype_reachProto(s->proto, varr, varr_len);
 				
 		return NULL;
 	}
@@ -616,7 +619,7 @@ Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent) {
 		return NULL;
 
 	case PROTO_MODE_LINK:
-		return Prototype_reachProto(proto->link, parent);
+		return Prototype_reachProto(proto->link, varr, varr_len);
 	}
 }
 
@@ -702,15 +705,16 @@ Scope* Prototype_reachSubScope(Prototype* proto, ScopeBuffer* buffer) {
 		return Prototype_reachSubScope(proto->ref.proto, buffer);
 
 	case PROTO_MODE_DIRECT:
-		buffer->cl.scope.parent = NULL;
-		buffer->cl.scope.type = SCOPE_CLASS;
-		buffer->cl.cl = proto->direct.cl;
-		buffer->cl.allowThis = false;
-		return &buffer->cl.scope;
+		buffer->proto.scope.parent = NULL;
+		buffer->proto.scope.type = SCOPE_PROTO;
+		buffer->proto.proto = proto;
+		return &buffer->proto.scope;
 
 	case PROTO_MODE_VARIADIC:
-		raiseError("[TODO] subscoppe of a variadic");
-		break;
+	{
+		Prototype* res = Prototype_getArgDefintion(buffer->proto.proto, proto->variadic.ref->name);
+		return Prototype_reachSubScope(res, buffer);
+	}
 
 	case PROTO_MODE_PRIMITIVE:
 		raiseError("[Architecture] Cannot get a property from a primitive object");
@@ -880,6 +884,65 @@ Variable* ProtoSetting_getVariable(ProtoSetting *setting, Class *meta) {
 		return v;
 	}
 }
+
+
+
+Variable* ScopePrototype_searchVariable(ScopePrototype* scope, label_t name, ScopeSearchArgs* args) {
+	Class* cl = Prototype_getClass(scope->proto);
+
+	if (!cl)
+		return NULL;
+
+	Array_loopPtr(Variable, cl->variables, ptr) {
+		Variable* v = *ptr;
+		if (v->name == name)
+			return v;
+	}
+	
+	return NULL;
+}
+
+Class* ScopePrototype_searchClass(ScopePrototype* scope, label_t name, ScopeSearchArgs* args) {
+	Class* cl = Prototype_getClass(scope->proto);
+
+	if (!cl)
+		return NULL;
+
+	return NULL;
+}
+
+Function* ScopePrototype_searchFunction(ScopePrototype* scope, label_t name, ScopeSearchArgs* args) {
+	Class* cl = Prototype_getClass(scope->proto);
+
+	if (!cl)
+		return NULL;
+
+	Array_loopPtr(Function, cl->methods, ptr) {
+		Function* f = *ptr;
+		if (f->name == name)
+			return f;
+	}
+	
+	return NULL;
+}
+
+
+void ScopePrototype_addVariable(ScopePrototype* scope, Variable* v) {
+	raiseError("[TODO] ScopePrototype_addVariable");
+}
+
+void ScopePrototype_addClass(ScopePrototype* scope, Class* cl) {
+	raiseError("[TODO] ScopePrototype_addClass");
+}
+
+void ScopePrototype_addFunction(ScopePrototype* scope, Function* fn, int addFlag) {
+	raiseError("[TODO] ScopePrototype_addFunction");
+}
+
+
+
+
+
 
 
 

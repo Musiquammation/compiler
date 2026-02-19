@@ -274,13 +274,13 @@ Type* Type_deepCopy(Type* root, Prototype* proto, Variable** varr, int varr_len,
 			}
 
 			ProtoSetting* settings_end = settings + settingLength;
-			Array_for(var_ptr_t, &varr[1], varr_len - 1, vptr) {
+			for (int iv = 0; iv < varr_len-1; iv++) {
 				for (ProtoSetting* s = settings; s < settings_end; s++) {
 					if (s->useVariable && s->useProto) {
 						Prototype* origin = s->proto;
 						Prototype* p = origin;
 						while (true) {
-							Prototype* res = Prototype_reachProto(p, (*(vptr-1))->proto);
+							Prototype* res = Prototype_reachProto(p, varr, iv);
 							if (res == NULL || p == res) {
 								break;
 							}

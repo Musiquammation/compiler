@@ -2,6 +2,7 @@
 
 #include "declarations.h"
 #include "label_t.h"
+#include "Scope.h"
 #include "definitionState_t.h"
 #include "tools/Array.h"
 
@@ -84,6 +85,16 @@ struct Prototype {
 	};
 };
 
+
+struct ScopePrototype {
+	Scope scope;
+	Prototype* proto;
+};
+
+
+
+
+
 typedef struct {
 	int mode; // 0: default constructor, 1: copy
 
@@ -128,7 +139,7 @@ Prototype* Prototype_reachMeta(Prototype* proto);
 Class* Prototype_getMetaClass(Prototype* proto);
 
 Class* Prototype_getClass(Prototype* proto);
-Prototype* Prototype_reachProto(Prototype* proto, Prototype* parent);
+Prototype* Prototype_reachProto(Prototype* proto, Variable** varr, int varr_len);
 
 int Prototype_getSignedSize(Prototype* proto);
 
@@ -152,4 +163,13 @@ Prototype* Prototype_generateStackPointer(Variable **varr, int varLength);
 
 Variable* ProtoSetting_getVariable(ProtoSetting* setting, Class* meta);
 
+
+
+Variable* ScopePrototype_searchVariable(ScopePrototype* scope, label_t name, ScopeSearchArgs* args);
+Class* ScopePrototype_searchClass(ScopePrototype* scope, label_t name, ScopeSearchArgs* args);
+Function* ScopePrototype_searchFunction(ScopePrototype* scope, label_t name, ScopeSearchArgs* args);
+
+void ScopePrototype_addVariable(ScopePrototype* scope, Variable* v);
+void ScopePrototype_addClass(ScopePrototype* scope, Class* cl);
+void ScopePrototype_addFunction(ScopePrototype* scope, Function* fn, int addFlag);
 

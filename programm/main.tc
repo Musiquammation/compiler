@@ -1,17 +1,9 @@
 
 
 function main {
-	let emptyPointerForTest: Pointer<T: Container<J: Integer> >;
+	let array: Array<U: Vector>;
 
-	let src = Integer:def<40>{}();
-	
-	src.printMeta<src>();
-
-	src.setToAbsolute<src>();
-
-	src.printMeta<src>();
-
-	return src.value;
+	let result = array.obj.z;
 }
 
 

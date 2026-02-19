@@ -35,7 +35,9 @@ structdef(Parser);
 structdef(Annotation);
 
 structdef(Prototype);
+structdef(ScopePrototype);
 structdef(ProtoSetting);
+
 structdef(Type);
 structdef(ScopeType);
 structdef(TypeFollower);
